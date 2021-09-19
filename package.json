@@ -1,0 +1,21 @@
+{
+  "name": "electron-test",
+  "version": "1.0.0",
+  "description": "Secure Email Client",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "author": "Nikos Kontos",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "dotenv": "^8.6.0",
+    "fs-jetpack": "^4.1.1",
+    "stack-trace": "0.0.10"
+  },
+  "devDependencies": {
+    "electron": "^14.0.0",
+    "electron-debug": "^3.2.0"
+  }
+}
