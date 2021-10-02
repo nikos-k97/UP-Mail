@@ -1,5 +1,5 @@
 {
-  "name": "emailClient",
+  "name": "email-client",
   "version": "1.0.0",
   "description": "Secure Email Client",
   "main": "main.js",
