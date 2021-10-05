@@ -97,7 +97,7 @@ function openWindow (file) {
     //The file:// protocol is used to load a file from the local filesystem.
     //loadURL method can also use http protocol to load a webpage etc.
     appWindows[index].loadURL(`file://${__dirname}/app/html/${file}.html`);
-    console.log(appWindows[index].webContents);
+ 
 
     //Event handlers on 'close' events.
     appWindows[index].on('close',() => {
