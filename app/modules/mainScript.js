@@ -1,8 +1,8 @@
-    //renderer process
+    //Renderer process - has access to Node API via IPC renderer.
     const electron = require('electron');
     const {ipcRenderer} = electron;
     const ul = document.querySelector('ul');
-    console.log(window);
+
     //Catch add item from main.js (webcontents.send)
     ipcRenderer.on('item:add',(e,item)=>{
         const li = document.createElement('li');

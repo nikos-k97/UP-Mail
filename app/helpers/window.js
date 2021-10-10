@@ -8,7 +8,7 @@ module.exports = function (name, options) {
   // Set cwd for jetpack module to app.getPath('userData') instead of the directory that the project is saved.
   // cwd: current working directory
   // app.getPath('userData'):    C:\Users\xxx\AppData\Roaming\project-xxx
-  let userDataDir = jetpack.cwd(app.getPath('userData'));                                                  
+  let userDataDir = jetpack.cwd(app.getPath('userData'));                                               
   let stateStoreFile = 'window-state-' + name + '.json'; //name: name of the window
   let defaultSize = {
     width: options.width,
@@ -23,7 +23,7 @@ module.exports = function (name, options) {
     try {
       restoredState = userDataDir.read(stateStoreFile, 'json');
     } catch (err) {
-      //For some reason json can't be read (might be corrupted). No worries, we have defaults (the options parameters).
+      //For some reason json can't be read (might be corrupted). In this case the defaults are used (the options parameters).
     }
     //Return the cloned object that is made from merging 'defaultSize' and 'restoredState' objects.
     //'restoredState' is second in the 'Object.assign()' call so it overrides the 'defaultSize' properties (if the .json is successfully read).
@@ -51,7 +51,7 @@ module.exports = function (name, options) {
   };
 
 
-  let resetToDefaults = function (windowState) {
+  let resetToDefaults = function () {
     let bounds = screen.getPrimaryDisplay().bounds;
     return Object.assign({}, defaultSize, {
       x: (bounds.width - defaultSize.width) / 2,
@@ -61,12 +61,14 @@ module.exports = function (name, options) {
 
 
   let ensureVisibleOnSomeDisplay = function (windowState) {
+    //Get all displays and execute the 'some' Array function. The 'some' function checks if every
+    //element 'display' of the array, when passed into the callback function, the function returns true.
     let visible = screen.getAllDisplays().some(function (display) {
       return windowWithinBounds(windowState, display.bounds);
     });
     if (!visible) {
       // Window is partially or fully not visible now -> Reset it to safe defaults.
-      return resetToDefaults(windowState);
+      return resetToDefaults();
     };
     return windowState;
   }
@@ -80,16 +82,19 @@ module.exports = function (name, options) {
     userDataDir.write(stateStoreFile, state, { atomic: true });
   };
 
-
+  //Retrieve previous saved configurations. If with these configurations the window is not visible,
+  //fallback to default
   let previous = restore();
-  if (!previous.maximize) {
+  if (!previous.maximized) {
     state = ensureVisibleOnSomeDisplay(previous);
   };
 
-
+  //Now that we have the previous configuration, we override some specific 'options' parameters
   state = Object.assign({}, options, state); //clone the merged <options,state> objects into the new state object (second arguement overrides first-default-options)
   logger.log(`Loading ${name} with the following state:`);
   logger.log(state);
+
+  //Create the BrowserWindow
   win = new BrowserWindow(state);
   win.on('close', saveState);
   if (state.maximized) {

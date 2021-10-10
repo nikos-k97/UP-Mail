@@ -43,7 +43,7 @@ app.whenReady().then(() => {
 //Quits the application except on macOS since it contradicts the default behavior of macOS.
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
-        app.quit(); // exit
+        app.quit(); 
     }
 });
 
@@ -51,8 +51,8 @@ app.on('window-all-closed', () => {
 //Closing all windows in macOS doesn’t close the application (main process).
 //So opens a window (if none are already opened) when the application is activated again.
 app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) { //or     if (!windows[0]) 
-        openWindow('mainWindow'); //open main window
+    if (BrowserWindow.getAllWindows().length === 0) { 
+        openWindow('mainWindow'); 
     }
 });
 
@@ -61,37 +61,26 @@ function openWindow (file) {
     let index = file === 'mainWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
     const {width, height} = electron.screen.getPrimaryDisplay().workAreaSize;
     
-    //Create app window
-    appWindows[index] = new BrowserWindow({
+    //Use window.js helper script to create and open the BrowserWindow
+    appWindows[index] = createWindow(file, {
         width,
         height,
+        icon: 'build/email-icon.png',
         title:'Mail Client', //overriden by the loaded html's <title/> tag
-        //minWidth=320,
-        //minHeight=480,
-        //maximized=true,
-        //frame=false,
+        minWidth: 320,
+        minHeight: 480,
+        maximized: true,
+        frame: true,
+        show:false,
         webPreferences: {
             contextIsolation: false, //security
             nodeIntegration: true //allows renderer process access to the node.js API
         }
     });
 
-    // appWindows[index] = createWindow(file, {
-    //     width, height,
-    //     //icon: 'build/128x128.png',
-    //     //title: 'Mail Client',
-    //     minWidth: 320,
-    //     minHeight: 480,
-    //     maximized: true,
-    //     frame: false,
-    //     webPreferences: {
-    //         contextIsolation: false, //security
-    //         nodeIntegration: true //allows renderer process access to the node.js API
-    //     }
-    // });
-
-
-
+    appWindows[index].once('ready-to-show', () => {
+        appWindows[index].show();
+    });
 
     //Load .html content from html folder.
     //The file:// protocol is used to load a file from the local filesystem.
@@ -179,7 +168,7 @@ const mainMenuTemplate = [
             {
                 label:'Add Item',
                 click(){
-                    createAddWindow();
+                    openWindow('addWindow');
                 }
             },
             {
@@ -211,7 +200,7 @@ if (process.env.NODE_ENV !== 'production'){
         submenu:[
             {
                 label:'Toggle dev tools',
-                accelerator: process.platform==='darwin' ? 'Command+I' : 'Ctrl+I',
+                accelerator: process.platform === 'darwin' ? 'Command+I' : 'Ctrl+I',
                 click(item,focusedWindow){
                     focusedWindow.toggleDevTools();
                 }
