@@ -25,6 +25,7 @@ if (process.env.NODE_ENV === 'development') {
 };
 
 
+
 //Listening to the 'ready' event of the application.
 //This event is fired only once when Electron has done initializing the application and app windows can be safely created.
 //Wait for the event and then call openWindow() when app's whenReady() method resolves its promise
