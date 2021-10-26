@@ -1,7 +1,11 @@
-let stacktrace = require('stack-trace'); 
-let jetpack    = require('fs-jetpack');
-let chalk      = require('chalk');
-let path       = require('path');
+const stacktrace = require('stack-trace'); 
+const jetpack    = require('fs-jetpack');
+const chalk      = require('chalk');
+const path       = require('path');
+
+//Ensure that chalk.level != 0 (which causes 'supports-color' to be considered false => no color shown)
+//Level 3 : Truecolor support (16 million colors)
+chalk.level = 3;
 
 let defaults = {
   'logLevel': 5,

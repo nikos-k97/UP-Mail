@@ -13,9 +13,7 @@ const createWindow = require('./app/helpers/window');
 global.app = app;
 require('./app/helpers/logger'); //Adds global logging.
 
-
 let appWindows = []; //Prevents being garbage collected -> manual garbage collection
-
 
 //Sets environment variables
 process.env.NODE_ENV = 'development'; //or production
@@ -56,12 +54,11 @@ app.on('activate', () => {
     }
 });
 
-
 function openWindow (file) {
     let index = file === 'mainWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
     const {width, height} = electron.screen.getPrimaryDisplay().workAreaSize;
     
-    //Use window.js helper script to create and open the BrowserWindow
+    //Use window.js helper script to create and open the electron.js BrowserWindow
     appWindows[index] = createWindow(file, {
         width,
         height,
