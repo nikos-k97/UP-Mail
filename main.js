@@ -8,33 +8,31 @@
 const electron = require('electron');
 const {app, BrowserWindow, Menu, ipcMain, shell} = electron;
 const createWindow = require('./app/helpers/window');
-// Allows app to be accessible globally -> adds 'electron.app' to the global scope.
-// app API/module controls application's lifecycle
+// Allows app to be accessible globally (adds 'electron.app' to the global scope).
+// 'app' API/module controls application's lifecycle
 global.app = app;
 require('./app/helpers/logger'); //Adds global logging.
 
-let appWindows = []; //Prevents being garbage collected -> manual garbage collection
-
-//Sets environment variables
+//Sets node environment variable
 process.env.NODE_ENV = 'development'; //or production
 
-//If in development mode adds debug features like HotKeys for triggering Dev Tools and reload.
+//If in development mode enables dotenv and adds debug features like HotKeys for triggering Dev Tools and reload.
 if (process.env.NODE_ENV === 'development') {
-    require('dotenv').config();
+    //require('dotenv').config();
+    //const { port } = require('./app/config');
+    //console.log(port);
     require('electron-debug')({ showDevTools: true }); //not necessery since we display the menu in development mode
 };
 
 
+let appWindows = []; //Prevents being garbage collected -> manual garbage collection
 
 //Listening to the 'ready' event of the application.
 //This event is fired only once when Electron has done initializing the application and app windows can be safely created.
 //Wait for the event and then call openWindow() when app's whenReady() method resolves its promise
 app.whenReady().then(() => {
     openWindow('mainWindow');
-    //electron.globalShortcut.register('CmdOrCtrl+Shift+C', () => {
-    //    openWindow('compose')
-    //})
-  })
+})
 
 
 //The 'window-all-closed' event is emitted when the last opened window of the application is closed.
@@ -69,7 +67,7 @@ function openWindow (file) {
         minHeight: 480,
         maximized: true,
         frame: true,
-        show:false,
+        show:false, //false until all content is loaded
         webPreferences: {
             contextIsolation: false, //security
             nodeIntegration: true //allows renderer process access to the node.js API
@@ -77,25 +75,39 @@ function openWindow (file) {
     });
 
     appWindows[index].once('ready-to-show', () => {
-        appWindows[index].show();
+        appWindows[index].show(); //all content is loaded -> window can be shown
     });
 
     //Load .html content from html folder.
     //The file:// protocol is used to load a file from the local filesystem.
-    //loadURL method can also use http protocol to load a webpage etc.
+    //loadURL method can also use 'http' protocol to load a webpage etc.
     appWindows[index].loadURL(`file://${__dirname}/app/html/${file}.html`);
  
 
-    //Event handlers on 'close' events.
-    appWindows[index].on('close',() => {
-        //Do something
-    });
+    //Passing an arguement to the event listener is tricky since it invokes the function rather than declaring it.
+    //without arguements - function is not invoked: appWindows[index].on('closed', testFunction);
+    //with arguements - function is invoked: appWindows[index].on('closed', testFunction(arg1,arg2) );
+    
+    //Solution 1: Using 'bind' method. Downside (for browser js) is that event listener cannot be removed. 
+    appWindows[index].on('closed', onQuit.bind(null,index) );
 
-  
-    appWindows[index].on('closed', 
-    (   (i) => ()  =>  {onQuit(i)}     )(index) 
-    );
+    //Solution 2: appWindows[index].on('closed', wrapperFunction(index));
+    //   or       appWindows[index].on('closed', ( (i) => () => {onQuit(i)} ) (index) );
+    //
+    //Invokes the first outer function so the console.log(i) is printed. Returns the reference
+    //to the inner function for it to be used when the 'closed' event is emmited. 
+    //This way uses function currying to pass an arguement to the event listener
+        // function wrapperFunction(i){
+        //     console.log(i);
+        //     return function(){
+        //         onQuit(i)
+        //     }
+        // };
 
+    //Solution 3: appWindows[index].on('closed', function() { onQuit(index) });
+    //Wrap the function in another function. The outer function is not invoked. Downside of this way is that
+    //the scope is constantly changed.
+   
 
     //Build menu from the template
     const mainMenu = Menu.buildFromTemplate(mainMenuTemplate);
@@ -108,16 +120,16 @@ function openWindow (file) {
     //windows[index].webContents.on('will-navigate', handleURL);
 }
 
-function onQuit (windowNumber) {
+function onQuit (index) { //index = windowNumber
     //If not on MacOS then when the last window closes the app terminates and all the windows are garbage collected.
     //The if statement is true only if 'windowNumber'== 0 (when main application window / process is closed).
     //If on MacOS or if it's not the mainWindow, then only the current window closes and is garbage collected.
-    if (process.platform !== 'darwin' && !windowNumber) {
+    if (process.platform !== 'darwin' && !index) {
         appWindows.map( (windowNum) => {return null} );
         app.quit()
     }
-    appWindows[windowNumber] = null;
-    logger.log(`Window number ${windowNumber} closed.`);
+    appWindows[index] = null;
+    logger.log(`Window number ${index} closed.`);
 };
 
 

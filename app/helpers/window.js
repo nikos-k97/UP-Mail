@@ -3,7 +3,7 @@
 
 module.exports = function (name, options) {
   const {app, BrowserWindow, screen} = require('electron');
-  const jetpack = require('fs-jetpack');
+  const jetpack = require('fs-jetpack'); //replacement for node.js default 'fs' library
   
   // Set cwd for jetpack module to app.getPath('userData') instead of the directory that the project is saved.
   // cwd: current working directory
