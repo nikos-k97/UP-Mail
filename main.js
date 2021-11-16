@@ -62,15 +62,15 @@ function openWindow (file) {
         width,
         height,
         icon: 'build/email-icon.png',
-        title:'Mail Client', //overriden by the loaded html's <title/> tag
+        title:'Mail Client', //overriden by the loaded html's <title/> tag (!!)
         minWidth: 320,
         minHeight: 480,
         maximized: true,
         frame: true,
         show:false, //false until all content is loaded
         webPreferences: {
-            contextIsolation: false, //security
-            nodeIntegration: true //allows renderer process access to the node.js API
+            contextIsolation: true, //security
+            nodeIntegration: false //allows renderer process access to the node.js API
         }
     });
 
@@ -83,7 +83,6 @@ function openWindow (file) {
     //loadURL method can also use 'http' protocol to load a webpage etc.
     appWindows[index].loadURL(`file://${__dirname}/app/html/${file}.html`);
  
-
     //Passing an arguement to the event listener is tricky since it invokes the function rather than declaring it.
     //without arguements - function is not invoked: appWindows[index].on('closed', testFunction);
     //with arguements - function is invoked: appWindows[index].on('closed', testFunction(arg1,arg2) );
@@ -92,7 +91,8 @@ function openWindow (file) {
     appWindows[index].on('closed', onQuit.bind(null,index) );
 
     //Solution 2: appWindows[index].on('closed', wrapperFunction(index));
-    //   or       appWindows[index].on('closed', ( (i) => () => {onQuit(i)} ) (index) );
+    //   or       
+    //            appWindows[index].on('closed', ( (i) => () => {onQuit(i)} ) (index) );
     //
     //Invokes the first outer function so the console.log(i) is printed. Returns the reference
     //to the inner function for it to be used when the 'closed' event is emmited. 
@@ -111,10 +111,14 @@ function openWindow (file) {
 
     //Build menu from the template
     const mainMenu = Menu.buildFromTemplate(mainMenuTemplate);
+
     //Insert menu to the app
     Menu.setApplicationMenu(mainMenu);
 
-
+    if (file === 'addWindow'){
+        appWindows[index].setMenu(null);
+    }
+    
 
     //windows[index].webContents.on('new-window', handleURL);
     //windows[index].webContents.on('will-navigate', handleURL);
@@ -125,9 +129,10 @@ function onQuit (index) { //index = windowNumber
     //The if statement is true only if 'windowNumber'== 0 (when main application window / process is closed).
     //If on MacOS or if it's not the mainWindow, then only the current window closes and is garbage collected.
     if (process.platform !== 'darwin' && !index) {
-        appWindows.map( (windowNum) => {return null} );
+        appWindows.map( windowNum => {return null} );
         app.quit()
     }
+   
     appWindows[index] = null;
     logger.log(`Window number ${index} closed.`);
 };
