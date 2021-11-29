@@ -1,7 +1,8 @@
 // Secure way of importing ipcRenderer (and other node.js modules) into the renderer process is with IPC 
 // (inter-process-communication), which is Electron's way of allowing interaction between main and renderer processes.
 
-const {app,contextBridge, ipcRenderer} = require("electron");
+const {contextBridge, ipcRenderer} = require("electron");
+const {app} = require('@electron/remote');
 const Navigo = require("navigo");
 //require('./app/helperModules/logger'); //Adds global logging.
 
@@ -22,7 +23,8 @@ contextBridge.exposeInMainWorld(
             }
         },
         router : 5,
-        app : app
+        two : {app:2},
+        app:app
     }
 );
 

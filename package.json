@@ -9,6 +9,7 @@
   "author": "Nikos Kontos",
   "license": "MIT",
   "dependencies": {
+    "@electron/remote": "^2.0.1",
     "dotenv": "^8.6.0",
     "fs-jetpack": "^4.1.1",
     "jquery": "^3.6.0",

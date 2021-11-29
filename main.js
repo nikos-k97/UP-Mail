@@ -8,7 +8,10 @@
 const path = require("path");
 const electron = require('electron');
 const {app, BrowserWindow, Menu, ipcMain} = electron;
+const remoteMain = require("@electron/remote/main");
+remoteMain.initialize();
 const createWindow = require('./app/helperModules/window');
+
 // Allows app to be accessible globally (adds 'electron.app' to the global scope).
 // 'app' API/module controls application's lifecycle
 global.app = app;
@@ -71,6 +74,7 @@ function openWindow (file) {
         frame: true,
         show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
         webPreferences: {
+            sandbox:false,
             preload: path.join(__dirname, "/app/preload.js"), // use a preload script
             contextIsolation: true, //security (prevent prototype pollution attacks etc.)
             nodeIntegration: false, //deny the renderer process access to the node.js API
@@ -81,6 +85,8 @@ function openWindow (file) {
     appWindows[index].once('ready-to-show', () => {
         appWindows[index].show(); //all content is loaded -> window can be shown
     });
+
+    remoteMain.enable(appWindows[index].webContents);
 
     //Load .html content from html folder.
     //The file:// protocol is used to load a file from the local filesystem.
