@@ -11,6 +11,8 @@
   "dependencies": {
     "dotenv": "^8.6.0",
     "fs-jetpack": "^4.1.1",
+    "jquery": "^3.6.0",
+    "navigo": "^8.11.1",
     "stack-trace": "0.0.10"
   },
   "devDependencies": {

@@ -5,13 +5,14 @@
 // Main Process can interact with each Renderer Processes web page via the BrowserWindows's 'webContents' object.
 
 'use strict'
+const path = require("path");
 const electron = require('electron');
-const {app, BrowserWindow, Menu, ipcMain, shell} = electron;
-const createWindow = require('./app/helpers/window');
+const {app, BrowserWindow, Menu, ipcMain} = electron;
+const createWindow = require('./app/helperModules/window');
 // Allows app to be accessible globally (adds 'electron.app' to the global scope).
 // 'app' API/module controls application's lifecycle
 global.app = app;
-require('./app/helpers/logger'); //Adds global logging.
+require('./app/helperModules/logger'); //Adds global logging.
 
 //Sets node environment variable
 process.env.NODE_ENV = 'development'; //or production
@@ -24,8 +25,9 @@ if (process.env.NODE_ENV === 'development') {
     require('electron-debug')({ showDevTools: true }); //not necessery since we display the menu in development mode
 };
 
-
-let appWindows = []; //Prevents being garbage collected -> manual garbage collection
+// Keep a global reference of the window object, otherwise the window will
+// be closed automatically when the JavaScript object is garbage collected.
+let appWindows = []; 
 
 //Listening to the 'ready' event of the application.
 //This event is fired only once when Electron has done initializing the application and app windows can be safely created.
@@ -67,10 +69,12 @@ function openWindow (file) {
         minHeight: 480,
         maximized: true,
         frame: true,
-        show:false, //false until all content is loaded
+        show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
         webPreferences: {
-            contextIsolation: true, //security
-            nodeIntegration: false //allows renderer process access to the node.js API
+            preload: path.join(__dirname, "/app/preload.js"), // use a preload script
+            contextIsolation: true, //security (prevent prototype pollution attacks etc.)
+            nodeIntegration: false, //deny the renderer process access to the node.js API
+            enableRemoteModule: false //turn off remote (for safety, since Remote module was removed at electron.js v14)
         }
     });
 
@@ -82,7 +86,8 @@ function openWindow (file) {
     //The file:// protocol is used to load a file from the local filesystem.
     //loadURL method can also use 'http' protocol to load a webpage etc.
     appWindows[index].loadURL(`file://${__dirname}/app/html/${file}.html`);
- 
+
+    
     //Passing an arguement to the event listener is tricky since it invokes the function rather than declaring it.
     //without arguements - function is not invoked: appWindows[index].on('closed', testFunction);
     //with arguements - function is invoked: appWindows[index].on('closed', testFunction(arg1,arg2) );
@@ -108,20 +113,20 @@ function openWindow (file) {
     //Wrap the function in another function. The outer function is not invoked. Downside of this way is that
     //the scope is constantly changed.
    
-
     //Build menu from the template
     const mainMenu = Menu.buildFromTemplate(mainMenuTemplate);
-
     //Insert menu to the app
     Menu.setApplicationMenu(mainMenu);
-
     if (file === 'addWindow'){
         appWindows[index].setMenu(null);
     }
     
-
-    //windows[index].webContents.on('new-window', handleURL);
-    //windows[index].webContents.on('will-navigate', handleURL);
+    ipcMain.on('toMain', (event, ...args) => {
+        console.log('[Main Process] event: '+event.sender+' args: '+args);
+        // Send result back to renderer process
+        let responseObj = 1;
+        appWindows[index].webContents.send('fromMain', responseObj, 3, JSON.stringify({sti:3}), 'hi');
+    });
 }
 
 function onQuit (index) { //index = windowNumber
@@ -136,43 +141,6 @@ function onQuit (index) { //index = windowNumber
     appWindows[index] = null;
     logger.log(`Window number ${index} closed.`);
 };
-
-
-
-//Handle create add window
-function createAddWindow(){
-    addWindow = new BrowserWindow({
-        width:200,
-        height:200,
-        title:'Add item',
-        webPreferences: {
-            contextIsolation: true, //security
-            nodeIntegration: false
-        }
-    });
-    //Load html file into the window
-    addWindow.loadURL(url.format(
-        {
-            pathname:path.join(__dirname,'app/html/addWindow.html'),
-            protocol:'file:',
-            slashes: true
-        } 
-    ));
-    //Garbage collection handle
-    addWindow.on('close',()=>{
-        addWindow=null;
-    });
-    addWindow.setMenu(null);
-}
-
-
-//Catch item:add with ipcMain (sent from addWindow.html with ipcRenderer)
-ipcMain.on('item:add',(e,item)=>{
-    //Send it to the main window (mainWindow.html)
-    mainWindow.webContents.send('item:add',item);
-    addWindow.close();
-});
-
 
 
 //Create menu template
