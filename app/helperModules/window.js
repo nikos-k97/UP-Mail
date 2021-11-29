@@ -27,6 +27,7 @@ module.exports = function (name, options) {
     }
     //Return the cloned object that is made from merging 'defaultSize' and 'restoredState' objects.
     //'restoredState' is second in the 'Object.assign()' call so it overrides the 'defaultSize' properties (if the .json is successfully read).
+    //if (restoredState.preload) restoredState.preload = null;
     return Object.assign({}, defaultSize, restoredState);
   }
 
@@ -89,8 +90,11 @@ module.exports = function (name, options) {
     state = ensureVisibleOnSomeDisplay(previous);
   };
 
+  console.log(options,state)
   //Now that we have the previous configuration, we override some specific 'options' parameters
   state = Object.assign({}, options, state); //clone the merged <options,state> objects into the new state object (second arguement overrides first-default-options)
+  //Use the new info each time for webPreferences
+  state.webPreferences = options.webPreferences;
   logger.log(`Loading ${name} with the following state:`);
   logger.log(state);
 
