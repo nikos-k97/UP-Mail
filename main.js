@@ -11,11 +11,9 @@ const {app, BrowserWindow, Menu, ipcMain} = electron;
 const remoteMain = require("@electron/remote/main");
 remoteMain.initialize();
 const createWindow = require('./app/helperModules/window');
-
-// Allows app to be accessible globally (adds 'electron.app' to the global scope).
-// 'app' API/module controls application's lifecycle
-global.app = app;
-require('./app/helperModules/logger'); //Adds global logging.
+const Logger = require('./app/helperModules/logger'); 
+const logger = new Logger({}, app);
+global.logger = logger; //logger is now visible into all modules that main.js uses (not in renderer processes)
 
 //Sets node environment variable
 process.env.NODE_ENV = 'development'; //or production
@@ -66,7 +64,7 @@ function openWindow (file) {
     appWindows[index] = createWindow(file, {
         width,
         height,
-        icon: 'build/email-icon.png',
+        icon: './icons/email-icon.png',
         title:'Mail Client', //overriden by the loaded html's <title/> tag (!!)
         minWidth: 320,
         minHeight: 480,
@@ -74,11 +72,15 @@ function openWindow (file) {
         frame: true,
         show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
         webPreferences: {
-            sandbox:false,
-            preload: path.join(__dirname, "/app/preload.js"), // use a preload script
-            contextIsolation: true, //security (prevent prototype pollution attacks etc.)
-            nodeIntegration: false, //deny the renderer process access to the node.js API
-            enableRemoteModule: false //turn off remote (for safety, since Remote module was removed at electron.js v14)
+            sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
+                            // (only in conjunction with preload script - otherwise only IPC messages are permitted)
+            preload: path.join(__dirname, "/app/preload.js"), // use a preload script - safely get and set file system and 
+                                                              // operating system values on behalf of the browser window.
+            contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
+                                    // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
+                                    // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
+            nodeIntegration: false, // deny the renderer process access to the node.js API
+            enableRemoteModule: false //turn off remote (redundant, since Remote module was removed at electron.js v14)
         }
     });
 
@@ -127,12 +129,19 @@ function openWindow (file) {
         appWindows[index].setMenu(null);
     }
     
-    ipcMain.on('toMain', (event, ...args) => {
-        console.log('[Main Process] event: '+event.sender+' args: '+args);
-        // Send result back to renderer process
-        let responseObj = 1;
-        appWindows[index].webContents.send('fromMain', responseObj, 3, JSON.stringify({sti:3}), 'hi');
+    appWindows[index].once('did-finish-load', () => { //or dome-ready
+        // Send Message
+     });
+    appWindows[index].webContents.on('did-finish-load', () => {
+        //appWindows[index].webContents.send('message', 'hello world');
     });
+
+    // ipcMain.on('toMain', (event, ...args) => {
+    //     console.log('[Main Process] event: '+event.sender+' args: '+args);
+    //     // Send result back to renderer process
+    //     let responseObj = 1;
+    //     appWindows[index].webContents.send('fromMain', responseObj, 3, JSON.stringify({sti:3}), 'hi');
+    // });
 }
 
 function onQuit (index) { //index = windowNumber
@@ -145,7 +154,7 @@ function onQuit (index) { //index = windowNumber
     }
    
     appWindows[index] = null;
-    logger.log(`Window number ${index} closed.`);
+    logger.log(`Window number ${index} closed.`); // logger.error prints the text in red etc...
 };
 
 

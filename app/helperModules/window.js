@@ -90,7 +90,6 @@ module.exports = function (name, options) {
     state = ensureVisibleOnSomeDisplay(previous);
   };
 
-  console.log(options,state)
   //Now that we have the previous configuration, we override some specific 'options' parameters
   state = Object.assign({}, options, state); //clone the merged <options,state> objects into the new state object (second arguement overrides first-default-options)
   //Use the new info each time for webPreferences
