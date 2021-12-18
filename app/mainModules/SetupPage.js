@@ -1,20 +1,6 @@
 const jetpack = require('fs-jetpack');
 
 /**
- * Tests whether the setup has been completed.
- *
- * @param  {string} page
- * @return {undefined}
- */
-global.testLoaded = (page) => {
-  if (typeof setupComplete === 'undefined' || !setupComplete) {
-    logger.warning(`We tried to load ${page}, but setup hadn't completed yet, likely caused by the user refreshing the page.`)
-    return false
-  }
-  return true
-}
-
-/**
  * Setup is called when the application is run, it retrieves required
  * databases and files, and works out the current state.
  *
@@ -47,7 +33,7 @@ SetupPage.prototype.load = function() {
   // setInterval(refreshAllAccounts, 300000)
 
   global.setupComplete = true;
-  this.logger.debug(`Setup complete, we've read the config file and loaded the databases.`)
+  this.logger.debug(`Setup complete, the configuration file has been read and the databases have been loaded.`)
 
   this.stateManager.update();
 }

@@ -13,10 +13,15 @@ function AccountManager () {
 
 AccountManager.prototype.addAccount = async function (details) {
   /*----------  OVERLAY PROCESSING MODAL  ----------*/
-  $('.wrapper').html(`
-    <span id="doing"></span> <span id="number"></span><br>
-    <span id="mailboxes"></span>
-  `)
+  document.querySelector('.wrapper').innerHTML = `
+    <span id="doing"></span> 
+    <span id="number"></span><br>
+    <span id="mailboxes"></span>`;
+
+  //$('.wrapper').html(`
+  //  <span id="doing"></span> <span id="number"></span><br>
+  ///  <span id="mailboxes"></span>
+  //`)
 
   /*----------  LOG USER IN  ----------*/
   $('#doing').text('logging you in.')

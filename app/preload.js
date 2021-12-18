@@ -17,6 +17,8 @@ const WelcomePage = require('./mainModules/WelcomePage');
 // 'app' global and accessible in all the modules, app is passed as a parameter to the created instances.
 // (Global variables defined inside the preload script are accessible by only the modules loaded by the preload script
 // which means they are undefined at the 'browser' side - 'app.js' and undefined on the electron side - 'main.js' ).
+// This is the primary reason why arrow functions are not used in the application ('this' is automatically bound
+// in arrow functions so when instances are created, the 'this' keyword inside the methods is pointing to the wrong place).
 const router = new Navigo('/');
 const threader = new Threader();
 const logger = new Logger({}, app); 

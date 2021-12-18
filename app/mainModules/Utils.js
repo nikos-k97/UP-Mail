@@ -9,6 +9,21 @@ function Utils (app,logger) {
 }
 
 /**
+ * Tests whether the setup has been completed.
+ *
+ * @param  {string} page
+ * @return {undefined}
+ */
+Utils.prototype.testLoaded = function(page) {
+  //setupComplete is a global variable defined in 'SetupPage.js' - it's set to true after a successful setup page load
+  if (typeof setupComplete === 'undefined' || !setupComplete) {
+    this.logger.warning(`Tried to load ${page}, but setup hasn't been completed yet, likely caused by the user refreshing the page.`);
+    return false;
+  }
+  return true;
+}
+
+/**
  * Simple object check.
  * 
  * @param item
