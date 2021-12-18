@@ -3,8 +3,6 @@ const jetpack    = require('fs-jetpack');
 const chalk      = require('chalk');
 const path       = require('path');
 
-let app = {};
-
 //Ensure that chalk.level != 0 (which causes 'supports-color' to be considered false => no color shown)
 //Level 3 : Truecolor support (16 million colors)
 chalk.level = 3;
@@ -40,9 +38,10 @@ let defaults = {
   'currentDate': getDate()
 };
 
-function Logger (options,application) {
-  app = application;
-  defaults.fs = jetpack.cwd(app.getPath('userData'), 'logs');
+function Logger (options, application) {
+  this.app = application;
+
+  defaults.fs = jetpack.cwd(this.app.getPath('userData'), 'logs');
   options = options || {};
 
   for (let option in defaults) {

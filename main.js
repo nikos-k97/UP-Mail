@@ -13,7 +13,9 @@ remoteMain.initialize();
 const createWindow = require('./app/helperModules/window');
 const Logger = require('./app/helperModules/logger'); 
 const logger = new Logger({}, app);
-global.logger = logger; //logger is now visible into all modules that main.js uses (not in renderer processes)
+
+//Global object in Node.js is the 'module.exports' object
+global.logger = logger; //logger is now visible into all modules that main.js uses (not in renderer processes/ preload)
 
 //Sets node environment variable
 process.env.NODE_ENV = 'development'; //or production
@@ -72,10 +74,10 @@ function openWindow (file) {
         frame: true,
         show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
         webPreferences: {
-            sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
-                            // (only in conjunction with preload script - otherwise only IPC messages are permitted)
             preload: path.join(__dirname, "/app/preload.js"), // use a preload script - safely get and set file system and 
                                                               // operating system values on behalf of the browser window.
+            sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
+                            // (only in conjunction with preload script - otherwise only IPC messages are permitted)
             contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
                                     // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
                                     // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.

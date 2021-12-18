@@ -1,15 +1,19 @@
 const jetpack = require('fs-jetpack');
-//const $       = require('jquery');
-
-const app = window.app;
 
 //Constructor function
-function StateManager () {
+function StateManager (app, logger, router) {
+  this.app = app;
+  this.logger = logger;
+  this.router = router;
+
   // Set cwd for jetpack module to app.getPath('userData') instead of the directory that the project is saved.
   // cwd: current working directory
   // app.getPath('userData'):    C:\Users\xxx\AppData\Roaming\project-xxx (OS: Windows)
-  this.storeDir = jetpack.cwd(app.getPath('userData'));
+  // app.getAppPath():           C:\Users\xxx\Desktop\project-xxx (the directory where the project is saved)
+  this.storeDir = jetpack.cwd(this.app.getPath('userData'));
+  this.appDir = jetpack.cwd(this.app.getAppPath());
   this.state = this.storeDir.read('./state.json', 'json') || { state: 'new' };
+}
 /*
 {
   "state": "mail",
@@ -25,8 +29,6 @@ function StateManager () {
   }
 }
 */
-}
-
 
 // ** PROTOTYPE PROPERTY **
 // ************************
@@ -73,15 +75,15 @@ StateManager.prototype.change = function (option, value) {
 StateManager.prototype.update = function () {
   switch (this.state.state) {
     case 'new':
-      logger.debug(`This is a new user. Welcome them to the application.`);
-      router.navigate('/welcome');
+      this.logger.debug(`This is a new user. Welcome them to the application.`);
+      this.router.navigate('/welcome');
       break;
     case 'mail':
-      logger.debug(`This user has logged in. Show them their email.`);
-      router.navigate('/mail');
+      this.logger.debug(`This user has logged in. Show them their email.`);
+      this.router.navigate('/mail');
       break;
     default:
-      logger.warning(`Unknown state?  This should never happen.  The state was ${state.state}`);
+      this.logger.warning(`Unknown state?  This should never happen.  The state was ${state.state}`);
   }
 }
 
@@ -93,25 +95,24 @@ StateManager.prototype.update = function () {
  * @return {undefined}
  */
 
-/*
 StateManager.prototype.style = function (titles) {
   for (let i = 0; i < document.styleSheets.length; i++) {
-    let shouldEnable = titles.includes(document.styleSheets[i].ownerNode.getAttribute('data-name')) || document.styleSheets[i].ownerNode.getAttribute('data-name').includes('all-')
+    let shouldEnable = titles.includes(document.styleSheets[i].ownerNode.getAttribute('data-name')) || document.styleSheets[i].ownerNode.getAttribute('data-name').includes('all-');
 
-    document.styleSheets[i].disabled = !shouldEnable
+    document.styleSheets[i].disabled = !shouldEnable;
 
     if (titles.includes(document.styleSheets[i].ownerNode.getAttribute('data-name'))) {
-      titles.splice(titles.indexOf(document.styleSheets[i].ownerNode.getAttribute('data-name')), 1)
+      titles.splice(titles.indexOf(document.styleSheets[i].ownerNode.getAttribute('data-name')), 1);
     }
   }
   if (titles.length) {
-    logger.error(`Warning, ${titles} was/were not found within the list of stylesheets.`)
-    logger.log(document.styleSheets)
+    this.logger.error(`Warning, ${titles} was/were not found within the list of stylesheets.`);
+    this.logger.log(document.styleSheets);
   }
 }
-*/
+
 /**
- * Page handles all our application state switching by enabling
+ * Page handles all the application state switching by enabling
  * and disabling CSS, and loading the HTML into the body of the
  * application
  *
@@ -119,12 +120,12 @@ StateManager.prototype.style = function (titles) {
  * @param  {array} css
  * @return {undefined}
  */
-/*
-StateManager.prototype.page = function (page, css) {
-  logger.debug(`Switching page to ${page}`)
-  $('#content').html(appDir.read(`./app/${page}.html`))
-  this.style(css)
-}
-*/
 
-module.exports = new StateManager()
+StateManager.prototype.page = function (page, css) {
+  this.logger.debug(`Switching page to ${page}`);
+  document.querySelector('#content').innerHTML = this.appDir.read(`./app/html/${page}.html`);
+  //this.style(css);
+}
+
+
+module.exports = StateManager;
