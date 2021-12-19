@@ -1,24 +1,26 @@
 const domainList = require('../generatedData/email_format_general');
 
-function WelcomePage (logger,stateManager,utils) {
+function WelcomePage (logger, stateManager, utils, accountManager) {
   this.logger = logger;
   this.stateManager = stateManager;
   this.utils = utils;
+  this.accountManager = accountManager;
 }
 
-WelcomePage.prototype.load = function () {
+WelcomePage.prototype.load = function () { // No arrow functions. 'this' is bound via bind() in the preload script.
 	if (!this.utils.testLoaded('welcome')) return;
 
-	this.logger.log('Loading up the welcome page...');
+	this.logger.log('Loading up the welcome page ...');
 	this.stateManager.page('welcome', ['basic', 'welcome']);
   
   let loginForm = document.querySelector('#login-form');
-  let utils = this.utils; // Store 'utils' in a new variable since 'this' inside the event function is changed.
+  let utils = this.utils; // Store 'utils' in a new variable since 'this' inside the event listener is changed.
+  let accountManager = this.accountManager; // Store 'accountManager' in a new variable since 'this' inside the event listener is changed.
   loginForm.addEventListener('submit', 
     async function onLogin (e) {
       e.preventDefault();
       let details = utils.getItemsFromForm(loginForm);
-      //AccountManager.addAccount(details);
+      accountManager.addAccount(details);
     }
   );
 

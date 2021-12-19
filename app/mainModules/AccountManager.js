@@ -1,22 +1,39 @@
-const Datastore = require('nedb')
-const Promise = require('bluebird')
-const $ = require('jquery')
+const Datastore = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Promise = require('bluebird');
 
-function AccountManager () {
-	this.accounts = Promise.promisifyAll(new Datastore({
-	  filename: app.getPath('userData') + '/db/accounts.db',
-	  autoload: true
-	}))
+// BlueBird is used to make the NeDB module run asynchronously.
+// It's useful feature is that it allows us to “promisify” other Node modules in order to use them asynchronously. 
+// Promisify is a concept (applied to callback functions) that ensures that every callback function (in a node 
+// module), when called, returns some value.
 
-  this.accounts.ensureIndex({ fieldName: 'user', unique: true })
+function AccountManager (app, logger, utils) {
+  this.app = app;
+  this.logger = logger;
+  this.utils = utils;
+  const db = new Datastore(
+    {
+      // Persistent datastore (stored on disk at 'filename' not in-memory). 
+      filename: this.app.getPath('userData') + '/db/accounts.db', 
+      // The database will automatically be loaded from the datafile upon creation (no 'loadDatabase' needed).
+      autoload: true                                              
+    }
+  );
+	this.accounts = Promise.promisifyAll(db);
+
+  // Use database indexing for 'user' field - mostly used to enforce uniqueness to the 'user' field
+  this.accounts.ensureIndex({ fieldName: 'user', unique: true });
 }
 
+// Async functions always return a promise. Other values are wrapped in a resolved promise automatically.
+// Also enables the use of 'await', which is another way to wait for a promise to be resolved insted of
+// promise.then(). The 'await' keyword blocks the code under it from executing until the promise resolves.
 AccountManager.prototype.addAccount = async function (details) {
   /*----------  OVERLAY PROCESSING MODAL  ----------*/
   document.querySelector('.wrapper').innerHTML = `
     <span id="doing"></span> 
     <span id="number"></span><br>
-    <span id="mailboxes"></span>`;
+    <span id="mailboxes"></span>
+  `;
 
   //$('.wrapper').html(`
   //  <span id="doing"></span> <span id="number"></span><br>
@@ -24,14 +41,14 @@ AccountManager.prototype.addAccount = async function (details) {
   //`)
 
   /*----------  LOG USER IN  ----------*/
-  $('#doing').text('logging you in.')
-  let client = await (new IMAPClient(details))
-  logger.log(`Successfully logged in to user ${details.user}.`)
+  document.querySelector('#doing').innerText = 'Logging you in ...'; // innerText != textContent
+  //let client = await (new IMAPClient(details));
+  this.logger.log(`Successfully logged in to user ${details.user}.`);
 
   /*----------  CREATE ACCCOUNT DATABASE  ----------*/
-  $('#doing').text('creating a database for your mail.')
-  await MailStore.createEmailDB(details.user)
-  logger.log(`Successfully created a database account for ${details.user}`)
+  document.querySelector('#doing').innerText = 'Creating a database for your email ...';
+  //await MailStore.createEmailDB(details.user);
+  this.logger.log(`Successfully created a database account for ${details.user}.`);
 
   /*----------  REFORMAT DETAILS OBJECT  ----------*/
   let user = {
@@ -46,26 +63,26 @@ AccountManager.prototype.addAccount = async function (details) {
     user: details.user, 
     password: details.password, 
     tls: details.tls,
-    hash: Utils.md5(details.user),
-    date: +new Date()
-  }
+    hash: this.utils.md5(details.user),
+    date: + new Date()
+  };
 
   /*----------  SAVE ACCOUNT TO ACCOUNTS DB  ----------*/
   try {
-    $('#doing').text('saving your account for the future.')
-  	await this.accounts.insertAsync(user)
-    logger.log(`Added ${details.user} to the accounts database.`)
+    document.querySelector('#doing').innerText = 'Saving your account for the future ...';
+  	//await this.accounts.insertAsync(user)
+    this.logger.log(`Added ${details.user} to the accounts database.`)
   } catch(e) {
-    logger.warning(`Huh, ${details.user} appeared to already be in the database?`)
+    this.logger.warning(`Huh, ${details.user} appeared to already be in the database?`)
   }
 
   /*----------  UPDATE MAIL ITEMS FOR ACCOUNT  ----------*/
-  await client.updateAccount()
+  //await client.updateAccount()
 
   /*----------  SWITCH TO THAT USER  ----------*/
-  StateManager.change('account', { hash: user.hash, email: user.user })
-  StateManager.change('state', 'mail')
-  StateManager.update()
+  //StateManager.change('account', { hash: user.hash, email: user.user })
+  //StateManager.change('state', 'mail')
+  //StateManager.update()
 }
 
 AccountManager.prototype.listAccounts = async function () {
@@ -95,4 +112,4 @@ AccountManager.prototype.getIMAP = async function (email) {
   })
 }
 
-module.exports = new AccountManager()
+module.exports = AccountManager;

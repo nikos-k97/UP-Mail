@@ -10,6 +10,8 @@
   "license": "MIT",
   "dependencies": {
     "@electron/remote": "^2.0.1",
+    "@rmanibus/nedb": "^1.9.2",
+    "bluebird": "^3.7.2",
     "dotenv": "^8.6.0",
     "fs-jetpack": "^4.1.1",
     "luxon": "^2.1.1",

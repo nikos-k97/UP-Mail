@@ -10,6 +10,7 @@ const Utils = require('./mainModules/Utils'); //Contains many utility functions
 const Header = require('./mainModules/Header');
 const SetupPage = require('./mainModules/SetupPage');
 const WelcomePage = require('./mainModules/WelcomePage');
+const AccountManager = require('./mainModules/AccountManager');
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload
@@ -25,8 +26,9 @@ const logger = new Logger({}, app);
 const utils = new Utils(app, logger);
 const stateManager = new StateManager(app, logger, router);
 const header = new Header(app, BrowserWindow);
-const setupPage = new SetupPage(app,logger, stateManager);
-const welcomePage = new WelcomePage(logger, stateManager, utils);
+const setupPage = new SetupPage(app, logger, stateManager);
+const accountManager = new AccountManager(app, logger, utils);
+const welcomePage = new WelcomePage(logger, stateManager, utils, accountManager); // <<<<<<<<<<<<<
 
 
 router.on(
@@ -36,7 +38,6 @@ router.on(
         // is therefore 'global' (in this particular occasion) and not equal to the parent object/ "class". 
         // So 'bind' method is neccesary in order to set the correct context for 'this' keyword.
         '/setup': () => { utils.time(setupPage.load.bind(setupPage)) },
-
         '/welcome': () => { utils.time(welcomePage.load.bind(welcomePage)) },
         //'/mail': () => { utils.time(MailPage.load) }
     }

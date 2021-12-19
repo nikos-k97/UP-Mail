@@ -1,7 +1,7 @@
 //Renderer process 
 //Has access only to the modules and functions exposed by contextBridge
 
-window.api.logger('warning','Hello!')
+//window.api.logger('warning','Hello!')
 window.api.loadHeader();
 
 
