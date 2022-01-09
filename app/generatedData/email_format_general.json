@@ -1,12 +1,4 @@
 {
-  "1und1.de": {
-    "smtp": {
-      "ssl": {
-        "host": "smtp.1und1.de",
-        "port": 465
-      }
-    }
-  },
   "aol.com": {
     "smtp": {
       "start-tls": {
@@ -90,25 +82,19 @@
       "Hotmail.com"
     ],
     "smtp": {
-      "unencrypted": {
+      "ssl": {
         "host": "smtp.live.com",
         "port": 587
       },
-      "start-tls": {
-        "host": "smtp-mail.outlook.com",
+      "startTls": {
+        "host": "smtp.office365.com",
         "port": "587"
       }
     },
     "imap": {
       "ssl": {
-        "host": "imap-mail.outlook.com",
+        "host": "outlook.office365.com",
         "port": "993"
-      }
-    },
-    "pop3": {
-      "ssl": {
-        "host": "pop3.live.com",
-        "port": 995
       }
     }
   },
@@ -119,25 +105,19 @@
       "Hotmail.com"
     ],
     "smtp": {
-      "unencrypted": {
+      "ssl": {
         "host": "smtp.live.com",
         "port": 587
       },
-      "start-tls": {
-        "host": "smtp-mail.outlook.com",
+      "startTls": {
+        "host": "smtp.office365.com",
         "port": "587"
       }
     },
     "imap": {
       "ssl": {
-        "host": "imap-mail.outlook.com",
+        "host": "outlook.office365.com",
         "port": "993"
-      }
-    },
-    "pop3": {
-      "ssl": {
-        "host": "pop3.live.com",
-        "port": 995
       }
     }
   },

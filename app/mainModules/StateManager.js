@@ -80,7 +80,7 @@ StateManager.prototype.update = function () {
       break;
     case 'mail':
       this.logger.debug(`This user has logged in. Show them their email.`);
-      this.router.navigate('/mail');
+      //this.router.navigate('/mail');
       break;
     default:
       this.logger.warning(`Unknown state?  This should never happen.  The state was ${state.state}`);
@@ -122,7 +122,7 @@ StateManager.prototype.style = function (titles) {
  */
 
 StateManager.prototype.page = function (page, css) {
-  this.logger.debug(`Switching page to ${page}`);
+  this.logger.debug(`Switching page to ${page} ...`);
   document.querySelector('#content').innerHTML = this.appDir.read(`./app/html/${page}.html`);
   //this.style(css);
 }

@@ -40,6 +40,8 @@ Utils.prototype.isObject = function (item) {
  * @return {object}
  */
 Utils.prototype.removeCircular = function (object) {
+  // Get string representation of object 
+  // depth : null to recurse up to the maximum (nested object depth)
   var str = util.inspect(object, { depth: null });
   str = str
     .replace(/<Buffer[ \w\.]+>/ig, '"buffer"')
@@ -48,7 +50,7 @@ Utils.prototype.removeCircular = function (object) {
     .replace(/\{ \[Function: ([\w]+)]/ig, '{ $1: function $1 () {},')
     .replace(/\[Function: ([\w]+)]/ig, 'function $1(){}')
     .replace(/(\w+): ([\w :]+GMT\+[\w \(\)]+),/ig, '$1: new Date("$2"),')
-    .replace(/(\S+): ,/ig, '$1: null,')
+    .replace(/(\S+): ,/ig, '$1: null,');
   return JSON.parse(JSON.stringify((new Function('return ' + str + ';'))()));
 }
 

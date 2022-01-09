@@ -53,19 +53,19 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
         }
 
         if ('smtp' in domainList[domain]){
-          if ('ssl' in domainList[domain].smtp){
+          if ('startTls' in domainList[domain].smtp){
+            let outgoingHostField = document.querySelector('#host_outgoing');
+            if (!outgoingHostField.value) outgoingHostField.value = domainList[domain].smtp.startTls.host;
+            let outgoingPortField = document.querySelector('#port_outgoing');
+            if (!outgoingPortField.value) outgoingPortField.value = domainList[domain].smtp.startTls.port;
+            let tlsField = document.querySelector('#secure');
+            tlsField.setAttribute('checked', true);
+          }
+          else if ('ssl' in domainList[domain].smtp) {
             let outgoingHostField = document.querySelector('#host_outgoing');
             if (!outgoingHostField.value) outgoingHostField.value = domainList[domain].smtp.ssl.host;
             let outgoingPortField = document.querySelector('#port_outgoing');
             if (!outgoingPortField.value) outgoingPortField.value = domainList[domain].smtp.ssl.port;
-            let tlsField = document.querySelector('#secure');
-            tlsField.setAttribute('checked', true);
-          }
-          else if ('unencrypted' in domainList[domain].smtp) {
-            let outgoingHostField = document.querySelector('#host_outgoing');
-            if (!outgoingHostField.value) outgoingHostField.value = domainList[domain].smtp.unencrypted.host;
-            let outgoingPortField = document.querySelector('#port_outgoing');
-            if (!outgoingPortField.value) outgoingPortField.value = domainList[domain].smtp.unencrypted.port;
             // Leave checkbox unchecked.
           }
         }

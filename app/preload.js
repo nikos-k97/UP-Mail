@@ -11,6 +11,7 @@ const Header = require('./mainModules/Header');
 const SetupPage = require('./mainModules/SetupPage');
 const WelcomePage = require('./mainModules/WelcomePage');
 const AccountManager = require('./mainModules/AccountManager');
+//const MailPage = require('./mainModules/MailPage');
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload
@@ -21,15 +22,14 @@ const AccountManager = require('./mainModules/AccountManager');
 // This is the primary reason why arrow functions are not used in the application ('this' is automatically bound
 // in arrow functions so when instances are created, the 'this' keyword inside the methods is pointing to the wrong place).
 const router = new Navigo('/');
-const threader = new Threader();
 const logger = new Logger({}, app); 
 const utils = new Utils(app, logger);
 const stateManager = new StateManager(app, logger, router);
 const header = new Header(app, BrowserWindow);
 const setupPage = new SetupPage(app, logger, stateManager);
-const accountManager = new AccountManager(app, logger, utils);
+const accountManager = new AccountManager(app, logger, stateManager, utils);
 const welcomePage = new WelcomePage(logger, stateManager, utils, accountManager); // <<<<<<<<<<<<<
-
+//const mailPage = new MailPage();
 
 router.on(
     {
@@ -39,7 +39,7 @@ router.on(
         // So 'bind' method is neccesary in order to set the correct context for 'this' keyword.
         '/setup': () => { utils.time(setupPage.load.bind(setupPage)) },
         '/welcome': () => { utils.time(welcomePage.load.bind(welcomePage)) },
-        //'/mail': () => { utils.time(MailPage.load) }
+        //'/mail': () => { utils.time(mailPage.load.bind(mailPage)) }
     }
 ).resolve();
 
