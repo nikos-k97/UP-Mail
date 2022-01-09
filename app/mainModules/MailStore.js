@@ -11,8 +11,8 @@ function MailStore (app, utils, imapClient) {
 // Called inside 'onLoad' callback function of the getEmails() function defined in IMAPClient.js
 // for each email inside a mailbox.
 MailStore.prototype.saveEmail = async function (email, seqno, msg, attributes, folder) { // msg = parsedContent
-  //const hash = this.utils.md5(email);
-  //if (typeof this[hash] === 'undefined') createEMailDB(email)
+  // For example when the reload button is pressed, a new IMAP client is created and this.hash is undefined
+  if (typeof this.hash === 'undefined') await this.createEmailDB(email);
 
   // The properties are overwritten by other objects that have the same properties later in the parameters order. 
   let mail = Object.assign( 

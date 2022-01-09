@@ -80,7 +80,7 @@ StateManager.prototype.update = function () {
       break;
     case 'mail':
       this.logger.debug(`This user has logged in. Show them their email.`);
-      //this.router.navigate('/mail');
+      this.router.navigate('/mail');
       break;
     default:
       this.logger.warning(`Unknown state?  This should never happen.  The state was ${state.state}`);

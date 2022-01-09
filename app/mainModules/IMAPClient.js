@@ -340,7 +340,7 @@ IMAPClient.prototype.getEmailBody = async function (uid) {
 IMAPClient.prototype.updateAccount = async function () {
   let emailAddress = this.client._config.user;
   let hash = this.utils.md5(emailAddress);
-
+ 
   /*----------  GRAB USER MAILBOXES  ----------*/
   document.querySelector('#doing').innerText = 'Grabbing your mailboxes ...';
   await this.checkClient();
@@ -463,12 +463,6 @@ IMAPClient.prototype.updateAccount = async function () {
     "account": {
       "hash": "9c6abxxxxxxxxxxxxxx19477",
       "email": "test-mail@test.com",
-      "folder": [
-        {
-          "name": "Inbox",
-          "delimiter": "/"
-        }
-      ]
     }
   }
   */

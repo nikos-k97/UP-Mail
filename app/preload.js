@@ -11,7 +11,7 @@ const Header = require('./mainModules/Header');
 const SetupPage = require('./mainModules/SetupPage');
 const WelcomePage = require('./mainModules/WelcomePage');
 const AccountManager = require('./mainModules/AccountManager');
-//const MailPage = require('./mainModules/MailPage');
+const MailPage = require('./mainModules/MailPage');
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload
@@ -28,8 +28,8 @@ const stateManager = new StateManager(app, logger, router);
 const header = new Header(app, BrowserWindow);
 const setupPage = new SetupPage(app, logger, stateManager);
 const accountManager = new AccountManager(app, logger, stateManager, utils);
-const welcomePage = new WelcomePage(logger, stateManager, utils, accountManager); // <<<<<<<<<<<<<
-//const mailPage = new MailPage();
+const welcomePage = new WelcomePage(logger, stateManager, utils, accountManager); // <<<<<<<<<<<<< !!!!
+const mailPage = new MailPage(logger, stateManager, utils, accountManager);
 
 router.on(
     {
@@ -39,11 +39,15 @@ router.on(
         // So 'bind' method is neccesary in order to set the correct context for 'this' keyword.
         '/setup': () => { utils.time(setupPage.load.bind(setupPage)) },
         '/welcome': () => { utils.time(welcomePage.load.bind(welcomePage)) },
-        //'/mail': () => { utils.time(mailPage.load.bind(mailPage)) }
+        '/mail': () => { utils.time(mailPage.load.bind(mailPage)) } 
     }
-).resolve();
+).resolve()
 
-
+// Add an 'already' hook to the 'mail' route. When we reload the mail page via 'MailPage.prototype.reload()'
+// router is already on the 'mail' path. So the 'already' hook matches the 'mail' route again.
+router.addAlreadyHook('mail', () => {
+    utils.time(mailPage.load.bind(mailPage))
+});
 
 // Expose protected methods that allow the renderer process to use the ipcRenderer without exposing the entire object.
 // Proxy-like API -> instead of assigning values straight to window object - functions can be ovverriden in javascript. 
