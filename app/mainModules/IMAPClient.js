@@ -8,6 +8,7 @@ const IMAP         = require('node-imap');
 const _            = require('lodash');
 const MailStore    = require('./MailStore');
 const Threader     = require('./Threader');
+const MailPage = require('./MailPage');
 
 /**
  * Logs the user in to their email server.
@@ -26,7 +27,7 @@ function IMAPClient(app, logger, utils, stateManager, accountManager, details, d
   this.utils = utils;
   this.stateManager = stateManager;
   this.accountManager = accountManager;
-  this.mailStore = new MailStore(this.app,this.utils, this);
+  this.mailStore = new MailStore(this.app,this.utils, this); 
   // Jetpack is used in order to write to the log files, which are organised by day (yyyy-mm-dd.log).
   this.jetpack = jetpack.cwd(this.app.getPath('userData'), 'logs');
   // Grabs the current day, for use in writing to the log files.
@@ -508,6 +509,13 @@ IMAPClient.prototype.checkClient = async function () {
     //this.client = await new IMAPClient(this.client._config);
     //this.client = await new IMAPClient(this.app, this.logger, this.details);
   }
+}
+
+// Since preload.js doesnt contain references to imapClient and mailStore, we cant pass 'mailstore'
+// as arguement to 'mailpage' without the help of 'accountManager'.
+IMAPClient.prototype.redirectToMailPage = async function () {
+  const mailPage = new MailPage(this.logger, this.stateManager, this.utils, this.accountManager, this.mailStore);
+  mailPage.load();
 }
 
 module.exports = IMAPClient;

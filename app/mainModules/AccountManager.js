@@ -1,7 +1,6 @@
 const Datastore = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise = require('bluebird');
 const IMAPClient = require('./IMAPClient');
-const MailStore = require('./MailStore');
 
 // BlueBird is used to make the NeDB module run asynchronously.
 // It's useful feature is that it allows us to “promisify” other Node modules in order to use them asynchronously. 
@@ -95,6 +94,7 @@ AccountManager.prototype.listAccounts = async function () {
 }
 
 AccountManager.prototype.findAccount = async function (email) {
+  // FindAsync returns an array of 1 element , so we use the [0] to get inside the array.
   return (await this.accounts.findAsync({ user: email }))[0] || {};
 }
 

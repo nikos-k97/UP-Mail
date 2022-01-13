@@ -1,7 +1,8 @@
 const { timeout, TimeoutError } = require('promise-timeout');
+
 //const searchInPage              = require('electron-in-page-search').default
 
-function MailPage (logger, stateManager, utils, accountManager) {
+function MailPage (logger, stateManager, utils, accountManager, client) {
   this.logger = logger;
   this.stateManager = stateManager;
   this.utils = utils;
@@ -11,8 +12,9 @@ function MailPage (logger, stateManager, utils, accountManager) {
 MailPage.prototype.load = async function () {
   if (!this.utils.testLoaded('mail')) return;
 
-  this.logger.debug('Mail Page is now loading...');
+  // Change internal state to 'mail'
   this.stateManager.page('mail', ['basic', 'mail']);
+  this.logger.debug('Mail Page is now loading...');
 
   /*----------  ENSURE ACCOUNT SET IN STATE  ----------*/
   if (typeof this.stateManager.state.account === 'undefined') {
@@ -21,6 +23,8 @@ MailPage.prototype.load = async function () {
   }
 
   /*----------  RETRIEVE & SETUP ACCOUNT  ----------*/
+
+  // Retrive data from accounts.db
   let account = await this.accountManager.findAccount(this.stateManager.state.account.emailAddress);
   let folders = account.folders;
       // await MailStore.createEmailDB(account.user) <<< this.mailstore
@@ -36,6 +40,7 @@ MailPage.prototype.load = async function () {
         }));
       }
     }
+  }
     /*
     {
       "state": "mail",
@@ -51,7 +56,7 @@ MailPage.prototype.load = async function () {
       }
     }
     */
-  }
+
 
   /*----------  ACTIVATE MAIL BUTTON  ----------*/
       //$('#compose-button').click(() => {
@@ -60,17 +65,23 @@ MailPage.prototype.load = async function () {
 
   /*----------  ACTIVATE RELOAD BUTTON  ----------*/
   document.querySelector('#refresh-button').addEventListener('click', () => {
-    console.log('refresh button pushed')
     this.reload();
   });
 
+  /*----------  SET FOLDER LIST  ----------*/
 
-//   /*----------  SET FOLDER LIST  ----------*/
-//   // The false here in the third argument position defines whether folders should have
-//   // depth or not.
-//   $('#folders').html(await MailPage.generateFolderList(undefined, folders, [], false))
-//   MailPage.linkFolders($('#folders').children().children())
-//   MailPage.highlightFolder()
+  // The false in the third argument position defines whether folders should have depth or not.
+  document.querySelector('#folders').innerHTML = await (this.generateFolderList(undefined, folders, [], false));
+  let firstChildren = document.querySelector('#folders').children;
+  let secondChildren = [];
+  for (let i=0; i<firstChildren.length; i++){
+    let secondChild = firstChildren[i].children;
+    secondChildren[i] = secondChild[0]; //Remove the HTMLCollection - get only its value
+  };
+  this.linkFolders(secondChildren);
+ 
+  // Highlight (css) the folder that is selected as current in 'state.json' .
+  this.highlightFolder();
 
 //   /*----------  ADD MAIL ITEMS  ----------*/
 //   MailPage.render()
@@ -78,89 +89,130 @@ MailPage.prototype.load = async function () {
 
 //   /*----------  SEARCH IN MAIL WINDOW  ----------*/
 //   // MailPage.enableSearch()
-// }
+}
 
-// MailPage.generateFolderList = async function (email, folders, journey, depth) {
-//   if (typeof email === 'undefined') {
-//     let accounts = await AccountManager.listAccounts()
-//     let html = ''
-//     for (let i = 0; i < accounts.length; i++) {
-//       if (depth) {
-//         html += `
-//           <div class="col s12 no-padding center-align">
-//             <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
-//               ${accounts[i].name || accounts[i].user}
-//         `
-//       } else {
-//         html += `
-//           <div class="col s12 no-padding center-align">
-//             <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
-//               ${accounts[i].name || accounts[i].user}
-//             </div>
-//           </div>
-//         `
-//       }
-//       html += await MailPage.generateFolderList(accounts[i].user, accounts[i].folders, [], depth)
-//       if (depth) {
-//         html += `
-//             </div>
-//           </div>
-//         `
-//       }
-//       // html += await MailPage.generateFolderList(accounts[i].user, accounts[i].folders, [], depth)
-//     }
-//     return html
-//   }
-//   let html = ''
-//   for (let prop in folders) {
-//     temp = journey.concat({ name: prop, delimiter: folders[prop].delimiter })
-//     let id = btoa(JSON.stringify(temp))
-//     if (depth) {
-//       html += `
-//         <div class="col s12 no-padding center-align">
-//           <div class="waves-effect waves-teal btn-flat wide folder-tree" id="${id}">
-//             ${prop} ${await MailPage.generateFolderList(email, folders[prop].children, temp, depth)}
-//           </div>
-//         </div>
-//       `
-//     } else {
-//       html += `
-//         <div class="col s12 no-padding center-align">
-//           <div class="waves-effect waves-teal btn-flat wide folder-tree" id="${id}">${prop}</div>
-//         </div>
-//       `
-//       html += await MailPage.generateFolderList(email, folders[prop].children, temp, depth)
-//     }
-//   }
-//   return html
-// }
+MailPage.prototype.generateFolderList = async function (email, folders, journey, depth) {
+  if (typeof email === 'undefined') {
+    // Get all the accouns present in the accounts db.
+    let accounts = await this.accountManager.listAccounts();
+    let html = '';
+    for (let i = 0; i < accounts.length; i++) {
+      // If 'depth' leave the <div> elements open, otherwise close them.
+      if (depth) {
+        html += `
+          <div class="col s12 no-padding center-align">
+            <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
+              ${accounts[i].name || accounts[i].user}
+        `;
+      } else {
+        html += `
+          <div class="col s12 no-padding center-align">
+            <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
+              ${accounts[i].name || accounts[i].user}
+            </div>
+          </div>
+        `;
+      }
+      html += await this.generateFolderList(accounts[i].user, accounts[i].folders, [], depth);
+      if (depth) {
+        html += `
+            </div>
+          </div>
+        `
+      }
+      // html += await MailPage.generateFolderList(accounts[i].user, accounts[i].folders, [], depth)
+    }
+    return html
+  }
+  let html = '';
+  for (let folder in folders) {
+    let pathSoFar = journey.concat({ name: folder, delimiter: folders[folder].delimiter });
+    let id = btoa(JSON.stringify(pathSoFar));
+    if (depth) {
+      html += `
+        <div class="col s12 no-padding center-align">
+          <div class="waves-effect waves-teal btn-flat wide folder-tree" id="${id}">
+            ${folder} ${await this.generateFolderList(email, folders[folder].children, pathSoFar, depth)}
+          </div>
+        </div>
+      `;
+    } else {
+      html += `
+        <div class="col s12 no-padding center-align">
+          <div class="waves-effect waves-teal btn-flat wide folder-tree" id="${id}">${folder}
+          </div>
+        </div>
+      `;
+      html += await this.generateFolderList(email, folders[folder].children, pathSoFar, depth);
+    }
+  }
+  return html;
+}
 
-// MailPage.linkFolders = function (children) {
-//   children.each((index, item) => {
-//     $(`#${item.id.replace(/=/g, '\\=')}`).click((element) => {
-//       logger.log(`Switching page to ${atob(element.target.id)}`)
-//       StateManager.change('account', Object.assign(StateManager.state.account, {
-//         folder: JSON.parse(atob(element.target.id))
-//       }))
-//       $(`.folder-tree`).removeClass('teal lighten-2')
-//       $(`#${element.target.id.replace(/=/g, '\\=')}`).addClass('teal lighten-2')
-//       MailPage.render()
-//     })
+MailPage.prototype.linkFolders = function (children) {
+  // Children are all the (inside - second level) div elements 
+  // with id either the (base64) email hash or the (base64) folder path.
+  children.forEach( 
+    (element => {
+      // Replace every '=' in the div id with the escaped '\='.
+      let divElement = document.querySelector(`#${element.id.replace(/=/g,'\\=')}`);
+      // Add 'click' functionality only on folders- not on accounts. 
+      if (divElement.classList.contains('folder-tree')){
+        divElement.addEventListener('click', (clickedElement) => {
+          // example: Switching page to [{"name": "Inbox", "delimeter":"/""}]
+          this.logger.log(`Switching page to ${atob(clickedElement.target.id)}`);
+  
+          // Store in 'state.json' the folder that user has selected last.
+          // example: {"state": "mail","account": {"hash": "9xxxxxxxxxxxxxxxxx77","emailAddress": "test@test.com",
+          //           "folder": [{"name": "Inbox","delimiter": "/"}]}}            
+          this.stateManager.change('account', Object.assign(this.stateManager.state.account, 
+            { folder: JSON.parse(atob(clickedElement.target.id)) }
+          ));
+          
+          // Change the css for the currently selected / clicked folder.
+          let otherFolders = document.querySelectorAll('.folder-tree');
+          for (let i=0; i<otherFolders.length; i++){
+            otherFolders[i].classList.remove('teal','lighten-2');
+          }
+          document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('teal','lighten-2');
+          //MailPage.render();                     
+        });
+      }
+    })
+  );
 
-//     let items = $(`#${item.id.replace(/=/g, '\\=')}`).children().children()
-//     if (items.length) {
-//       MailPage.linkFolders(items)
-//     }
-//   })
-// }
+  // children.each(
+  //   (index, item) => {
+  //     $(`#${item.id.replace(/=/g, '\\=')}`).click((element) => {
+  //       logger.log(`Switching page to ${atob(element.target.id)}`)
+  //       StateManager.change('account', Object.assign(StateManager.state.account, {
+  //         folder: JSON.parse(atob(element.target.id))
+  //       }))
+  //       $(`.folder-tree`).removeClass('teal lighten-2')
+  //       $(`#${element.target.id.replace(/=/g, '\\=')}`).addClass('teal lighten-2')
+  //       MailPage.render()
+  //     })
 
-// MailPage.highlightFolder = function () {
-//   $(`.folder-tree`).removeClass('teal lighten-2')
-//   $(`#${btoa(JSON.stringify(StateManager.state.account.folder)).replace(/=/g, '\\=')}`).addClass('teal lighten-2')
-// }
+  //     let items = $(`#${item.id.replace(/=/g, '\\=')}`).children().children()
+  //     if (items.length) {
+  //       MailPage.linkFolders(items)
+  //     }
+  //   }
+  // );
 
-// MailPage.render = async function(page) {
-//   page = page || 0
+}
+
+MailPage.prototype.highlightFolder = function () {
+  let folders = document.querySelectorAll('.folder-tree');
+  for (let i=0; i< folders.length; i++){
+    folders[i].classList.remove('teal','lighten-2');
+  }
+  let currentFolder = document.querySelector(`#${btoa(JSON.stringify(this.stateManager.state.account.folder)).replace(/=/g, '\\=')}`);
+  currentFolder.classList.add('teal','lighten-2');
+}
+
+// MailPage.prototype.render = async function(page) {
+//   let page = page || 0;
 
 //   let mail = await MailStore.findEmails(StateManager.state.account.email, StateManager.state.account.folder, { uid: 1, isThreadChild: 1 }, page * 250, 250)
 //   Header.setLoc([StateManager.state.account.email].concat(StateManager.state.account.folder.map((val) => { return val.name })))
@@ -202,7 +254,6 @@ MailPage.prototype.reload = async function() {
   `;
   this.logger.log('Reloading mail messages...');
   let client = (await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress));
-  //client.createEmailDatabase(this.stateManager.state.account.emailAddress);
   await client.updateAccount();
 }
 
@@ -332,5 +383,5 @@ MailPage.prototype.reload = async function() {
 //     })
 //   }
 // })
-}
+
 module.exports = MailPage;
