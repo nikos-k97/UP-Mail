@@ -102,30 +102,33 @@ Utils.prototype.getItemsFromForm = (form) => {
   return values;
 }
 
-function isToday (momentDate) {
-  return momentDate.isSame(moment().clone().startOf('day'), 'd');
+function isToday (date) {
+  let now = DateTime.now();
+  return date.hasSame(now, 'day');
 }
 
-function isYesterday (momentDate) {
-  return momentDate.isSame(moment().clone().subtract(1, 'days').startOf('day'), 'd');
+function isWithinAWeek (date) {
+  let now = DateTime.now();
+  return date.hasSame(now, 'week');
 }
 
-function isWithinAWeek (momentDate) {
-  // return momentDate.isAfter(moment().clone().startOf('week'))
-  return momentDate.isAfter(moment().clone().subtract(7, 'days').startOf('day'));
+function isWithinAMonth (date) {
+  let now = DateTime.now();
+  return date.hasSame(now, 'month');
 }
 
-function isWithinAYear (momentDate) {
-  return momentDate.isAfter(moment().clone().startOf('year'));
+function isWithinAYear (date) {
+  let now = DateTime.now();
+  return date.hasSame(now, 'year');
 }
 
 Utils.prototype.alterDate = function (date) {
-  let messageTime = moment(new Date(date).toISOString())
-  if (isToday(messageTime)) return messageTime.format('hh:mmA');
-  if (isYesterday(messageTime)) return 'Yesterday';
-  if (isWithinAWeek(messageTime)) return messageTime.format('dddd');
-  if (isWithinAYear(messageTime)) return messageTime.format('Do MMM');
-  return messageTime.format('Do MMM YYYY');
+  let messageTime = DateTime.fromISO(new Date(date).toISOString()).setLocale('el-gr');
+  if (isToday(messageTime)) return messageTime.toFormat('hh:mm a');
+  if (isWithinAWeek(messageTime)) return messageTime.toFormat('ccc hh:mm a');
+  if (isWithinAMonth(messageTime)) return messageTime.toFormat('ccc dd/LL');
+  if (isWithinAYear(messageTime)) return messageTime.toFormat('dd/LL/yy');
+  return messageTime.toFormat('dd/LL/yy');
 }
 
 module.exports = Utils;

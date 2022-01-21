@@ -1,4 +1,6 @@
 const { timeout, TimeoutError } = require('promise-timeout');
+const Header = require('./Header');
+const Clean = require('./Clean');
 
 //const searchInPage              = require('electron-in-page-search').default
 
@@ -7,14 +9,17 @@ function MailPage (logger, stateManager, utils, accountManager, client) {
   this.stateManager = stateManager;
   this.utils = utils;
   this.accountManager = accountManager;
+  // this.client ->  defined in MailPage.prototype.reload()
+  // this.mailStore -> defined in MailPage.prototype.render() = client.mailStore
 }
 
 MailPage.prototype.load = async function () {
   if (!this.utils.testLoaded('mail')) return;
 
-  // Change internal state to 'mail'
+  // Change internal state to 'mail'.
   this.stateManager.page('mail', ['basic', 'mail']);
   this.logger.debug('Mail Page is now loading...');
+
 
   /*----------  ENSURE ACCOUNT SET IN STATE  ----------*/
   if (typeof this.stateManager.state.account === 'undefined') {
@@ -23,11 +28,10 @@ MailPage.prototype.load = async function () {
   }
 
   /*----------  RETRIEVE & SETUP ACCOUNT  ----------*/
-
   // Retrive data from accounts.db
   let account = await this.accountManager.findAccount(this.stateManager.state.account.emailAddress);
   let folders = account.folders;
-      // await MailStore.createEmailDB(account.user) <<< this.mailstore
+
 
   /*----------  ENSURE FOLDER SET IN STATE  ----------*/
   if (typeof this.stateManager.state.account.folder === 'undefined') {
@@ -35,29 +39,17 @@ MailPage.prototype.load = async function () {
     // we have to search through them, looking for one which contains the word "inbox".
     for (let folder in folders) {
       if (folder.toLowerCase() === 'inbox') {
+         /*
+          {"state": "mail","account": {"hash": "9c6abxxxxxxxxxxxxxx19477","email": "test-mail@test.com",
+            "folder": [ {"name": "Inbox","delimiter": "/"}]  }}
+        */
         this.stateManager.change('account', Object.assign(this.stateManager.state.account, {
           folder: [{ name: folder, delimiter: account.folders[folder].delimiter }]
         }));
       }
     }
   }
-    /*
-    {
-      "state": "mail",
-      "account": {
-        "hash": "9c6abxxxxxxxxxxxxxx19477",
-        "email": "test-mail@test.com",
-        "folder": [
-          {
-            "name": "Inbox",
-            "delimiter": "/"
-          }
-        ]
-      }
-    }
-    */
-
-
+   
   /*----------  ACTIVATE MAIL BUTTON  ----------*/
       //$('#compose-button').click(() => {
         //ipcRenderer.send('open', { file: 'compose' })
@@ -69,7 +61,6 @@ MailPage.prototype.load = async function () {
   });
 
   /*----------  SET FOLDER LIST  ----------*/
-
   // The false in the third argument position defines whether folders should have depth or not.
   document.querySelector('#folders').innerHTML = await (this.generateFolderList(undefined, folders, [], false));
   let firstChildren = document.querySelector('#folders').children;
@@ -83,13 +74,27 @@ MailPage.prototype.load = async function () {
   // Highlight (css) the folder that is selected as current in 'state.json' .
   this.highlightFolder();
 
-//   /*----------  ADD MAIL ITEMS  ----------*/
-//   MailPage.render()
-//   MailPage.retrieveEmailBodies()
-
+/*----------  ADD MAIL ITEMS  ----------*/
+  this.render();
+ 
 //   /*----------  SEARCH IN MAIL WINDOW  ----------*/
-//   // MailPage.enableSearch()
+//   // MailPage.enableSearch() to xei sxoliasmeno o "dimiourgos leme twra"
 }
+
+MailPage.prototype.reload = async function() {
+  // Add the fields that we were using (dynamically) in 'welcome.html' to 'mail.html', since we 
+  // need them for not breaking the code that uses them (IMAP.updateAccount)
+  document.querySelector('.wrapper').innerHTML = `
+    <span id="doing"></span> 
+    <span id="number"></span><br>
+    <span id="mailboxes"></span>
+  `;
+  this.logger.log('Reloading mail messages...');
+  let client = (await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress));
+  await client.updateAccount();
+  this.client = client;
+}
+
 
 MailPage.prototype.generateFolderList = async function (email, folders, journey, depth) {
   if (typeof email === 'undefined') {
@@ -153,7 +158,7 @@ MailPage.prototype.linkFolders = function (children) {
   // Children are all the (inside - second level) div elements 
   // with id either the (base64) email hash or the (base64) folder path.
   children.forEach( 
-    (element => {
+    (element) => {
       // Replace every '=' in the div id with the escaped '\='.
       let divElement = document.querySelector(`#${element.id.replace(/=/g,'\\=')}`);
       // Add 'click' functionality only on folders- not on accounts. 
@@ -175,31 +180,21 @@ MailPage.prototype.linkFolders = function (children) {
             otherFolders[i].classList.remove('teal','lighten-2');
           }
           document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('teal','lighten-2');
-          //MailPage.render();                     
+          this.render();                     
         });
       }
-    })
+      // Search for child forlders.
+      let firstChildren = document.querySelector(`#${element.id.replace(/=/g, '\\=')}`).children;
+      let secondChildren = [];
+      for (let i=0; i<firstChildren.length; i++){
+        let secondChild = firstChildren[i].children;
+        secondChildren[i] = secondChild[0]; //Remove the HTMLCollection - get only its value
+      };
+      if (secondChildren.length) {
+        this.linkFolders(secondChildren);
+      }
+    }
   );
-
-  // children.each(
-  //   (index, item) => {
-  //     $(`#${item.id.replace(/=/g, '\\=')}`).click((element) => {
-  //       logger.log(`Switching page to ${atob(element.target.id)}`)
-  //       StateManager.change('account', Object.assign(StateManager.state.account, {
-  //         folder: JSON.parse(atob(element.target.id))
-  //       }))
-  //       $(`.folder-tree`).removeClass('teal lighten-2')
-  //       $(`#${element.target.id.replace(/=/g, '\\=')}`).addClass('teal lighten-2')
-  //       MailPage.render()
-  //     })
-
-  //     let items = $(`#${item.id.replace(/=/g, '\\=')}`).children().children()
-  //     if (items.length) {
-  //       MailPage.linkFolders(items)
-  //     }
-  //   }
-  // );
-
 }
 
 MailPage.prototype.highlightFolder = function () {
@@ -211,127 +206,251 @@ MailPage.prototype.highlightFolder = function () {
   currentFolder.classList.add('teal','lighten-2');
 }
 
-// MailPage.prototype.render = async function(page) {
-//   let page = page || 0;
+// Render the currently selected folder (in state.json). Render is also called each time we click a folder.
+MailPage.prototype.render = async function(folderPage) {
+  // For a returning user we go straight into the /mail route so the ImapClient and MailStore are not
+  // initialized, unless we perform a reload.
+  if (this.mailStore === undefined){
+    await this.reload();
+    let client = this.client; // this.client is defined in MailPage.prototype.reload()
+    this.mailStore = client.mailStore;
+    return; //dont do recursion (when reload is called the rest of the function will run a second time)
+  }
+  let page = folderPage || 0;
 
-//   let mail = await MailStore.findEmails(StateManager.state.account.email, StateManager.state.account.folder, { uid: 1, isThreadChild: 1 }, page * 250, 250)
-//   Header.setLoc([StateManager.state.account.email].concat(StateManager.state.account.folder.map((val) => { return val.name })))
+  // Get the UID and the 'isThreadChild' fields of all the emails inside the current folder (folder stored in state.json).
+  let mail = await this.mailStore.findEmails(this.stateManager.state.account.folder, { uid: 1, isThreadChild: 1 }, page * 250, 250);
+  // Show in header the emailAddress followed by the folder currently selected.
+  Header.setLoc([this.stateManager.state.account.emailAddress].concat(this.stateManager.state.account.folder.map((val) => { return val.name })));
 
-//   if (!page) {
-//     $('#mail').html('')
-//     $('#message-holder').html(`<div id="message"></div>`)
-//   }
+  // If this is the first mail page initialize the html content.
+  let mailDiv = document.querySelector('#mail');
+  if (!page) {
+    mailDiv.innerHTML = '';
+    //document.querySelector('#message-holder').innerHTML = '<div id="message"></div>';
+  }
 
-//   let html = ""
-//   for (let i = 0; i < mail.length; i++) {
-//     if (!mail[i].isThreadChild) {
-//       html += `<e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>`
-//     }
-//   }
+  // Create <e-mail> tags equal to mailbox length.
+  let html = "";
+  for (let i = 0; i < mail.length; i++) {
+    if (! mail[i].isThreadChild) {
+      html += `<e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>`; // data-uid 
+    }
+  }
+  if (mail.length === 0) html = 'This folder is empty.';
+  if (await this.mailStore.countEmails(this.stateManager.state.account.folder) > 250 * (page + 1)) {
+    html += `<button class='load-more'>Load more...</button>`;
+  }
+  document.querySelector('#mail').innerHTML = html;
 
-//   if (mail.length === 0) $('#mail').html('This folder is empty ;(')
-//   if (await MailStore.countEmails(StateManager.state.account.email, StateManager.state.account.folder) > 250 * (page + 1)) {
-//     html += `<button class='load-more'>Load more...</button>`
-//     $('.load-more').remove()
-//   }
 
-//   $('#mail').append(html)
+  // Populate the <e-mail> tags with the mail content (header and title).
+  let emailCustomElements = document.getElementsByTagName('e-mail');
+  for (let i=0; i < emailCustomElements.length; i++){
+    let shadowRoot = emailCustomElements[i].shadowRoot;
+    // Show loading message until mail has loaded.
+    shadowRoot.innerHTML = 'Loading...';
 
-//   $('.email-item').off('click')
-//   $('.email-item').click((e) => { MailPage.renderEmail(unescape(e.currentTarget.attributes['data-uid'].nodeValue)) })
+                /*
+                ------------------------------ DATA ATTRIBUTES --------------------------------------------
+                Any attribute on any element whose attribute name starts with data- is a data attribute. 
+                Used to store some extra information that doesn't have any visual representation.
+                Reading the values of these attributes out in JavaScript is done by either:
+                - getting the property by the part of the attribute name after data- (dashes are converted to camelCase).
+                  example: <article id="electric-cars" data-columns="3" data-index-number="12314" </article>
+                            JS:       article.dataset.indexNumber // "12314"
+                - using getAttribute() with their full HTML name to read them.
+                --------------------------------------------------------------------------------------------
+                */
+    // We're able to assume some values from the current state.
+    // However, we don't rely on it, preferring instead to find it in the email itself.
+    let email = emailCustomElements[i].getAttribute('data-email') || this.stateManager.state.account.emailAddress;
+    let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
+    this.mailStore.loadEmail(uid).then((mail) => {
+      // NOTE: All of these *have* to be HTML escaped -> `Clean.escape(string)`.
+      shadowRoot.innerHTML = `
+        <div class="mail-item">
+          <div class="multi mail-checkbox">
+            <input type="checkbox" id="${mail.uid}">
+            <label for="${mail.uid}"></label>
+          </div>
+          <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
+            <div class="subject">
+              <div class="subject-text">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.subject)}</div>
+            </div>
+            <div class="sender">
+              <div class="sender-text">${Clean.escape(typeof mail.from !== 'undefined' ? mail.from.value[0].name || mail.from.value[0].address : 'Unknown Sender')}</div>
+            </div>
+            <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}</div>
+          </div>
+          <div id="message-holder"></div>
+        </div>
+        `;
+    })
+  }
 
-//   $('.load-more').off('click')
-//   $('.load-more').click((e) => { MailPage.render(page + 1) })
-// }
+  // Get the email details when a user clicks on the email.
+  // Inside the event the state of the Imap client is disconnected.
+  if (mail.length > 0){
+    let emailItems = document.querySelectorAll('.email-item');
+    for (let i=0; i<emailItems.length; i++){
+      if (this.client.client.state === 'disconnected'){
+      }
+      emailItems[i].addEventListener('click', (e) => {
+        this.renderEmail(unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+        //this.renderEmail(unescape(document.querySelector('.email-item').attributes['data-uid'].nodeValue));
+      });
+    }
+  }
 
-MailPage.prototype.reload = async function() {
-  // Add the fields that we were using (dynamically) in 'welcome.html' to 'mail.html', since we 
-  // need them for not breaking the code that uses them (IMAP.updateAccount)
-  document.querySelector('.wrapper').innerHTML = `
-    <span id="doing"></span> 
-    <span id="number"></span><br>
-    <span id="mailboxes"></span>
-  `;
-  this.logger.log('Reloading mail messages...');
-  let client = (await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress));
-  await client.updateAccount();
+
+  // If the 'load-more button exists (many emails) then add the event listener.
+  let loadMoreButton = document.querySelector('.load-more');
+  if (loadMoreButton) {
+    loadMoreButton.addEventListener('click', (e) => {
+      this.render(page + 1);
+      // Remove it after press. If it's needed again it will be rendered again in the next page's render call.
+      loadMoreButton.remove();
+    });
+  }
+
+  this.retrieveEmailBodies();
 }
 
-// MailPage.renderEmail = async function (uid, number) {
-//   number = number || 0
-//   let metadata = await MailStore.loadEmail(StateManager.state.account.email, uid)
+MailPage.prototype.renderEmail = async function (uid, childNumber) {
+  let number = childNumber || 0;
+  let metadata = await this.mailStore.loadEmail(uid);
 
-//   if (!number) {
-//     $(`e-mail div.mail-item div#message-holder div.message-wrapper`).remove()
-//     $(`e-mail div.mail-item`).removeClass('selected-mail-item')
-//     $(`e-mail[data-uid='${uid}'] div.mail-item`).addClass('selected-mail-item')
-//     let item = $(`e-mail[data-uid='${uid}'] div.mail-item div#message-holder`)
-//     item.html(`<div class="message-wrapper" id="message-0"></div>`)
-//     if (metadata.threadMsg) {
-//       for (let i = 1; i < metadata.threadMsg.length + 1; i++) {
-//         item.append(`<hr><div class="message-wrapper" id="message-${i}"></div>`)
-//         MailPage.renderEmail(metadata.threadMsg[i - 1], i)
-//       }
+  let emailElements = document.querySelectorAll('e-mail');
+  if ( ! number ) {
+    for (i=0 ; i < emailElements.length; i++){
+      let messageWrapper = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder div#message-0');
+      if (messageWrapper) {
+        messageWrapper.innerHTML = ''
+        messageWrapper.remove();
+      };
+
+      let unselectedMailItem = emailElements[i].shadowRoot.querySelector('div.mail-item');
+      if (unselectedMailItem) unselectedMailItem.classList.remove('selected-mail-item');
+
+      let dataUidAttributes = emailElements[i].getAttribute('data-uid');
+      if (dataUidAttributes.includes(`${escape(uid)}`)) {
+        let selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
+        selectedMailItem.classList.add('selected-mail-item');
+
+        let selectedItemWrapper = emailElements[i].shadowRoot.querySelector(`div.mail-item div#message-holder`);
+        selectedItemWrapper.innerHTML = '<div class="message-wrapper" id="message-0"></div>';
+        if (metadata.threadMsg) {
+          for (let i = 1; i < metadata.threadMsg.length + 1; i++) {
+            selectedItemWrapper.appendChild(document.createElement('hr'));
+            let appendedDiv = document.createElement('div');
+            appendedDiv.setAttribute('id',`message-${i}`);
+            appendedDiv.classList.add('message-wrapper');
+            selectedItemWrapper.appendChild(appendedDiv);
+            this.renderEmail(metadata.threadMsg[i - 1], i);
+          }
+        }
+      }
+    }
+  }
+  let selectedItemMessage;
+  if (!number){
+    for (let i=0; i<emailElements.length; i++){
+      let messageWrapper = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder div.message-wrapper#message-0');
+      if (messageWrapper) {
+        selectedItemMessage = messageWrapper;
+        break;
+      }
+    }
+  }
+  else{
+    for (let i=0; i<emailElements.length; i++){
+      let messageWrapper = emailElements[i].shadowRoot.querySelector(`div.mail-item div#message-holder div.message-wrapper#message-${number}`);
+      if (messageWrapper) {
+        selectedItemMessage = messageWrapper;
+        break;
+      }
+    }
+  }
+
+  let emailContent = await this.mailStore.loadEmailBody(uid, this.stateManager.state.account.emailAddress);
+
+  //The mail content is not yet stored in the database.
+  if (typeof emailContent === 'undefined') {
+    selectedItemMessage.innerHTML = 'Loading email content ...';
+    // The original client is now disconnected since renderEmail() is called via an event listener.
+    let client = await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress);
+    emailContent = await client.getEmailBody(uid);
+    this.client.client.end();
+  }
+
+  let cleanContent = Clean.cleanHTML(emailContent.html || emailContent.textAsHtml || emailContent.text);
+  selectedItemMessage.innerHTML = cleanContent;
+}
+
+MailPage.prototype.retrieveEmailBodies = async function() {
+  // Since this method is not called via an event (email click) we can use the same IMAPclient.
+  let email =  this.stateManager.state.account.emailAddress;
+  let toGrab = await this.mailStore.loadEmailsWithoutBody();
+  let total = toGrab.length;
+  let currentIter = 0;
+  console.log(this.client.client.state)
+  if (total > 0) {
+    for (let i=0; i<total; i++){
+      this.logger.log(`Grabbing email body ${i + 1} / ${total - 1}`);
+      emailContent = await this.client.getEmailBody(toGrab[i].uid);
+    }
+  }
+}
+
+
+// MailPage.prototype.retrieveEmailBodies = async function() {
+//   // Since this method is not called via an event (email click) we can use the same IMAPclient.
+//   let email =  this.stateManager.state.account.emailAddress;
+//   let toGrab = await this.mailStore.loadEmailsWithoutBody();
+//   let total = toGrab.length;
+ 
+//   if (total) {
+//     let limit = 10;
+//     let currentIter = 0;
+//     let currentCount = 0;
+
+//     let promises = [];
+//     for (let j = 0; j < limit; j++) {
+//       promises.push(this.accountManager.getIMAP(email));
 //     }
-//   }
-//   let shadow = document.getElementById(`message-${number}`).createShadowRoot()
-//   let email = await MailStore.loadEmailBody(StateManager.state.account.email, uid)
+//     let clientsFree = await Promise.all(promises);
 
-//   if (typeof email === 'undefined') {
-//     shadow.innerHTML = `This email has not been retrieved yet.  We're fast tracking it!`
-//     let client = await AccountManager.getIMAP(StateManager.state.account.email)
-//     email = await client.getEmailBody(uid)
-//     client.client.end()
-//   }
-
-//   let display = Clean.cleanHTML(email.html || email.textAsHtml || email.text)
-//   shadow.innerHTML = display
-// }
-
-// MailPage.retrieveEmailBodies = async function() {
-//   let accounts = await AccountManager.listAccounts()
-//   for (let i = 0; i < accounts.length; i++) {
-//     let email = accounts[i].user
-//     let toGrab = await MailStore.loadEmailsWithoutBody(email)
-//     let total = toGrab.length;
-
-//     if (total) {
-//       let limit = 10
-//       let currentIter = 0
-//       let currentCount = 0
-
-//       let promises = []
-//       for (let j = 0; j < limit; j++) {
-//         promises.push(AccountManager.getIMAP(email))
-//       }
-//       let clientsFree = await Promise.all(promises)
-
-//       let interval = setInterval(async function retrieveEmail() {
-//         if (currentIter == total - 1) {
-//           clearInterval(interval)
-//           setTimeout(function () {
-//             for (let i = 0; i < clientsFree.length; i++) {
-//               clientsFree[i].client.end()
-//             }
-//           }, 20000)
-//         } else if (currentCount < limit) {
-//           logger.log(`Grabbing email body ${currentIter + 1} / ${total - 1}`)
-//           currentCount++
-//           currentIter++
-//           let client = clientsFree.pop()
-//           try { await timeout(client.getEmailBody(toGrab[currentIter].uid), 20000) }
-//           catch(e) {
-//             if (e instanceof TimeoutError) logger.error('Timeout on one of our emails grabs...')
-//             else throw e
+//     let interval = setInterval(async function retrieveEmail() {
+//       if (currentIter === total - 1) {
+//         clearInterval(interval);
+//         setTimeout (function () {
+//           for (let i = 0; i < clientsFree.length; i++) {
+//             clientsFree[i].client.end();
 //           }
-//           clientsFree.push(client)
-
-//           currentCount--
+//         }, 20000);
+//       }
+//       else if (currentCount < limit) {
+//         this.logger.log(`Grabbing email body ${currentIter + 1} / ${total - 1}`);
+//         currentCount++;
+//         currentIter++;
+//         let client = clientsFree.pop();
+//         try { 
+//           await timeout(client.getEmailBody(toGrab[currentIter].uid), 20000) 
 //         }
-//       }, 50)
-//     }
+//         catch(e) {
+//           if (e instanceof TimeoutError) this.logger.error('Timeout reached on one of the emails grabs...');
+//           else throw e;
+//         }
+//         clientsFree.push(client);
+//         currentCount--;
+//       }
+//     }.bind(this), 50);
 //   }
 // }
+
+
+
 
 // MailPage.enableSearch = function() {
 //   const listener = new window.keypress.Listener()
@@ -340,48 +459,6 @@ MailPage.prototype.reload = async function() {
 //     searchInWindow.openSearchWindow()
 //   })
 // }
-
-// customElements.define('e-mail', class extends HTMLElement {
-//   constructor () {
-//     super()
-
-//     // Shadow root is it's *own* entire DOM.  This makes it impact less when
-//     // we change and search through other parts of the DOM, *hopefully* making it
-//     // slightly quicker.  It also allows us to use the cool <e-mail> tags.
-//     // const shadowRoot = this.attachShadow({ mode: 'open' })
-//     this.innerHTML = `
-//       <div>Loading...</div>
-//     `
-
-//     // We're able to assume some values from the current state.
-//     // However, we don't rely on it, preferring instead to find it in the email itself.
-//     let email = this.getAttribute('data-email') ||
-//                 StateManager.state.account.email
-//     let uid = unescape(this.getAttribute('data-uid'))
-
-//     MailStore.loadEmail(email, uid).then((mail) => {
-//       // Attach a shadow root to <e-mail>.
-//       // NOTE: All of these *have* to be HTML escaped.  Consider using `Clean.escape(string)` which
-//       // is globally accessible.
-//       this.innerHTML = `
-//         <div class="mail-item">
-//           <div class="multi mail-checkbox"><input type="checkbox" id="${mail.uid}" />
-//             <label for="${mail.uid}"></label>
-//           </div>
-//           <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
-//             <div class="subject">
-//               <div class="subject-text">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.subject)}</div>
-//             </div>
-//             <div class="sender">
-//               <div class="sender-text">${Clean.escape(typeof mail.from !== 'undefined' ? mail.from.value[0].name || mail.from.value[0].address : 'No Sender...')}</div>
-//             </div>
-//             <div class="date teal-text right-align">${Utils.alterDate(mail.date)}</div>
-//           </div>
-//           <div id="message-holder"></div>
-//         </div>
-//       `
-//     })
-//   }
-// })
+        
 
 module.exports = MailPage;

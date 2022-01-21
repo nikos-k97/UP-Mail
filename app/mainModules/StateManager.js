@@ -106,7 +106,7 @@ StateManager.prototype.style = function (titles) {
     }
   }
   if (titles.length) {
-    this.logger.error(`Warning, ${titles} was/were not found within the list of stylesheets.`);
+    this.logger.error(`Warning, ${titles} was /were not found within the list of stylesheets.`);
     this.logger.log(document.styleSheets);
   }
 }

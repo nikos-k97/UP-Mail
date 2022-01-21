@@ -1,6 +1,6 @@
 const simpleParser = require('mailparser').simpleParser;
-const Datastore = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
-const Promise  = require('bluebird');
+const Datastore    = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Promise      = require('bluebird');
 const jetpack      = require('fs-jetpack');
 const merge        = require('merge-deep');
 const util         = require('util');
@@ -8,7 +8,7 @@ const IMAP         = require('node-imap');
 const _            = require('lodash');
 const MailStore    = require('./MailStore');
 const Threader     = require('./Threader');
-const MailPage = require('./MailPage');
+const MailPage     = require('./MailPage');
 
 /**
  * Logs the user in to their email server.
@@ -80,7 +80,7 @@ IMAPClient.prototype.createEmailDatabase = async function (email){
  * @param  {array}  path An array of path components
  * @return {string}      A string representing the path to a box
  */
-IMAPClient.compilePath = function (path) {
+IMAPClient.prototype.compilePath = function (path) {
   let compiledPath = '';
   for (let i = 0; i < path.length - 1; i++) {
     compiledPath += path[i].name + path[i].delimiter;
@@ -198,7 +198,6 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
     this.logger.log("Grabbing: " + `${seqno}${grabNewer ? `:*` : ``}`);
     if (!this.mailbox.messages.total) return resolve();
 
-
     /*
      Fetches message(s) in the currently open mailbox. 
      ------------------------------------------------------------------------------------------------------
@@ -226,8 +225,9 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
      If we want the former, we expect the `grabNewer` boolean to be true.
     ---------------------------------------------------------------------------------------------------------    
     */
+
     let fetchObject = this.client.seq.fetch(`${seqno}${grabNewer ? `:*` : ``}`, options); 
- 
+
     /*
       fetchObject (typeof : ImapFetch) -> 'message' event.
         message(<ImapMessage> msg, <integer> seqno) - Event emitted for each message resulting from a fetch request. 
@@ -316,20 +316,19 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
 }
 
 IMAPClient.prototype.getEmailBody = async function (uid) {
-  await this.checkClient();
+  //await this.checkClient();
   return new Promise(async function (resolve, reject) {
     let email = this.client._config.user;
-    let message = await MailStore.loadEmail(email, uid);
-
+    let message = await this.mailStore.loadEmail(uid, email);
     await this.getEmails(message.folder, true, false, message.seqno, {
       bodies: '', struct: true, envelope: true
     }, async function (seqno, content, attributes) {
-      let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
-      MailStore.saveMailBody(email, uid, compiledContent);
-      await MailStore.updateEmailByUid(email, uid, { retrieved: true });
-      this.logger.log(`Added ${email}:${uid} to the file system.`);
-      resolve(compiledContent);
-    })
+          let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
+          await this.mailStore.saveMailBody(uid, compiledContent, email);
+          await this.mailStore.updateEmailByUid(uid, { retrieved: true });
+          this.logger.log(`Added ${email}:${uid} to the file system.`);
+          resolve(compiledContent);
+    }.bind(this)) //we need this to point to ImapClient (inside the callback)
   }.bind(this))
 }
 
@@ -341,7 +340,6 @@ IMAPClient.prototype.getEmailBody = async function (uid) {
 IMAPClient.prototype.updateAccount = async function () {
   let emailAddress = this.client._config.user;
   let hash = this.utils.md5(emailAddress);
- 
   /*----------  GRAB USER MAILBOXES  ----------*/
   document.querySelector('#doing').innerText = 'Grabbing your mailboxes ...';
   await this.checkClient();
@@ -364,7 +362,7 @@ IMAPClient.prototype.updateAccount = async function () {
   let totalEmails = 0;
  
   for (let i = 0; i < boxesLinear.length; i++) {
-    let path = IMAPClient.compilePath(boxesLinear[i]);
+    let path = this.compilePath(boxesLinear[i]);
     this.logger.debug("Path:", path);
     this.logger.debug("Linear Box Path:", boxesLinear[i]);
     let objectPath = IMAPClient.compileObjectPath(boxesLinear[i]);
@@ -375,7 +373,7 @@ IMAPClient.prototype.updateAccount = async function () {
     // During the first grab of emails 'state' is 'new' (there is no 'stateManager.state.account' yet -> only when 
     // state = 'mail') so 'isCurrentPath' is false.
     // 'currentPath' is set in 'openBox' function of 'IMAPClient.js'
-    let isCurrentPath = this.stateManager.state && this.stateManager.state.account && IMAPClient.compilePath(this.stateManager.state.account.folder) == path;
+    let isCurrentPath = this.stateManager.state && this.stateManager.state.account && this.compilePath(this.stateManager.state.account.folder) == path;
     
     // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
     let promises = []; // For each mailbox's message.
@@ -384,7 +382,7 @@ IMAPClient.prototype.updateAccount = async function () {
     await this.getEmails(path, true, true, highest, 
       {
         // fetch(source, options). For options we use the 'options' object which 
-        // contains the 'bodies' and 'envelope' options.
+        // contains the 'bodies','envelope' and struct options.
         /*
         An envelope includes the following fields (a value is only included in the response if it is set).
           -date :         is a date (string) of the message
@@ -420,7 +418,6 @@ IMAPClient.prototype.updateAccount = async function () {
     for (let j = 0; j < boxKeys.length; j++) {
       _.set(updateObject, objectPath.concat([boxKeys[j]]), this.mailbox[boxKeys[j]]);
     }
-    console.log(updateObject)
   }
 
   /*----------  THREADING EMAILS  ----------*/
@@ -506,16 +503,17 @@ IMAPClient.prototype.checkClient = async function () {
   // Possible client/ connection states are: 'connected', 'authenticated', 'disconnected'. 
   if (this.client.state === 'disconnected') {
     this.logger.log('Client disconnected. Reconnecting...');
-    //this.client = await new IMAPClient(this.client._config);
-    //this.client = await new IMAPClient(this.app, this.logger, this.details);
-  }
-}
 
-// Since preload.js doesnt contain references to imapClient and mailStore, we cant pass 'mailstore'
-// as arguement to 'mailpage' without the help of 'accountManager'.
-IMAPClient.prototype.redirectToMailPage = async function () {
-  const mailPage = new MailPage(this.logger, this.stateManager, this.utils, this.accountManager, this.mailStore);
-  mailPage.load();
+    document.querySelector('.wrapper').innerHTML = `
+    <span id="doing"></span> 
+    <span id="number"></span><br>
+    <span id="mailboxes"></span>
+  `;
+  let client = (await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress));
+  this.logger.log('Reloading mail messages...');
+  await client.updateAccount();
+  this.client = client;
+  }
 }
 
 module.exports = IMAPClient;

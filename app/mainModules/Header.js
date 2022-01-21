@@ -34,15 +34,16 @@ Header.prototype.load = function () {
 
 }
 
+// Used in MailPage.prototype.render().
 Header.setLoc = function (parts) {
-  parts = ['Femto'].concat(parts);
+  parts = ['Mail Client'].concat(parts);
 
   let html = '';
   for (let i = 0; i < parts.length; i++) {
     html += `<a href="#!" class="breadcrumb">${parts[i]}</a>`;
   }
 
-  $('#title').html(html);
+  document.querySelector('#title').innerHTML = html;
 }
 
 module.exports = Header;
