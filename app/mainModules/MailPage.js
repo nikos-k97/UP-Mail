@@ -294,8 +294,6 @@ MailPage.prototype.render = async function(folderPage) {
   if (mail.length > 0){
     let emailItems = document.querySelectorAll('.email-item');
     for (let i=0; i<emailItems.length; i++){
-      if (this.client.client.state === 'disconnected'){
-      }
       emailItems[i].addEventListener('click', (e) => {
         this.renderEmail(unescape(e.currentTarget.attributes['data-uid'].nodeValue));
         //this.renderEmail(unescape(document.querySelector('.email-item').attributes['data-uid'].nodeValue));
@@ -324,19 +322,26 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
   let emailElements = document.querySelectorAll('e-mail');
   if ( ! number ) {
     for (i=0 ; i < emailElements.length; i++){
-      let messageWrapper = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder div#message-0');
-      if (messageWrapper) {
-        messageWrapper.innerHTML = ''
-        messageWrapper.remove();
-      };
-
+      let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
+      if (messageHolder) messageHolder.innerHTML = '';
+      
       let unselectedMailItem = emailElements[i].shadowRoot.querySelector('div.mail-item');
       if (unselectedMailItem) unselectedMailItem.classList.remove('selected-mail-item');
 
       let dataUidAttributes = emailElements[i].getAttribute('data-uid');
-      if (dataUidAttributes.includes(`${escape(uid)}`)) {
+    
+      if (dataUidAttributes===`${escape(uid)}`) {
         let selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
-        selectedMailItem.classList.add('selected-mail-item');
+        // If user clicks an already selected mail -> deselect it
+        if (selectedMailItem.classList.contains('selected-mail-item')){
+          console.log('already')
+          selectedMailItem.querySelector('div#message-holder').innerHTML = '';
+          return;
+        }
+        else{
+          selectedMailItem.classList.add('selected-mail-item');
+        }
+        
 
         let selectedItemWrapper = emailElements[i].shadowRoot.querySelector(`div.mail-item div#message-holder`);
         selectedItemWrapper.innerHTML = '<div class="message-wrapper" id="message-0"></div>';
@@ -388,66 +393,58 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
   selectedItemMessage.innerHTML = cleanContent;
 }
 
+// Retrieve some bodies in the background (store them in mail/hash.json) so that they are marked as 
+// 'retrieved' -> we dont fetch the body when user clicks on the email since the body is stored in the
+// .json file (see Mailstore.prototype.loadMailWithoutBody').
+
+// Since this method is not called via an event (email click) we can use the same IMAPclient (this.client).
+// However only works for the first grab of emails (in the default folder saved in state.json)
+// After the user clicks on another folder to read the messages there, we are inside an event
+// handler and the client.state = disconnected, so this.client doesnt work.
 MailPage.prototype.retrieveEmailBodies = async function() {
-  // Since this method is not called via an event (email click) we can use the same IMAPclient.
   let email =  this.stateManager.state.account.emailAddress;
   let toGrab = await this.mailStore.loadEmailsWithoutBody();
   let total = toGrab.length;
-  let currentIter = 0;
-  console.log(this.client.client.state)
-  if (total > 0) {
-    for (let i=0; i<total; i++){
-      this.logger.log(`Grabbing email body ${i + 1} / ${total - 1}`);
-      emailContent = await this.client.getEmailBody(toGrab[i].uid);
+ 
+  if (total) {
+    let limit = 10;
+    if (total < limit) limit = total; //So that don't open useless connections that give timeout errors.
+    let currentIter = 0;
+    let currentCount = 0;
+
+    let promises = [];
+    for (let j = 0; j < limit; j++) {
+      promises.push(this.accountManager.getIMAP(email));
     }
+    let clientsFree = await Promise.all(promises);
+  
+    let interval = setInterval(async function retrieveEmail() {
+      if (currentIter === total - 1) {
+        clearInterval(interval);
+        setTimeout (function () {
+          for (let i = 0; i < clientsFree.length; i++) {
+            clientsFree[i].client.end();
+          }
+        }, 20000);
+      }
+      else if (currentCount < limit) {
+        this.logger.log(`Grabbing email body ${currentIter + 1} / ${total - 1}`);
+        currentCount++;
+        currentIter++;
+        let client = clientsFree.pop();
+        try { 
+          await timeout(client.getEmailBody(toGrab[currentIter].uid), 2000) 
+        }
+        catch(e) {
+          if (e instanceof TimeoutError) this.logger.error('Timeout reached on one of the emails grabs...');
+          else throw e;
+        }
+        clientsFree.push(client);
+        currentCount--;
+      }
+    }.bind(this), 50);
   }
 }
-
-
-// MailPage.prototype.retrieveEmailBodies = async function() {
-//   // Since this method is not called via an event (email click) we can use the same IMAPclient.
-//   let email =  this.stateManager.state.account.emailAddress;
-//   let toGrab = await this.mailStore.loadEmailsWithoutBody();
-//   let total = toGrab.length;
- 
-//   if (total) {
-//     let limit = 10;
-//     let currentIter = 0;
-//     let currentCount = 0;
-
-//     let promises = [];
-//     for (let j = 0; j < limit; j++) {
-//       promises.push(this.accountManager.getIMAP(email));
-//     }
-//     let clientsFree = await Promise.all(promises);
-
-//     let interval = setInterval(async function retrieveEmail() {
-//       if (currentIter === total - 1) {
-//         clearInterval(interval);
-//         setTimeout (function () {
-//           for (let i = 0; i < clientsFree.length; i++) {
-//             clientsFree[i].client.end();
-//           }
-//         }, 20000);
-//       }
-//       else if (currentCount < limit) {
-//         this.logger.log(`Grabbing email body ${currentIter + 1} / ${total - 1}`);
-//         currentCount++;
-//         currentIter++;
-//         let client = clientsFree.pop();
-//         try { 
-//           await timeout(client.getEmailBody(toGrab[currentIter].uid), 20000) 
-//         }
-//         catch(e) {
-//           if (e instanceof TimeoutError) this.logger.error('Timeout reached on one of the emails grabs...');
-//           else throw e;
-//         }
-//         clientsFree.push(client);
-//         currentCount--;
-//       }
-//     }.bind(this), 50);
-//   }
-// }
 
 
 

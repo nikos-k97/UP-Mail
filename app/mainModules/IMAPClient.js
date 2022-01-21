@@ -159,7 +159,8 @@ IMAPClient.prototype.openBox = async function (path, readOnly) {
 
 
 IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqno, options, onLoad) {
-  await this.checkClient();
+  //await this.client.checkClient();
+
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
   if (this.currentPath !== path) {  
     this.mailbox = await this.openBox(path, readOnly);
@@ -316,7 +317,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
 }
 
 IMAPClient.prototype.getEmailBody = async function (uid) {
-  //await this.checkClient();
+  //await this.client.checkClient();
   return new Promise(async function (resolve, reject) {
     let email = this.client._config.user;
     let message = await this.mailStore.loadEmail(uid, email);
