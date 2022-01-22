@@ -122,9 +122,11 @@ StateManager.prototype.style = function (titles) {
  */
 
 StateManager.prototype.page = function (page, css) {
-  this.logger.debug(`Switching page to ${page} ...`);
-  document.querySelector('#content').innerHTML = this.appDir.read(`./app/html/${page}.html`);
-  //this.style(css);
+  //document.addEventListener('DOMContentLoaded',() => {
+    this.logger.debug(`Switching page to ${page} ...`);
+    document.querySelector('#content').innerHTML = this.appDir.read(`./app/html/${page}.html`);
+    this.style(css);
+  //}) ;
 }
 
 

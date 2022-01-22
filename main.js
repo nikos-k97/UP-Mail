@@ -71,7 +71,7 @@ function openWindow (file) {
         minWidth: 320,
         minHeight: 480,
         maximized: true,
-        frame: true,
+        frame: false,
         show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
         webPreferences: {
             preload: path.join(__dirname, "/app/preload.js"), // use a preload script - safely get and set file system and 

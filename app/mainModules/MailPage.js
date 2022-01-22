@@ -17,7 +17,7 @@ MailPage.prototype.load = async function () {
   if (!this.utils.testLoaded('mail')) return;
 
   // Change internal state to 'mail'.
-  this.stateManager.page('mail', ['basic', 'mail']);
+  this.stateManager.page('mail', new Array('basic','mail'));
   this.logger.debug('Mail Page is now loading...');
 
 
@@ -74,6 +74,7 @@ MailPage.prototype.load = async function () {
   // Highlight (css) the folder that is selected as current in 'state.json' .
   this.highlightFolder();
 
+ 
 /*----------  ADD MAIL ITEMS  ----------*/
   this.render();
  
@@ -248,6 +249,7 @@ MailPage.prototype.render = async function(folderPage) {
   let emailCustomElements = document.getElementsByTagName('e-mail');
   for (let i=0; i < emailCustomElements.length; i++){
     let shadowRoot = emailCustomElements[i].shadowRoot;
+    
     // Show loading message until mail has loaded.
     shadowRoot.innerHTML = 'Loading...';
 
@@ -285,7 +287,95 @@ MailPage.prototype.render = async function(folderPage) {
           </div>
           <div id="message-holder"></div>
         </div>
-        `;
+        <style>
+        .read {
+          color: #A0A0A0;
+        }
+        
+        .unread {
+          font-weight: bolder;
+        }
+        
+        .mail-item {
+          cursor: pointer;
+          align-items: center;
+          padding: 2px 1rem 2px 1rem;
+          background-color: #FFF;
+          max-width: 100%;
+          min-width: 100%;
+          width: 100%;
+        }
+        .mail-item:hover {
+          filter: brightness(90%);
+        }
+        .mail-item label {
+          padding-left: 1.7em;
+        }
+        .mail-item .multi {
+          display: flex;
+          align-items: center;
+          display: inline-block;
+          height: 100%;
+          display: flex;
+          align-items: center;
+        }
+        .mail-item .star {
+          display: flex;
+          align-items: center;
+          display: inline-block;
+          height: 100%;
+        }
+        .mail-item .text {
+          display: flex;
+          align-items: center;
+          max-width: 100%;
+          min-width: 100%;
+          width: 100%;
+          height: 100%;
+        }
+        .mail-item .text .sender {
+          display: flex;
+          align-items: center;
+          width: 25%;
+          height: 100%;
+        }
+        .mail-item .text .sender .sender-text {
+          display: inline-block;
+          width: 100%;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .mail-item .text .subject {
+          display: flex;
+          align-items: center;
+          width: 60%;
+          height: 100%;
+        }
+        .mail-item .text .subject .subject-text {
+          display: inline-block;
+          width: 100%;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .mail-item .text .date {
+          width: 15%;
+          float: right;
+          position: relative;
+          right: 25.25px;
+        }
+        
+        .selected-mail-item {
+          cursor: inherit;
+          filter: brightness(100%) !important;
+        }
+        
+        .padding {
+          padding: 10px 10px 10px 10px;
+        }
+        </style>`;
+        
     })
   }
 

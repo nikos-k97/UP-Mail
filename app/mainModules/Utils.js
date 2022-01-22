@@ -9,6 +9,18 @@ function Utils (app,logger) {
 }
 
 /**
+ * Convert a template string into HTML DOM nodes
+ * @param  {String} str The template string
+ * @return {Node}       The template HTML
+ */
+Utils.prototype.stringToHTML = function (str) {
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(str, 'text/html');
+    return doc.body;
+};
+
+
+/**
  * Tests whether the setup has been completed.
  *
  * @param  {string} page

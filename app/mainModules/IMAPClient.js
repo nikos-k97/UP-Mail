@@ -9,6 +9,7 @@ const _            = require('lodash');
 const MailStore    = require('./MailStore');
 const Threader     = require('./Threader');
 const MailPage     = require('./MailPage');
+const iconv         = require('iconv-lite');
 
 /**
  * Logs the user in to their email server.
@@ -63,7 +64,9 @@ function IMAPClient(app, logger, utils, stateManager, accountManager, details, d
               reject(err);
             }
           );
-
+          this.client.on('mail' , () => {
+            console.log('new mail arrived')
+          })
           // Attempts to connect and authenticate with the IMAP server.
           this.client.connect();
         }
@@ -274,6 +277,13 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
       */
       msg.once('end', async () => {
         let parsedContent = await simpleParser(content);
+        console.log(parsedContent.headers.get('content-disposition'))
+        console.log(parsedContent.headers.get('content-type'))
+        //if (parsedContent.html) {
+         // let html = this.utils.stringToHTML(parsedContent.html);
+         // console.log(html)
+       // }
+        //str = iconv.decode(Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f]), 'win1251');
         /*
         -------------------------------------------------------------------------------------------------------
         Parsed mail object has the following properties:

@@ -11,7 +11,7 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
 	if (!this.utils.testLoaded('welcome')) return;
 
 	this.logger.log('Loading up the welcome page ...');
-	this.stateManager.page('welcome', ['basic', 'welcome']);
+	this.stateManager.page('welcome', ['basic','welcome']);
   
   let loginForm = document.querySelector('#login-form');
   let utils = this.utils; // Store 'utils' in a new variable since 'this' inside the event listener is changed.
