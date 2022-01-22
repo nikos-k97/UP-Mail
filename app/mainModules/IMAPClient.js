@@ -1,15 +1,12 @@
 const simpleParser = require('mailparser').simpleParser;
-const Datastore    = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise      = require('bluebird');
 const jetpack      = require('fs-jetpack');
 const merge        = require('merge-deep');
-const util         = require('util');
 const IMAP         = require('node-imap');
 const _            = require('lodash');
 const MailStore    = require('./MailStore');
 const Threader     = require('./Threader');
-const MailPage     = require('./MailPage');
-const iconv         = require('iconv-lite');
+const MailParser   = require("mailparser-mit").MailParser;
 
 /**
  * Logs the user in to their email server.
@@ -277,13 +274,6 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
       */
       msg.once('end', async () => {
         let parsedContent = await simpleParser(content);
-        console.log(parsedContent.headers.get('content-disposition'))
-        console.log(parsedContent.headers.get('content-type'))
-        //if (parsedContent.html) {
-         // let html = this.utils.stringToHTML(parsedContent.html);
-         // console.log(html)
-       // }
-        //str = iconv.decode(Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f]), 'win1251');
         /*
         -------------------------------------------------------------------------------------------------------
         Parsed mail object has the following properties:
@@ -321,6 +311,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
       end() - Emitted when all messages have been parsed.
     */
     fetchObject.once('end', () => {
+      //this.client.end()
       resolve();
     })
   }.bind(this)) // Bind 'this' to point to the function not the promise.
