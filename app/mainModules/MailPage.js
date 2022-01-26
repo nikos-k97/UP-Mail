@@ -2,9 +2,8 @@ const { timeout, TimeoutError } = require('promise-timeout');
 const Header = require('./Header');
 const Clean = require('./Clean');
 
-//const searchInPage              = require('electron-in-page-search').default
-
-function MailPage (logger, stateManager, utils, accountManager, client) {
+function MailPage (app, logger, stateManager, utils, accountManager) {
+  this.app = app;
   this.logger = logger;
   this.stateManager = stateManager;
   this.utils = utils;
@@ -14,11 +13,11 @@ function MailPage (logger, stateManager, utils, accountManager, client) {
 }
 
 MailPage.prototype.load = async function () {
-  if (!this.utils.testLoaded('mail')) return;
+  if (!this.utils.testLoaded('mailbox')) return;
 
   // Change internal state to 'mail'.
-  this.stateManager.page('mail', new Array('basic','mail'));
-  this.logger.debug('Mail Page is now loading...');
+  this.stateManager.page('mailbox', new Array('basic','mailbox'));
+  this.logger.debug('Mailbox Page is now loading...');
 
 
   /*----------  ENSURE ACCOUNT SET IN STATE  ----------*/
@@ -74,7 +73,6 @@ MailPage.prototype.load = async function () {
   // Highlight (css) the folder that is selected as current in 'state.json' .
   this.highlightFolder();
 
- 
 /*----------  ADD MAIL ITEMS  ----------*/
   this.render();
  
@@ -278,10 +276,10 @@ MailPage.prototype.render = async function(folderPage) {
           </div>
           <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
             <div class="subject">
-              <div class="subject-text">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.subject)}</div>
+              <div class="subject-text">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}</div>
             </div>
             <div class="sender">
-              <div class="sender-text">${Clean.escape(typeof mail.from !== 'undefined' ? mail.from.value[0].name || mail.from.value[0].address : 'Unknown Sender')}</div>
+              <div class="sender-text">${Clean.escape(typeof mail.envelope.from[0].name !== 'undefined' ?  `${mail.envelope.from[0].name} (${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host})`  : 'Unknown Sender')}</div>
             </div>
             <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}</div>
           </div>
@@ -402,13 +400,13 @@ MailPage.prototype.render = async function(folderPage) {
     });
   }
 
-  this.retrieveEmailBodies();
+  //this.retrieveEmailBodies();
 }
 
 MailPage.prototype.renderEmail = async function (uid, childNumber) {
   let number = childNumber || 0;
   let metadata = await this.mailStore.loadEmail(uid);
-
+ 
   let emailElements = document.querySelectorAll('e-mail');
   if ( ! number ) {
     for (i=0 ; i < emailElements.length; i++){
@@ -437,6 +435,7 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
         selectedItemWrapper.innerHTML = '<div class="message-wrapper" id="message-0"></div>';
         if (metadata.threadMsg) {
           for (let i = 1; i < metadata.threadMsg.length + 1; i++) {
+            selectedItemWrapper.appendChild(document.createElement('hr'));
             selectedItemWrapper.appendChild(document.createElement('hr'));
             let appendedDiv = document.createElement('div');
             appendedDiv.setAttribute('id',`message-${i}`);
@@ -479,8 +478,37 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
     this.client.client.end();
   }
 
-  let cleanContent = Clean.cleanHTML(emailContent.html || emailContent.textAsHtml || emailContent.text);
+  const app = this.app;
+  let dirtyContent;
+  if (emailContent.html){
+    if (emailContent.attachments){
+      let dirtyHTML = this.utils.stringToHTML(emailContent.html);
+      let images = dirtyHTML.querySelectorAll('img') ;
+      for (let i=0; i<images.length; i++){
+        let src = images[i].getAttribute('src');
+        for (let j=0; j < emailContent.attachments.length; j++){
+          let attachmentCID = emailContent.attachments[j].cid;
+          if (src.includes(attachmentCID)){
+            src = `${app.getAppPath()}\\mailAttachments\\${emailContent.attachments[j].filename}`;;
+            break;
+          }
+        }
+        images[i].setAttribute('src',src);
+      }
+      // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
+      dirtyContent = dirtyHTML.outerHTML;
+    }
+    else{
+      dirtyContent = emailContent.html;
+    }
+  }
+  else{
+    dirtyContent = emailContent.textAsHtml || emailContent.text;
+  } 
+  //let cleanContent = Clean.cleanHTML(dirtyContent);
+  let cleanContent = dirtyContent; //allow images etc...
   selectedItemMessage.innerHTML = cleanContent;
+
 }
 
 // Retrieve some bodies in the background (store them in mail/hash.json) so that they are marked as 
@@ -491,61 +519,49 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
 // However only works for the first grab of emails (in the default folder saved in state.json)
 // After the user clicks on another folder to read the messages there, we are inside an event
 // handler and the client.state = disconnected, so this.client doesnt work.
-MailPage.prototype.retrieveEmailBodies = async function() {
-  let email =  this.stateManager.state.account.emailAddress;
-  let toGrab = await this.mailStore.loadEmailsWithoutBody();
-  let total = toGrab.length;
+// MailPage.prototype.retrieveEmailBodies = async function() {
+//   let email =  this.stateManager.state.account.emailAddress;
+//   let toGrab = await this.mailStore.loadEmailsWithoutBody();
+//   let total = toGrab.length;
  
-  if (total) {
-    let limit = 10;
-    if (total < limit) limit = total; //So that don't open useless connections that give timeout errors.
-    let currentIter = 0;
-    let currentCount = 0;
+//   if (total) {
+//     let limit = 10;
+//     if (total < limit) limit = total; //So that don't open useless connections that give timeout errors.
+//     let currentIter = 0;
+//     let currentCount = 0;
 
-    let promises = [];
-    for (let j = 0; j < limit; j++) {
-      promises.push(this.accountManager.getIMAP(email));
-    }
-    let clientsFree = await Promise.all(promises);
+//     let promises = [];
+//     for (let j = 0; j < limit; j++) {
+//       promises.push(this.accountManager.getIMAP(email));
+//     }
+//     let clientsFree = await Promise.all(promises);
   
-    let interval = setInterval(async function retrieveEmail() {
-      if (currentIter === total - 1) {
-        clearInterval(interval);
-        setTimeout (function () {
-          for (let i = 0; i < clientsFree.length; i++) {
-            clientsFree[i].client.end();
-          }
-        }, 20000);
-      }
-      else if (currentCount < limit) {
-        this.logger.log(`Grabbing email body ${currentIter + 1} / ${total - 1}`);
-        currentCount++;
-        currentIter++;
-        let client = clientsFree.pop();
-        try { 
-          await timeout(client.getEmailBody(toGrab[currentIter].uid), 2000) 
-        }
-        catch(e) {
-          if (e instanceof TimeoutError) this.logger.error('Timeout reached on one of the emails grabs...');
-          else throw e;
-        }
-        clientsFree.push(client);
-        currentCount--;
-      }
-    }.bind(this), 50);
-  }
-}
-
-
-
-
-// MailPage.enableSearch = function() {
-//   const listener = new window.keypress.Listener()
-//   listener.simple_combo('ctrl f', () => {
-//     const searchInWindow = searchInPage(remote.getCurrentWebContents())
-//     searchInWindow.openSearchWindow()
-//   })
+//     let interval = setInterval(async function retrieveEmail() {
+//       if (currentIter === total - 1) {
+//         clearInterval(interval);
+//         setTimeout (function () {
+//           for (let i = 0; i < clientsFree.length; i++) {
+//             clientsFree[i].client.end();
+//           }
+//         }, 20000);
+//       }
+//       else if (currentCount < limit) {
+//         this.logger.log(`Grabbing email body ${currentIter + 1} / ${total - 1}`);
+//         currentCount++;
+//         currentIter++;
+//         let client = clientsFree.pop();
+//         try { 
+//           await timeout(client.getEmailBody(toGrab[currentIter].uid), 2000) 
+//         }
+//         catch(e) {
+//           if (e instanceof TimeoutError) this.logger.error('Timeout reached on one of the emails grabs...');
+//           else throw e;
+//         }
+//         clientsFree.push(client);
+//         currentCount--;
+//       }
+//     }.bind(this), 50);
+//   }
 // }
-        
 
 module.exports = MailPage;

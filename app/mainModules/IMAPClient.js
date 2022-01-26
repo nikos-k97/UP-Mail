@@ -1,12 +1,16 @@
-const simpleParser = require('mailparser').simpleParser;
-const Promise      = require('bluebird');
-const jetpack      = require('fs-jetpack');
-const merge        = require('merge-deep');
-const IMAP         = require('node-imap');
-const _            = require('lodash');
-const MailStore    = require('./MailStore');
-const Threader     = require('./Threader');
-const MailParser   = require("mailparser-mit").MailParser;
+const MailParser     = require('mailparser').MailParser;
+const simpleParser   = require('mailparser').simpleParser;
+const Promise        = require('bluebird');
+const jetpack        = require('fs-jetpack');
+const merge          = require('merge-deep');
+const IMAP           = require('node-imap');
+const _              = require('lodash');
+const MailStore      = require('./MailStore');
+const Threader       = require('./Threader');
+const fs             = require('fs');
+const base64 = require('base64-stream');
+
+
 
 /**
  * Logs the user in to their email server.
@@ -57,13 +61,18 @@ function IMAPClient(app, logger, utils, stateManager, accountManager, details, d
           );
           this.client.once('error', 
             (err) => {
-              console.log('Connection state is : '+this.client.state); // Connected - Not authenticated (the other states are disconnected, authenticated)
+              this.logger.error('Connection state is : '+this.client.state); // Connected - Not authenticated (the other states are disconnected, authenticated)
               reject(err);
             }
           );
-          this.client.on('mail' , () => {
-            console.log('new mail arrived')
-          })
+          // this.client.on('mail' , () => {
+          //   console.log('new mail arrived')
+          // })
+
+          this.client.once('end', () => {
+            this.logger.log('Connection ended');
+          });
+
           // Attempts to connect and authenticate with the IMAP server.
           this.client.connect();
         }
@@ -191,6 +200,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
 
   -----------------------------------------------------------------------------------------------------------------
   */
+  let parser = new MailParser();
 
   return new Promise(function (resolve, reject) {
     this.logger.log("Total: " + this.mailbox.messages.total);
@@ -212,18 +222,38 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
                                                        We want 'Specific header fields only'.
           envelope: true                             : Fetch the message envelope
         } 
-     Other valid options for 'bodies' are:
-        'HEADER'                              - The message header
-        'HEADER.FIELDS (TO FROM SUBJECT)'     - Specific header fields only
-        'HEADER.FIELDS.NOT (TO FROM SUBJECT)' - Header fields only that do not match the fields given
-        'TEXT'                                - The message body
-        ''                                    - The entire message (header + body)
-        'MIME'                                - MIME-related header fields only (e.g. 'Content-Type')
 
-     There are two ways we're going to want to fetch emails, either:
-       'lowest:*'
-       'seqno'
-     If we want the former, we expect the `grabNewer` boolean to be true.
+        Other options include: 
+         **markSeen** - _boolean_    - Mark message(s) as read when fetched. **Default:** false
+         **struct** - _boolean_      - Fetch the message structure. **Default:** false
+         **envelope** - _boolean_    - Fetch the message envelope. **Default:** false
+         **size** - _boolean_        - Fetch the RFC822 size. **Default:** false
+         **modifiers** - _object_    - Fetch modifiers defined by IMAP extensions. **Default:** (none)
+         **extensions** - _array_    - Fetch custom fields defined by IMAP extensions, 
+                                       e.g. ['X-MAILBOX', 'X-REAL-UID']. **Default:** (none)
+         **bodies** - _mixed_        - A string or Array of strings containing the body part section to fetch.
+           |                           **Default:** (none) 
+           |
+           |
+           --> Valid options for 'bodies' are:
+                'HEADER'                              - The message header
+                'HEADER.FIELDS (TO FROM SUBJECT)'     - Specific header fields only
+                'HEADER.FIELDS.NOT (TO FROM SUBJECT)' - Header fields only that do not match the fields given
+                'TEXT'                                - The message body
+                ''                                    - The entire message (header + body)
+                'MIME'                                - MIME-related header fields only (e.g. 'Content-Type')
+
+                **Note:** You can also prefix `bodies` strings (i.e. 'TEXT', 'HEADER', 'HEADER.FIELDS', 
+                          and 'HEADER.FIELDS.NOT' for `message/rfc822` messages and 'MIME' for any kind of message) 
+                          with part ids. For example: '1.TEXT', '1.2.HEADER', '2.MIME', etc.
+
+        There are two ways we're going to want to fetch emails, either:
+          'lowest:*'
+          'seqno'
+        If we want the former, we expect the `grabNewer` boolean to be true.
+          > This function (getEmails()) runs two times. The first one is run when we render the emails of the 
+            each mailbox where we fetch only some header fields. The second time is when we render an email 
+            so we fetch emails via the second ('seqno') method and we use the '' options to fetch everything.
     ---------------------------------------------------------------------------------------------------------    
     */
 
@@ -234,8 +264,8 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
         message(<ImapMessage> msg, <integer> seqno) - Event emitted for each message resulting from a fetch request. 
         seqno is the message's sequence number.
     */
-      fetchObject.on('message', (msg, seqno) => {
-      let content, attributes;
+    fetchObject.on('message', (msg, seqno) => {
+      let parsePromise, parsedHeaders, parsedData, parsedAttachments = [], attributes;
 
       /*
         msg (typeof : ImapMessage) -> 'body' event
@@ -245,15 +275,50 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
             size (integer) :  The size of this body in bytes.
       */
       msg.on('body', (stream, info) => {
-        let buffer = '';
-        stream.on('data', (chunk) => {
-          buffer += chunk.toString('utf8');
-        });
-        stream.once('end', () => {
-          content = buffer;
-        });
-      });
+        let attachmentNo = 0;
+        parsePromise = new Promise(
+          (resolve, reject) => {
+            stream.pipe(parser)
+            .on('headers', (headers) => parsedHeaders = headers)
+            .on('data', (data) => {
+              /*
+                If a message has both an attachment and two forms of the message body (plain text and HTML) then
+                each message part is identified by a partID which is used when we want to fetch the content of 
+                that part.
+                                              (see fetch())
+                                              -------------
+                You can prefix `bodies` strings (i.e. 'TEXT', 'HEADER', 'HEADER.FIELDS', 
+                and 'HEADER.FIELDS.NOT' for `message/rfc822` messages and 'MIME' for any kind of message) 
+                with part ids. For example: '1.TEXT', '1.2.HEADER', '2.MIME', etc.    
+              */          
+              if (data.type === 'attachment'){
+                // Get necessary data and then remove the circular structure 'content'.
+                if (data.content.algo) data.algo = data.content.algo;
+                if (data.content.allowHalfOpen) data.allowHalfOpen = data.content.allowHalfOpen;
+                if (data.content.byteCount) data.byteCount = data.content.byteCount;
+                delete data.content; 
 
+                // let storeDir = this.app.getPath('userData');
+                // console.log(storeDir+`\\${data.filename}`)
+                // fs.writeFile(storeDir+`\\${data.filename}`, Buffer.from(data.filename,'base64'), err => {
+                //   if (err) {
+                //     console.error(err)
+                //   }
+                //   //file written successfully
+                // })
+               
+                parsedAttachments[attachmentNo] = data;
+                data.release();
+                attachmentNo++;
+              }
+              if (data.type === 'text') parsedData = data;
+            })
+            .on('error', reject)
+            .on('end', resolve)
+          }
+        );
+      });
+      
       /*
       msg (typeof : ImapMessage) -> 'attributes' event
         attributes(<object> attrs) - Event emitted when all message attributes have been collected. 
@@ -273,31 +338,80 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
         end() - Event emitted when all attributes and bodies have been parsed. 
       */
       msg.once('end', async () => {
-        let parsedContent = await simpleParser(content);
         /*
         -------------------------------------------------------------------------------------------------------
         Parsed mail object has the following properties:
-          headers :    a Map object with lowercase header keys
-          subject :    the subject line (also available from the header mail.headers.get(‘subject’))
-          from :       an address object for the From: header
-          to :         an address object for the To: header
-          cc :         an address object for the Cc: header
-          bcc :        an address object for the Bcc: header (usually not present)
-          date :       a Date object for the Date: header
-          messageId :  the Message-ID value string
-          inReplyTo :  the In-Reply-To value string
-          reply-to :   an address object for the Cc: header
-          references : an array of referenced Message-ID values
-          html :       the HTML body of the message. If the message included embedded images as cid: urls then 
-                       these are all replaced with base64 formatted data: URIs
-          text :       the plaintext body of the message
-          textAsHtml : the plaintext body of the message formatted as HTML
-          attachments :an array of attachments
+          headers     : a Map object with lowercase header keys
+          envelope    : envelope object (properties : from,to,replyTo,inReplyTo,date,subject,sender,messageId)
+          date        : The internal server date for the message - example: Wed Mar 31 2021 16:09:23 GMT+0300 (Eastern European Summer Time) {}  
+          flags       : array of flags currently set on this message. (example: ['\Seen', '\Recent'])
+          headers     : map object containing all the parsed SMTP / MIME headers
+                        (contains size - The RFC822 message size)
+          seqno       : message sequence number
+          uid         : int - A 32-bit ID that uniquely identifies this message within its mailbox.
+          text        : the plaintext body of the message
+          textAsHtml  : the plaintext body of the message formatted as HTML
+          html        : the HTML body of the message. If the message included embedded images as cid: urls then 
+                        these are all replaced with base64 formatted data
+          struct      : array - The message's body structure 
+                        **example**: **A message structure with multiple parts**
+                        struct: Array(3)
+                          0: { disposition: null , language: null, params: {boundary: "=-HmnnJaB8e7HlNCOozAwDgg=="},
+                               type: "alternative" }
+                          1: Array(1)
+                            0: { description: null, disposition: null, encoding: "8bit", id: null, language: null,
+                                 lines: 9, location: null, md5: null, params: {charset: 'windows-1253'}, partID: "1",
+                                 size: 1013, subtype: "plain", type: "text"}
+                          2: Array(1)
+                            0: { description: null, disposition: null, encoding: "8bit", id: null, language: null,
+                                 lines: 26, location: null, md5: null, params: {charset: 'windows-1253'}, partID: "2",
+                                 size: 3266, subtype: "html", type: "text"}
+          attachments : an array of attachment objects
+                        **example**:**Attachments object**
+                        attachments: Array(11)
+                          0: { algo: "md5", checksum: "826792a9b5d81c45c3ae7f3a9050cd8f", allowHalfOpen: true,
+                               cid: "colors", contentDisposition: "inline", contentId: "<colors>", 
+                               contentType: "image/png", filename: "colors.png" ,
+                               headers: Map(5) { 
+                                'content-type' => {…}, 'content-description' => 'colors.png', 
+                                'content-disposition' => {…}, 'content-id' => '<colors>', 
+                                'content-transfer-encoding' => 'base64'},
+                               partId: "2" , related: true, release: null, size: 5306, type: "attachment" }
+                          1 : { ... }
+          type        : text, application etc...     
           ------------------------------------------------------------------------------------------------------
         */
-        
-        // Run the callback function 'onLoad' for each parsedMessage.
-        if (typeof onLoad === 'function') onLoad(seqno, parsedContent, attributes);
+        parsePromise.then(
+          () => {
+            const parsedContent = {};
+            parsedContent.headers = parsedHeaders;
+
+            // Handle possible attachments.
+            if (parsedAttachments.length) { 
+              parsedContent.attachments = parsedAttachments;
+              // Fetch attachments via fetch().
+              for (let i = 0; i < parsedAttachments.length; i++) {
+                let attachment = parsedAttachments[i];
+                this.logger.log('Fetching attachment "%s" ...', attachment.filename);
+                let fetchAttachmentObject = this.client.fetch(`${attributes.uid}`, { //do not use imap.seq.fetch here
+                  bodies: [attachment.partId]
+                }); 
+                // The buildAttMessageFunction returns a function.
+                fetchAttachmentObject.on('message', this.buildAttMessageFunction(attachment));
+              }
+            }
+            Object.assign(parsedContent, parsedData);
+            // Run the callback function 'onLoad' for each parsedMessage.
+            if (typeof onLoad === 'function') onLoad(seqno, parsedContent, attributes);
+          }
+        );
+
+        parsePromise.catch( 
+          () => {
+            this.logger.error('Mail parsing encountered a problem.');
+            return undefined;
+          }
+        )
       });
     });
 
@@ -317,6 +431,41 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
   }.bind(this)) // Bind 'this' to point to the function not the promise.
 }
 
+IMAPClient.prototype.buildAttMessageFunction = function(attachment) {
+  let filename = attachment.filename;
+  let encoding = attachment.headers.get('content-transfer-encoding');
+  
+  return function (msg) {
+    msg.on('body', function(stream, info) {
+      //Create a write stream so that we can stream the attachment to file;
+      console.log('Streaming this attachment to file', filename, info);
+    
+      let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
+     
+
+      writeStream.once('finish', function() {
+        console.log('Done writing to file %s', filename);
+        writeStream.destroy();
+      });
+   
+      //stream.pipe(writeStream); this would write base64 data to the file.
+      //so we decode during streaming using 
+      if (encoding === 'base64') {
+        //the stream is base64 encoded, so here the stream is decode on the fly and piped to the write stream (file)
+        stream.pipe(new base64.Base64Decode()).pipe(writeStream);
+      } else  {
+        //here we have none or some other decoding streamed directly to the file which renders it useless probably
+        stream.pipe(writeStream);
+      }
+    });
+    msg.once('end', function() {
+      console.log('Finished receiving attachment :', filename);
+    });
+  };
+  
+}
+
+
 IMAPClient.prototype.getEmailBody = async function (uid) {
   //await this.client.checkClient();
   return new Promise(async function (resolve, reject) {
@@ -326,6 +475,7 @@ IMAPClient.prototype.getEmailBody = async function (uid) {
       bodies: '', struct: true, envelope: true
     }, async function (seqno, content, attributes) {
           let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
+          console.log(compiledContent)
           await this.mailStore.saveMailBody(uid, compiledContent, email);
           await this.mailStore.updateEmailByUid(uid, { retrieved: true });
           this.logger.log(`Added ${email}:${uid} to the file system.`);
@@ -384,7 +534,7 @@ IMAPClient.prototype.updateAccount = async function () {
     await this.getEmails(path, true, true, highest, 
       {
         // fetch(source, options). For options we use the 'options' object which 
-        // contains the 'bodies','envelope' and struct options.
+        // contains the 'bodies','envelope' and 'struct' options.
         /*
         An envelope includes the following fields (a value is only included in the response if it is set).
           -date :         is a date (string) of the message

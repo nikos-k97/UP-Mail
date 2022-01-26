@@ -29,7 +29,7 @@ const header = new Header(app, BrowserWindow);
 const setupPage = new SetupPage(app, logger, stateManager);
 const accountManager = new AccountManager(app, logger, stateManager, utils);
 const welcomePage = new WelcomePage(logger, stateManager, utils, accountManager); // <<<<<<<<<<<<< !!!!
-const mailPage = new MailPage(logger, stateManager, utils, accountManager);
+const mailPage = new MailPage(app, logger, stateManager, utils, accountManager);
 
 router.on(
     {
