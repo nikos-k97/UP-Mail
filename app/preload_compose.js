@@ -9,7 +9,7 @@ const materialize           = require("./helperModules/materialize.min.js");
 const Logger                = require('./helperModules/logger'); 
 const FormValidator         = require('./helperModules/formValidator');
 const Header                = require('./mainModules/Header');
-const SMTPClient                = require('./mainModules/SMTPClient');
+const SMTPClient            = require('./mainModules/SMTPClient');
 
 
 const appDir = jetpack.cwd(app.getAppPath());
@@ -91,6 +91,8 @@ contextBridge.exposeInMainWorld(
                         materialize.toast({html: 'Sending message ...', classes: 'rounded'});
                         logger.log('Required fields completed. Redirecting to Sender.js ...');
                         smtpClient.initialize(message);
+                        // Disable the button again after sending.
+                        document.querySelector('#send').disabled = true;
                     }
                     else {
                         document.querySelector('.toast-no-subject').addEventListener('click' , (e) => {
@@ -104,6 +106,8 @@ contextBridge.exposeInMainWorld(
                             materialize.toast({html: 'Sending message ...',displayLength : 3000, classes: 'rounded'});
                             logger.log('Required fields completed. Redirecting to Sender.js ...');
                             smtpClient.initialize(message);
+                            // Disable the button again after sending.
+                            document.querySelector('#send').disabled = true;
                         })
 
                         document.querySelector('.toast-give-subject').addEventListener('click' , (e) => {

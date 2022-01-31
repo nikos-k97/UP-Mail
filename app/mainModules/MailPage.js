@@ -1,6 +1,7 @@
-const { timeout, TimeoutError } = require('promise-timeout');
-const Header = require('./Header');
-const Clean = require('./Clean');
+const { timeout, TimeoutError }     = require('promise-timeout');
+const materialize                   = require("../helperModules/materialize.min.js");
+const Header                        = require('./Header');
+const Clean                         = require('./Clean');
 
 function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager) {
   this.ipcRenderer = ipcRenderer;
@@ -51,11 +52,16 @@ MailPage.prototype.load = async function () {
   }
    
   /*----------  ACTIVATE SEND MAIL BUTTON  ----------*/
+  let composeButton = document.querySelector('.fixed-action-btn');
+  materialize.FloatingActionButton.init(composeButton, {
+    direction: 'left'
+  });
   document.querySelector('#compose-button').addEventListener('click', (e) => {
     this.ipcRenderer.send('open', { file: 'composeWindow' });
   });
      
 
+ 
   /*----------  ACTIVATE RELOAD BUTTON  ----------*/
   document.querySelector('#refresh-button').addEventListener('click', () => {
     this.reload();
@@ -263,6 +269,7 @@ MailPage.prototype.render = async function(folderPage) {
                 */
     // We're able to assume some values from the current state.
     // However, we don't rely on it, preferring instead to find it in the email itself.
+
     let email = emailCustomElements[i].getAttribute('data-email') || this.stateManager.state.account.emailAddress;
     let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
     this.mailStore.loadEmail(uid).then((mail) => {
@@ -278,7 +285,7 @@ MailPage.prototype.render = async function(folderPage) {
               <div class="subject-text">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}</div>
             </div>
             <div class="sender">
-              <div class="sender-text">${Clean.escape(typeof mail.envelope.from[0].name !== 'undefined' ?  `${mail.envelope.from[0].name} (${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host})`  : 'Unknown Sender')}</div>
+              <div class="sender-text">${Clean.escape((mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : `${mail.envelope.from[0].name} (${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host})`)}</div>
             </div>
             <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}</div>
           </div>

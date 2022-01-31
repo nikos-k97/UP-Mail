@@ -1,17 +1,17 @@
 // Secure way of importing node.js modules into the renderer process (app.js) - 
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
-const {contextBridge, ipcRenderer} = require("electron");
-const {app, BrowserWindow} = require('@electron/remote');
-const Navigo = require("navigo");
-const Logger = require('./helperModules/logger'); 
-const StateManager = require('./mainModules/StateManager'); //Contains the current state
-const Threader = require('./mainModules/Threader'); //Handles email threading
-const Utils = require('./mainModules/Utils'); //Contains many utility functions
-const Header = require('./mainModules/Header');
-const SetupPage = require('./mainModules/SetupPage');
-const WelcomePage = require('./mainModules/WelcomePage');
-const AccountManager = require('./mainModules/AccountManager');
-const MailPage = require('./mainModules/MailPage');
+const {contextBridge, ipcRenderer}  = require("electron");
+const {app, BrowserWindow}          = require('@electron/remote');
+const Navigo                        = require("navigo");
+const Logger                        = require('./helperModules/logger'); 
+const StateManager                  = require('./mainModules/StateManager'); //Contains the current state
+const Threader                      = require('./mainModules/Threader'); //Handles email threading
+const Utils                         = require('./mainModules/Utils'); //Contains many utility functions
+const Header                        = require('./mainModules/Header');
+const SetupPage                     = require('./mainModules/SetupPage');
+const WelcomePage                   = require('./mainModules/WelcomePage');
+const AccountManager                = require('./mainModules/AccountManager');
+const MailPage                      = require('./mainModules/MailPage');
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload
