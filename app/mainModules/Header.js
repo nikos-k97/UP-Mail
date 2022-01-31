@@ -34,7 +34,7 @@ Header.prototype.load = function () {
 
 }
 
-// Used in MailPage.prototype.render().
+// Used in MailPage.prototype.render() and in compose.js renderer process.
 Header.setLoc = function (parts) {
   parts = ['Mail Client'].concat(parts);
 

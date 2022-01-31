@@ -1,9 +1,8 @@
-// Renderer process. 
+// Renderer process for mainWindow. 
 // Has access only to the modules and functions exposed by contextBridge (via 'window.api.xxxxx').
 
 window.api.loadHeader();
 window.api.navigate('/setup');
-
 
 
 // Autonomous custom element <e-mail>.

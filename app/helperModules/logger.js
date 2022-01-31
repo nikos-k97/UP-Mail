@@ -132,7 +132,7 @@ Logger.prototype.print = function (args, level) {
     return `${date} [${func || file}] ${message}`;
   }
 
-  this.fs.append(`./FEMTO-${this.currentDate}.log`, `${date} [${func || file}] ${message}` + '\n');
+  this.fs.append(`./MailClient-${this.currentDate}.log`, `${date} [${func || file}] ${message}` + '\n');
 
   if (this.client) {
     log(`%c${date} %c[${func || file}] %c${message}`, `color:blue;`, func ? `color:green` : `color:orange`, this.clientColour[level]);

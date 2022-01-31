@@ -1,0 +1,38 @@
+<div class="wrapper" style="width: 100%">
+  <div class="row">
+    <div class="col m12 overflow">
+      <div class="card-panel collection padding">
+        <div id="mail">
+          <form id='send-mail-form' class="col s12">
+            <div class="form-field input-field col s12">
+              <label for="from">From: </label>
+              <select id="from" name='from'> 
+              </select>
+            </div>
+            <div class="form-field input-field col s12">
+              <label for='to'>To: </label>
+              <input type="email" name="to" id="to" autocomplete="off">
+              <small></small>
+            </div>
+            <div class="form-field input-field col s12">
+              <label for='subject'>Subject: </label>
+              <input type="text" name="subject" id="subject" autocomplete="off">
+              <small></small>
+            </div>
+            <div class="form-field input-field col s12">
+              <textarea id="message" name="message" class="materialize-textarea" autocomplete="off"></textarea>
+              <label for="message">Message</label>
+              <small></small>
+            </div>
+            <div class="form-field input-field col s12">
+              <button class="btn waves-effect waves-light" id="send"  type="submit">
+                <i class="material-icons right">send</i>
+                Send Message
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

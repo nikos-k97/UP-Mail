@@ -2,7 +2,8 @@ const { timeout, TimeoutError } = require('promise-timeout');
 const Header = require('./Header');
 const Clean = require('./Clean');
 
-function MailPage (app, logger, stateManager, utils, accountManager) {
+function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager) {
+  this.ipcRenderer = ipcRenderer;
   this.app = app;
   this.logger = logger;
   this.stateManager = stateManager;
@@ -49,10 +50,11 @@ MailPage.prototype.load = async function () {
     }
   }
    
-  /*----------  ACTIVATE MAIL BUTTON  ----------*/
-      //$('#compose-button').click(() => {
-        //ipcRenderer.send('open', { file: 'compose' })
-      //})
+  /*----------  ACTIVATE SEND MAIL BUTTON  ----------*/
+  document.querySelector('#compose-button').addEventListener('click', (e) => {
+    this.ipcRenderer.send('open', { file: 'composeWindow' });
+  });
+     
 
   /*----------  ACTIVATE RELOAD BUTTON  ----------*/
   document.querySelector('#refresh-button').addEventListener('click', () => {
@@ -75,9 +77,6 @@ MailPage.prototype.load = async function () {
 
 /*----------  ADD MAIL ITEMS  ----------*/
   this.render();
- 
-//   /*----------  SEARCH IN MAIL WINDOW  ----------*/
-//   // MailPage.enableSearch() to xei sxoliasmeno o "dimiourgos leme twra"
 }
 
 MailPage.prototype.reload = async function() {

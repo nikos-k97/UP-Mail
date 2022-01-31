@@ -36,7 +36,7 @@ let appWindows = [];
 //This event is fired only once when Electron has done initializing the application and app windows can be safely created.
 //Wait for the event and then call openWindow() when app's whenReady() method resolves its promise
 app.whenReady().then(() => {
-    openWindow('mainWindow');
+    openWindow('appWindow');
 })
 
 
@@ -54,38 +54,65 @@ app.on('window-all-closed', () => {
 //So opens a window (if none are already opened) when the application is activated again.
 app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) { 
-        openWindow('mainWindow'); 
+        openWindow('appWindow'); 
     }
 });
 
 function openWindow (file) {
-    let index = file === 'mainWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
+    let index = file === 'appWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
     const {width, height} = electron.screen.getPrimaryDisplay().workAreaSize;
     
-    //Use window.js helper script to create and open the electron.js BrowserWindow
-    appWindows[index] = createWindow(file, {
-        width,
-        height,
-        icon: './icons/email-icon.png',
-        title:'Mail Client', //overriden by the loaded html's <title/> tag (!!)
-        minWidth: 320,
-        minHeight: 480,
-        maximized: true,
-        frame: false,
-        show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
-        webPreferences: {
-            preload: path.join(__dirname, "/app/preload.js"), // use a preload script - safely get and set file system and 
-                                                              // operating system values on behalf of the browser window.
-            sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
-                            // (only in conjunction with preload script - otherwise only IPC messages are permitted)
-            contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
-                                    // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
-                                    // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
-            nodeIntegration: false, // deny the renderer process access to the node.js API
-            enableRemoteModule: false //turn off remote (redundant, since Remote module was removed at electron.js v14)
-        }
-    });
-
+    if (file === 'appWindow'){
+        //Use window.js helper script to create and open the electron.js BrowserWindow
+        appWindows[index] = createWindow(file, {
+            width,
+            height,
+            icon: './icons/email-icon.png',
+            title:'Mail Client', //overriden by the loaded html's <title/> tag (!!)
+            minWidth: 320,
+            minHeight: 480,
+            maximized: true,
+            frame: false,
+            show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
+            webPreferences: {
+                preload: path.join(__dirname, "/app/preload_app.js"), // use a preload script - safely get and set file system and 
+                                                                  // operating system values on behalf of the browser window.
+                sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
+                                // (only in conjunction with preload script - otherwise only IPC messages are permitted)
+                contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
+                                        // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
+                                        // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
+                nodeIntegration: false, // deny the renderer process access to the node.js API
+                enableRemoteModule: false //turn off remote (redundant, since Remote module was removed at electron.js v14)
+            }
+        });
+    }
+    else if (file === 'composeWindow'){
+        //Use window.js helper script to create and open the electron.js BrowserWindow
+        appWindows[index] = createWindow(file, {
+            width,
+            height,
+            icon: './icons/email-icon.png',
+            title:'Compose', //overriden by the loaded html's <title/> tag (!!)
+            minWidth: 320,
+            minHeight: 480,
+            maximized: false,
+            frame: false,
+            show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
+            webPreferences: {
+                preload: path.join(__dirname, "/app/preload_compose.js"), // use a preload script - safely get and set file system and 
+                                                                // operating system values on behalf of the browser window.
+                sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
+                                // (only in conjunction with preload script - otherwise only IPC messages are permitted)
+                contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
+                                        // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
+                                        // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
+                nodeIntegration: false, // deny the renderer process access to the node.js API
+                enableRemoteModule: false //turn off remote (redundant, since Remote module was removed at electron.js v14)
+            }
+        });
+    }
+  
     appWindows[index].once('ready-to-show', () => {
         appWindows[index].show(); //all content is loaded -> window can be shown
     });
@@ -103,7 +130,7 @@ function openWindow (file) {
     //with arguements - function is invoked: appWindows[index].on('closed', testFunction(arg1,arg2) );
     
     //Solution 1: Using 'bind' method. Downside (for browser js) is that event listener cannot be removed. 
-    appWindows[index].on('closed', onQuit.bind(null,index) );
+    appWindows[index].on('closed', onQuit.bind(null, index) );
 
     //Solution 2: appWindows[index].on('closed', wrapperFunction(index));
     //   or       
@@ -124,10 +151,10 @@ function openWindow (file) {
     //the scope is constantly changed.
    
     //Build menu from the template
-    const mainMenu = Menu.buildFromTemplate(mainMenuTemplate);
+    const appMenu = Menu.buildFromTemplate(appMenuTemplate);
     //Insert menu to the app
-    Menu.setApplicationMenu(mainMenu);
-    if (file === 'addWindow'){
+    Menu.setApplicationMenu(appMenu);
+    if (file === 'compose'){
         appWindows[index].setMenu(null);
     }
     
@@ -146,6 +173,11 @@ function openWindow (file) {
     // });
 }
 
+// 
+ipcMain.on('open', (event, arg) => {
+    openWindow(arg.file);
+})
+
 function onQuit (index) { //index = windowNumber
     //If not on MacOS then when the last window closes the app terminates and all the windows are garbage collected.
     //The if statement is true only if 'windowNumber'== 0 (when main application window / process is closed).
@@ -161,14 +193,14 @@ function onQuit (index) { //index = windowNumber
 
 
 //Create menu template
-const mainMenuTemplate = [
+const appMenuTemplate = [
     {
         label:'File',
         submenu:[
             {
                 label:'Add Item',
                 click(){
-                    openWindow('addWindow');
+                    //openWindow('addWindow');
                 }
             },
             {
@@ -190,12 +222,12 @@ const mainMenuTemplate = [
 
 //If macOS add empty object to menu to get rid of 'Electron' tab
 if (process.platform === 'darwin'){
-    mainMenuTemplate.unshift({});
+    appMenuTemplate.unshift({});
 }
 
 //Add developer tools tabs if not in production
 if (process.env.NODE_ENV !== 'production'){
-    mainMenuTemplate.push({
+    appMenuTemplate.push({
         label:'Developer Tools',
         submenu:[
             {
