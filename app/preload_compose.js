@@ -1,6 +1,6 @@
 // Secure way of importing node.js modules into the renderer process (compose.js) - 
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
-const {contextBridge}       = require("electron");
+const {contextBridge, nativeImage}       = require("electron");
 const {app, BrowserWindow}  = require('@electron/remote');
 const Datastore             = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise               = require('bluebird');
@@ -10,6 +10,8 @@ const Logger                = require('./helperModules/logger');
 const FormValidator         = require('./helperModules/formValidator');
 const Header                = require('./mainModules/Header');
 const SMTPClient            = require('./mainModules/SMTPClient');
+const easyMDE               = require('easymde');
+const {marked} = require('marked')
 
 
 const appDir = jetpack.cwd(app.getAppPath());
@@ -31,7 +33,7 @@ const logger = new Logger ({}, app);
 const header = new Header (app, BrowserWindow);
 const smtpClient = new SMTPClient (accounts, logger);
 
-
+let easymde;
 // Expose protected methods that allow the renderer process to use the ipcRenderer without exposing the entire object.
 // Proxy-like API -> instead of assigning values straight to window object - functions can be ovverriden in javascript. 
 // A determined attacker could modify the function definition and then the backend (ie. main.js code) would not be safe.
@@ -57,12 +59,24 @@ contextBridge.exposeInMainWorld(
             option.textContent = account.user;
             materialize.FormSelect.init(document.querySelector('#from'));
         },
+        formatTextArea : () => {
+          let tabsInstance = materialize.Tabs.init(document.querySelector('.tabs'));
+          easymde = new easyMDE({
+            element: document.getElementById('message-html'),
+            autoDownloadFontAwesome: false,
+            minHeight: "300px",
+            maxHeight: "300px",
+            unorderedListStyle : '*',
+            spellChecker : false,
+            scrollbarStyle : 'native',
+            //sanitizerFunction: Custom function for sanitizing the HTML output of markdown renderer.
+          });
+        },
         setSendHandler : () => {
             const form = document.getElementById('send-mail-form');
 
             const to = form.elements['to'];
             const subject = form.elements['subject'];
-            const body = form.elements['message'];
 
             form.addEventListener('input', FormValidator.debounce(function (e) {
                 switch (e.target.id) {
@@ -79,13 +93,23 @@ contextBridge.exposeInMainWorld(
                 
                 let isEmailValid = FormValidator.checkEmailAddress(to);
                 if (isEmailValid) {
+                    let emailContent;
+                    let activeEditor = document.querySelector('div.active').getAttribute('id');
+                    if (activeEditor === 'text'){
+                      emailContent = document.querySelector('div.active textarea').value;
+      
+                    }
+                    else if (activeEditor === 'html'){
+                      emailContent = easymde.value();
+                      emailContent = marked.parse(emailContent);
+                    }
                     let isSubjectOK = FormValidator.checkEmailSubject(subject);
                     if (isSubjectOK){
                         let message = {
                             from: form.elements['from'].value, //_id
                             to: form.elements['to'].value,
                             subject: form.elements['subject'].value,
-                            message: form.elements['message'].value
+                            message: emailContent
                         }
 
                         materialize.toast({html: 'Sending message ...', classes: 'rounded'});
@@ -101,7 +125,7 @@ contextBridge.exposeInMainWorld(
                                 from: form.elements['from'].value,
                                 to: form.elements['to'].value,
                                 subject: undefined,
-                                message: form.elements['message'].value
+                                message: emailContent
                             }
                             materialize.toast({html: 'Sending message ...',displayLength : 3000, classes: 'rounded'});
                             logger.log('Required fields completed. Redirecting to Sender.js ...');

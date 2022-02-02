@@ -1963,9 +1963,9 @@ html {
 
 ul:not(.browser-default) {
   padding-left: 0;
-  list-style-type: none; }
+  list-style-type: circle; }
   ul:not(.browser-default) li {
-    list-style-type: none; }
+    list-style-type: circle; }
 
 a {
   color: #039be5;
@@ -3578,6 +3578,8 @@ small {
     .toast {
       float: right; } }
 
+
+  
 .tabs {
   position: relative;
   overflow-x: auto;
@@ -3637,6 +3639,21 @@ small {
     background-color: #f6b2b5;
     will-change: left, right; }
 
+/*
+    .tabs .tab a{
+      color:#00ACC1;
+  }
+  .tabs .tab a:hover,.tabs .tab a.active {
+    background-color:transparent;
+    color:#008B9B;
+  }
+  .tabs .tab.disabled a,.tabs .tab.disabled a:hover {
+    color:rgba(102,147,153,0.7);	
+  }
+  .tabs .indicator {
+    background-color:#009BAD;
+  }
+  */
 @media only screen and (max-width: 992px) {
   .tabs {
     display: flex; }
@@ -4316,9 +4333,11 @@ input[type=datetime-local],
 input[type=tel],
 input[type=number],
 input[type=search],
+
+
 textarea.materialize-textarea {
   background-color: transparent;
-  border: none;
+  border: 1px solid #2bbbad  ;
   border-bottom: 1px solid #9e9e9e;
   border-radius: 0;
   outline: none;
@@ -4328,8 +4347,11 @@ textarea.materialize-textarea {
   margin: 0 0 20px 0;
   padding: 0;
   box-shadow: none;
-  box-sizing: content-box;
-  transition: all 0.3s; }
+  box-sizing: border-box;
+  transition: all 0.3s; 
+}
+
+
   input:not([type]):disabled, input:not([type])[readonly="readonly"],
   input[type=text]:disabled,
   input[type=text][readonly="readonly"],
@@ -4644,11 +4666,24 @@ textarea.materialize-textarea {
 textarea {
   width: 100%;
   height: 3rem;
-  background-color: transparent; }
+  background-color: transparent; 
+
+}
+textarea#message-text {
+  min-height: 330px;
+  border-radius:0.35em;
+}
+
+#text {
+  height: 350px;
+}
+#html {
+  height: 350px;
+}
   textarea.materialize-textarea {
-    overflow-y: hidden;
+    overflow-y: auto;
     /* prevents scroll bar flash */
-    padding: .8rem 0 1.6rem 0;
+    padding: 0.8rem 1rem 1.6rem 1rem;
     /* prevents text jump on Enter keypress */
     resize: none;
     min-height: 3rem; }

@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <div class="wrapper" style="width: 100%">
   <div class="row">
     <div class="col m12 overflow">
@@ -19,10 +20,17 @@
               <input type="text" name="subject" id="subject" autocomplete="off">
               <small></small>
             </div>
-            <div class="form-field input-field col s12">
-              <textarea id="message" name="message" class="materialize-textarea" autocomplete="off"></textarea>
-              <label for="message">Message</label>
-              <small></small>
+            <div class="form-field input-field col s12 row" >
+              <ul class="tabs">
+                <li class="tab col s2 offset-s7 grey lighten-5"><a class="active gray-text" href="#text">Text</a></li>
+                <li class="tab col s2 teal grey lighten-5"><a class='gray-text' href="#html">HTML</a></li>
+              </ul>
+              <div id="text" class="col s12">
+                <textarea id="message-text" class="materialize-textarea" autocomplete="off"></textarea> 
+              </div>
+              <div id="html" class="col s12">
+                <textarea id="message-html" class="materialize-textarea" autocomplete="off"></textarea> 
+              </div>
             </div>
             <div class="form-field input-field col s12">
               <button class="btn waves-effect waves-light" id="send"  type="submit">
