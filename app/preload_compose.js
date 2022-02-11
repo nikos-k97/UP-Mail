@@ -1,17 +1,17 @@
 // Secure way of importing node.js modules into the renderer process (compose.js) - 
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
-const {contextBridge, nativeImage}       = require("electron");
-const {app, BrowserWindow}  = require('@electron/remote');
-const Datastore             = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
-const Promise               = require('bluebird');
-const jetpack               = require('fs-jetpack');
-const materialize           = require("./helperModules/materialize.min.js");
-const Logger                = require('./helperModules/logger'); 
-const FormValidator         = require('./helperModules/formValidator');
-const Header                = require('./mainModules/Header');
-const SMTPClient            = require('./mainModules/SMTPClient');
-const easyMDE               = require('easymde');
-const {marked} = require('marked')
+const {contextBridge}              = require("electron");
+const {app, BrowserWindow, dialog} = require('@electron/remote');
+const Datastore                    = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Promise                      = require('bluebird');
+const jetpack                      = require('fs-jetpack');
+const materialize                  = require("./helperModules/materialize.min.js");
+const Logger                       = require('./helperModules/logger'); 
+const FormValidator                = require('./helperModules/formValidator');
+const Header                       = require('./mainModules/Header');
+const SMTPClient                   = require('./mainModules/SMTPClient');
+const easyMDE                      = require('easymde');
+const {marked}                     = require('marked')
 
 
 const appDir = jetpack.cwd(app.getAppPath());
@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld(
             scrollbarStyle : 'native',
             //sanitizerFunction: Custom function for sanitizing the HTML output of markdown renderer.
           });
+
         },
         setSendHandler : () => {
             const form = document.getElementById('send-mail-form');

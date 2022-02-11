@@ -4,10 +4,80 @@
   align-items: center;
   justify-content: center;
   height: 50px;
-  min-height: 100%; }
+  min-height: 100% ;
+  overflow: auto !important;
+}
 
+/* Space between input fields and login button */
 .break {
-  height: 2em; }
+  height: 3em; }
 
-html, body {
-  overflow: hidden; }
+/* label focus color */
+.input-field input:focus + label {
+  color: rgb(97,97,97) !important;
+}
+
+/* label underline focus color */
+.row .input-field input:focus {
+  border-bottom: 1px solid rgb(97,97,97) !important;
+  box-shadow: 0 1px 0 0 rgb(97,97,97) !important;
+}
+
+
+/* select element */
+.dropdown-content li > a, .dropdown-content li > span {
+  color: rgb(97,97,97) !important}
+
+.dropdown-content li > a:hover, .dropdown-content li > span:hover {
+  color: whitesmoke !important;
+  background-color : rgb(97,97,97) !important;
+}
+
+.dropdown-content li > a:enabled, .dropdown-content li > span:enabled {
+  color: whitesmoke !important;
+  background-color : rgb(97,97,97) !important;
+}
+
+/* Setting height of the .sidebar's parent element to 100% */
+.wrapper {
+  height: 100% !important;
+  width: 100% !important;
+}
+.row {
+  height:100% !important;
+}
+
+.sidebar {
+  background-color: rgb(97,97,97) !important;
+  height: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.mainarea{
+  box-sizing: border-box !important;
+  padding-top: 40px !important;
+}
+
+
+/* Login button */
+.login {
+  background-color: rgb(97,97,97) !important; 
+  color : rgb(255,202,40) !important;
+  border-radius: 10em !important;
+  height: 4em !important;
+  width : 9em !important;
+  display: inline-flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+}
+
+/* Login button */
+.login:hover {
+  background-color: rgb(97,97,97) !important; 
+}
+
+.ilogin {
+  font-size: 2rem !important;
+}
+
+

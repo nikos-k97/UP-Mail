@@ -3,8 +3,6 @@ const jetpack = require('fs-jetpack');
 /**
  * Setup is called when the application is run, it retrieves required
  * databases and files, and works out the current state.
- *
- * @return {undefined}
  */
 function SetupPage (app,logger,stateManager) {
   this.app = app;
@@ -13,9 +11,6 @@ function SetupPage (app,logger,stateManager) {
 }
 
 SetupPage.prototype.load = function() {
-  //global.appDir = jetpack.cwd(app.getAppPath())
-  //global.storeDir = jetpack.cwd(app.getPath('userData'))
-
   const appDir = jetpack.cwd(this.app.getAppPath());
   const storeDir = jetpack.cwd(this.app.getPath('userData'));
 

@@ -1,5 +1,5 @@
-const Datastore = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
-const Promise = require('bluebird');
+const Datastore  = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Promise    = require('bluebird');
 const IMAPClient = require('./IMAPClient');
 
 // BlueBird is used to make the NeDB module run asynchronously.
@@ -33,51 +33,77 @@ function AccountManager (app, logger, stateManager, utils) {
 // promise.then(). The 'await' keyword blocks the code under it from executing until the promise resolves.
 AccountManager.prototype.addAccount = async function (details) {
   /*----------  OVERLAY PROCESSING MODAL  ----------*/
-  document.querySelector('.wrapper').innerHTML = `
+  // The first time addAccount this run .mainarea class is refering to welcome.html
+  document.querySelector('.mainarea').innerHTML = `
     <span id="doing"></span> 
     <span id="number"></span><br>
     <span id="mailboxes"></span>
   `;
 
-  /*----------  LOG USER IN  ----------*/
-  document.querySelector('#doing').innerText = 'Logging you in ...'; // innerText != textContent
-  let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, details));
-  this.logger.log(`Successfully logged in to user ${details.user}.`);
-
-  /*----------  CREATE EMAIL DATABASE  ----------*/
-  document.querySelector('#doing').innerText = 'Initializing the database for your email ...';
-  // Create a database for the emails (only of it doesn't already exist).
-  client.createEmailDatabase(details.user);
-  this.logger.log(`Initialization for ${details.user} account was successfull.`);
- 
-  /*----------  REFORMAT DETAILS OBJECT  ----------*/
+  /*----------  REFORMAT DETAILS OBJECT (details -> user) TO STORE IN DATABASE  ----------*/
   let user = {
     imap: { 
-      host: details.host,
-      port: details.port
+      host : details.host_incoming,
+      port : details.port_incoming,
+      tls : details.tls_incoming === 'tls' ? true : false
     },
     smtp: {
-      host: details.host_outgoing,
-      port: details.port_outgoing
+      host : details.host_outgoing,
+      port : details.port_outgoing,
+      tls : details.tls_outgoing, //'starttls'-'tls'-'unencrypted' not true-false like IMAP
+      name: details.outgoing_name 
     },
-    user: details.user, 
-    password: details.password, 
-    tls: details.tls,
+    user: details.user,
+    password : details.password,
     hash: this.utils.md5(details.user),
     date: + new Date()
   };
 
+  // Used for authenticating to IMAPClient.
+  const IMAPDetails = {
+    user: details.user,
+    password : details.password,
+    host : details.host_incoming,
+    port : details.port_incoming,
+    tls : details.tls_incoming === 'tls' ? true : false
+  };
+
+  // Used for authenticating to SMTPClient.
+  const SMTPDetails = {
+    user: details.user,
+    password : details.password,
+    host : details.host_outgoing,
+    port : details.port_outgoing,
+    tls : details.tls_outgoing,
+    name: details.outgoing_name 
+  };
+
+  /*----------  LOG USER IN  ----------*/
+  document.querySelector('#doing').innerText = 'Logging you in ...'; // innerText != textContent
+  let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, IMAPDetails));
+  this.logger.log(`Successfully logged in to user ${user.user}.`);
+
+
+  /*----------  CREATE EMAIL DATABASE  ----------*/
+  // Stores the emails for this particular account.
+  document.querySelector('#doing').innerText = 'Initializing the database for your email ...';
+  // Create a database for the emails (only of it doesn't already exist).
+  client.createEmailDatabase(user.user);
+  this.logger.log(`Initialization for ${user.user} account was successfull.`);
+ 
+
   /*----------  SAVE ACCOUNT TO ACCOUNTS DB  ----------*/
+  // Inserts this particular account to accounts.db.
   try {
     document.querySelector('#doing').innerText = 'Saving your account for the future ...';
     // Await for the promisified NeDB's 'insert' function to resolve.
     // NeDB automatically adds an '_id' field for each document.
   	await this.accounts.insertAsync(user);
-    this.logger.log(`Added ${details.user} to the accounts database.`)
+    this.logger.log(`Added ${user.user} to the accounts database.`)
   } catch(e) {
     // Throw error if 'user' field already exists (due to the indexing - unique = true).
     // The user is not saved again.
-    this.logger.warning(`User ${details.user} was already found in the database. `)
+    this.logger.warning(`User ${user.user} was already found in the database. `)
   }
 
   /*----------  UPDATE MAIL ITEMS FOR ACCOUNT  ----------*/
@@ -116,6 +142,7 @@ AccountManager.prototype.getIMAP = async function (email) {
     tls: account.tls
   }
   let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, details));
+  console.log(client)
   return client;
 }
 

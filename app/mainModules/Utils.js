@@ -1,6 +1,7 @@
 const {DateTime} = require("luxon"); //Wrapper for JavaScript dates and times - Replacement of 'moment.js'
 const crypto = require('crypto');
 const util   = require('util');
+const Clean         = require("./Clean");
 
 
 function Utils (app,logger) {
@@ -106,9 +107,9 @@ Utils.prototype.getItemsFromForm = (form) => {
 
   for (let i = 0; i < form.elements.length; i++) {
     let e = form.elements[i];
-    if (!['login'].includes(e.name)) {
+    if (!['login'].includes(e.name) && e.name !== '') {
       // If it's a checkbox, work out if it's checked, else get it's value.
-      values[e.name] = e.type && e.type === 'checkbox' ? e.checked : e.value;
+      values[e.name] = Clean.cleanForm(e.type) && Clean.cleanForm(e.type) === 'checkbox' ? e.checked : Clean.cleanForm(e.value);
     }
   }
   return values;

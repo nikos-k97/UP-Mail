@@ -1,47 +1,84 @@
 <div class="wrapper">
   <div class="row">
-    <div class="input-field col s12 m8 l6 offset-m2 l5 offset-l3">
-      <h1 id="greet" class="center-align">Welcome!</h1>
-      <p class="subtitle center-align">
-        Please provide the following information in order to view your mailbox.
-        <div id="error"></div>
-      </p>
+    <div class="col s2 sidebar">
+
     </div>
-    <form class="subtitle" id="login-form">
-      <div class="input-field col s12 m8 l6 offset-m2 offset-l3">
-        <input id="email" type="email" class="validate" name="user">
-        <label for="email" data-error="Not Valid" data-success="Valid">Email</label>
+    <div class="col s8 offset-s2 mainarea">
+      <div class="input-field col s8 ">
+        <h1 id="greet" class="center-align">Welcome!</h1>
+        <p class="subtitle center-align">
+          Please provide the following information in order to view your mailbox.
+        <div id="error" class="center-align"></div>
+        </p>
       </div>
-      <div class="input-field col s12 m8 l6 offset-m2 offset-l3">
-        <input type="password" name="password" id="password">
-        <label for="password">Password</label>
-      </div>
-      <div class="input-field col s10 m6 offset-m2 l5 offset-l3">
-        <input type="text" name="host_outgoing" id="host_outgoing">
-        <label for="domain">Outgoing Host (SMTP)</label>
-      </div>
-      <div class="input-field col s2 m2 l1">
-        <input type="number" name="port_outgoing" id="port_outgoing">
-        <label for="port">SMTP Port</label>
-      </div>
-      <div class="input-field col s10 m6 offset-m2 l5 offset-l3">
-        <input type="text" name="host" id="host">
-        <label for="host">Incoming Host (IMAP)</label>
-      </div>
-      <div class="input-field col s2 m2 l1">
-        <input type="number" name="port" id="port">
-        <label for="port">IMAP Port</label>
-      </div>
-      <div class="input-field col s6 m4 l3 offset-m2 offset-l3">
-        <input type="checkbox" name="tls" id="secure">
-        <label for="secure">TLS (Secure)</label>
-      </div>
-      <div class="col s12 m8 l6 offset-m2 offset-l3 break"></div>
-      <div class="input-field col s12 m8 l6 offset-m2 offset-l3 center-align">
-        <button class="btn waves-effect waves-light" type="submit" name="login" value="Login">
-          <i class="material-icons">Confirm</i>
-        </button>
-      </div>
-    </form>
+      <form class="subtitle" id="login-form">
+        <div class="row">
+        <div class="input-field form-field col s8">
+          <input id="email" name="user" type="email">
+          <label for="email">Email</label>
+          <small></small>
+        </div>
+        </div>
+        <div class="row">
+        <div class="input-field form-field col s8">
+          <input id="password" type="password" name="password">
+          <label for="password">Password</label>
+          <small></small>
+        </div>
+        </div>
+        <div class="row">
+        <div class="input-field form-field col s4">
+          <input id="host_incoming" type="text" name="host_incoming">
+          <label for="host_incoming">Incoming Host (IMAP)</label>
+          <small></small>
+        </div>
+        <div class="input-field form-field col s3">
+          <select id="tls_incoming" name="tls_incoming">
+            <option value="tls" selected>TLS</option>
+            <option value="unencrypted">Unencrypted</option>
+          </select>
+          <label>Choose (IMAP) channel encryption</label>
+        </div>
+        <div class="input-field form-field col s1">
+          <input id="port_incoming" type="number" name="port_incoming">
+          <label for="port_incoming">IMAP Port</label>
+          <small></small>
+        </div>
+        </div>
+        <div class="row">
+        <div class="input-field form-field col s4 ">
+          <input id="host_outgoing" type="text" name="host_outgoing">
+          <label for="host_outgoing">Outgoing Host (SMTP)</label>
+          <small></small>
+        </div>
+        <div class="input-field form-field col s3">
+          <select id="tls_outgoing" name="tls_outgoing">
+            <option value="tls" selected>TLS</option>
+            <option value="starttls">STARTTLS</option>
+            <option value="unencrypted">Unencrypted</option>
+          </select>
+          <label>Choose (SMTP) channel encryption</label>
+        </div>
+        <div class="input-field form-field col s1">
+          <input id="port_outgoing" type="number" name="port_outgoing">
+          <label for="port_outgoing">SMTP Port</label>
+          <small></small>
+        </div>
+        </div>
+        <div class="row">
+        <div class="input-field form-field col s8">
+          <input id="outgoing_name"type="text" name="outgoing_name" data-length="40">
+          <label for="outgoing_name">Send emails using this name</label>
+          <small></small>
+        </div>
+        </div>
+        <div class="break col s8"></div>
+        <div class="input-field form-field col s8 center-align">
+          <button class="btn waves-effect waves-light login" type="submit" name="login" value="Login">
+            <i class="material-icons ilogin">input</i>
+          </button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>

@@ -40,5 +40,19 @@ Clean.cleanHTML = (dirty) => {
   return sanitizeHTML(dirty, htmlAllowed);
 }
 
+Clean.cleanForm = (dirty) => {
+  const htmlAllowedInForm = {
+    allowedTags : [],
+    allowedAttributes : [],
+    allowedClasses: [],
+    allowedSchemes : [],
+    allowedScriptDomains: [],
+    allowedScriptHostnames : [],
+    allowedIframeHostnames : [],
+    allowedIframeDomains: [],
+    allowProtocolRelative: false
+  };
+  return sanitizeHTML(dirty, htmlAllowedInForm);
+}
 
 module.exports = Clean;

@@ -173,7 +173,7 @@ function openWindow (file) {
     // });
 }
 
-// 
+
 ipcMain.on('open', (event, arg) => {
     openWindow(arg.file);
 })

@@ -1,3 +1,12 @@
+
+
+#addTo {
+  box-sizing: content-box !important;
+  width : fit-content !important;
+  height : fit-content !important;
+}
+
+
 .materialize-red {
   background-color: #e51c23 !important; }
 
@@ -6781,13 +6790,26 @@ header h1 {
   margin: 0px;
   position: fixed;
   top: 0px;
-  width: 100vw; }
+  width: 100vw;
+ }
+
+ #settings-bar {
+  z-index: 1000;
+  -webkit-app-region: drag;
+  height: 3px;
+  padding: none;
+  margin: 0px;
+  position: fixed;
+  top: 30px;
+  width: 100vw;
+ }
 
 #title {
   z-index: 1001;
   position: fixed;
   top: 0px;
-  left: 6px; }
+  left: 6px; 
+ }
 
 #title-bar-btns {
   z-index: 1002;
@@ -6818,3 +6840,11 @@ header h1 {
 
 #content {
   margin-top: 30px; }
+
+small {
+  color:red;
+}
+
+#error {
+  color : red;
+}

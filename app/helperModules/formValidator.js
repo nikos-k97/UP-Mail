@@ -1,5 +1,5 @@
 const materialize           = require("./materialize.min.js");
-
+const Clean                 = require("../mainModules/Clean");
 function FormValidator (){}
 
 FormValidator.isRequired = value => value === '' ? false : true;
@@ -29,6 +29,7 @@ FormValidator.isPasswordSecure = (password) => {
 FormValidator.showError = (input, message) => {
     // get the form-field element
     const formField = input.parentElement;
+
     // add the error class
     formField.classList.remove('success');
     formField.classList.add('error');
@@ -53,11 +54,12 @@ FormValidator.showSuccess = (input) => {
 
 FormValidator.checkEmailAddress = (emailEl) => {
     let valid = false;
-    const email = emailEl.value.trim();
+    const email = Clean.cleanForm(emailEl.value.trim());
+
     if (!FormValidator.isRequired(email)) {
         FormValidator.showError(emailEl, 'Email cannot be blank.');
     } else if (!FormValidator.isEmailValid(email)) {
-        FormValidator.showError(emailEl, 'Email is not valid.')
+        FormValidator.showError(emailEl, 'Email format is not valid.')
     } else {
         FormValidator.showSuccess(emailEl);
         valid = true;
@@ -65,15 +67,52 @@ FormValidator.checkEmailAddress = (emailEl) => {
     return valid;
 }
 
+FormValidator.checkIncomingHost = (domain) => {
+
+    let valid = false;
+    const domainName = Clean.cleanForm(domain.value.trim());
+    if (!FormValidator.isRequired(domainName)) {
+        FormValidator.showError(domain, 'Incoming mail server name cannot be blank.');
+    } else {
+        FormValidator.showSuccess(domain);
+        valid = true;
+    }
+    return valid;
+}
+
+FormValidator.checkOutgoingHost = (domain) => {
+    let valid = false;
+    const domainName = Clean.cleanForm(domain.value.trim());
+    if (!FormValidator.isRequired(domainName)) {
+        FormValidator.showError(domain, 'Outgoing mail server name cannot be blank.');
+    } else {
+        FormValidator.showSuccess(domain);
+        valid = true;
+    }
+    return valid;
+}
+
+FormValidator.checkPort = (port) => {
+    let valid = false;
+    const portNo = Clean.cleanForm(port.value.trim());
+    if (!FormValidator.isRequired(portNo)) {
+        FormValidator.showError(port, 'Port number cannot be blank.');
+    } else {
+        FormValidator.showSuccess(port);
+        valid = true;
+    }
+    return valid;
+}
+
 FormValidator.checkUsername = (usernameEl) => {
     let valid = false;
-    const min = 3,
-        max = 25;
-    const username = usernameEl.value.trim();
+    const min = 1;
+    const max = 40;
+    const username = Clean.cleanForm(usernameEl.value.trim());
     if (!FormValidator.isRequired(username)) {
-        FormValidator.showError(usernameEl, 'Username cannot be blank.');
-    } else if (!isBetween(username.length, min, max)) {
-        FormValidator.showError(usernameEl, `Username must be between ${min} and ${max} characters.`)
+        FormValidator.showError(usernameEl, 'Name should be blank.');
+    } else if (!FormValidator.isBetween(username.length, min, max)) {
+        FormValidator.showError(usernameEl, `Name length should have less than ${max} characters.`)
     } else {
         FormValidator.showSuccess(usernameEl);
         valid = true;
@@ -103,11 +142,9 @@ FormValidator.checkEmailBody = (textEl) => {
 
 FormValidator.checkPassword = (passwordEl) => {
     let valid = false;
-    const password = passwordEl.value.trim();
+    const password = Clean.cleanForm(passwordEl.value.trim());
     if (!FormValidator.isRequired(password)) {
         FormValidator.showError(passwordEl, 'Password cannot be blank.');
-    } else if (!isPasswordSecure(password)) {
-        FormValidator.showError(passwordEl, 'Password must has at least 8 characters that include at least 1 lowercase character, 1 uppercase characters, 1 number, and 1 special character in (!@#$%^&*)');
     } else {
         FormValidator.showSuccess(passwordEl);
         valid = true;

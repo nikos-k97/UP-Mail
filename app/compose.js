@@ -1,7 +1,6 @@
 // Renderer process for composeWindow. 
 // Has access only to the modules and functions exposed by contextBridge (via 'window.api.xxxxx').
 
-
 window.api.loadHeader();
 window.api.setLoc('Compose');
 window.api.loadContent();
