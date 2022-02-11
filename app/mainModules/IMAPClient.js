@@ -314,7 +314,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
               if (data.type === 'text') parsedData = data;
             })
             .on('error', reject)
-            .on('end', resolve)
+            .once('end', resolve)
           }
         );
       });
