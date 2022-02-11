@@ -82,7 +82,6 @@ MailStore.prototype.createEmailDB = async function (emailAddress) {
     );
     this.hash = Promise.promisifyAll(mailDB);
     // Load the database
-    // !!!!!!!!!!!!!! MAYBE LOADDATABASEASYNC IS NOT REQUIRED HERE!!!!!!!!!!!!!!!!!!!!!!!!!!
     await this.hash.loadDatabaseAsync();
     // Since each message's UID is unique inside each mailbox, we specify that 'uid' field should be unique.
     this.hash.ensureIndex({ fieldName: 'uid', unique: true });
