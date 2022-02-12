@@ -1,6 +1,8 @@
 const Datastore  = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const { resolve } = require('bluebird');
 const Promise    = require('bluebird');
 const IMAPClient = require('./IMAPClient');
+const SMTPClient = require('./SMTPClient');
 
 // BlueBird is used to make the NeDB module run asynchronously.
 // It's useful feature is that it allows us to “promisify” other Node modules in order to use them asynchronously. 
@@ -28,11 +30,49 @@ function AccountManager (app, logger, stateManager, utils) {
   this.accounts.ensureIndex({ fieldName: 'user', unique: true });
 }
 
+// Check if we can procceed to log the user in.
+AccountManager.prototype.testProvidedDetails = async function (details) {
+  let user = {
+    imap: { 
+      host : details.host_incoming,
+      port : details.port_incoming,
+      tls : details.tls_incoming === 'tls' ? true : false
+    },
+    smtp: {
+      host : details.host_outgoing,
+      port : details.port_outgoing,
+      tls : details.tls_outgoing, //'starttls'-'tls'-'unencrypted' not true-false like IMAP
+      name: details.outgoing_name 
+    },
+    user: details.user,
+    password : details.password,
+    hash: this.utils.md5(details.user),
+    date: + new Date()
+  };
+
+  let imapClient = new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, user);
+  let smtpClient = new SMTPClient(user, this.logger);
+
+  try {
+    await imapClient;
+    smtpClient.createTransporterObject(user);
+    await smtpClient.verifyServerConnection(user);
+    imapClient = null;
+    smtpClient = null;
+    return true;
+  } catch (error) {
+    this.logger.error(error);
+    imapClient = null;
+    smtpClient = null;
+    return false;
+  }
+}
+
 // Async functions always return a promise. Other values are wrapped in a resolved promise automatically.
 // Also enables the use of 'await', which is another way to wait for a promise to be resolved insted of
 // promise.then(). The 'await' keyword blocks the code under it from executing until the promise resolves.
 AccountManager.prototype.addAccount = async function (details) {
-  /*----------  OVERLAY PROCESSING MODAL  ----------*/
+   /*----------  OVERLAY PROCESSING MODAL  ----------*/
   // The first time addAccount this run .mainarea class is refering to welcome.html
   document.querySelector('.mainarea').innerHTML = `
     <span id="doing"></span> 
@@ -59,28 +99,9 @@ AccountManager.prototype.addAccount = async function (details) {
     date: + new Date()
   };
 
-  // Used for authenticating to IMAPClient.
-  const IMAPDetails = {
-    user: details.user,
-    password : details.password,
-    host : details.host_incoming,
-    port : details.port_incoming,
-    tls : details.tls_incoming === 'tls' ? true : false
-  };
-
-  // Used for authenticating to SMTPClient.
-  const SMTPDetails = {
-    user: details.user,
-    password : details.password,
-    host : details.host_outgoing,
-    port : details.port_outgoing,
-    tls : details.tls_outgoing,
-    name: details.outgoing_name 
-  };
-
-  /*----------  LOG USER IN  ----------*/
+  /*----------  TEST DETAILS USER PROVIDED - LOG USER IN  ----------*/
   document.querySelector('#doing').innerText = 'Logging you in ...'; // innerText != textContent
-  let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, IMAPDetails));
+  let client = await new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, user);
   this.logger.log(`Successfully logged in to user ${user.user}.`);
 
 
@@ -134,14 +155,7 @@ AccountManager.prototype.removeAccount = async function (email) {
 
 AccountManager.prototype.getIMAP = async function (email) {
   let account = await this.findAccount(email);
-  let IMAPDetails = {
-    user: account.user,
-    password: account.password,
-    host: account.imap.host,
-    port: account.imap.port,
-    tls: account.imap.tls
-  }
-  let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, IMAPDetails));
+  let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, account));
   console.log(client)
   return client;
 }

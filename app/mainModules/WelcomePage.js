@@ -19,18 +19,35 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
   materialize.FormSelect.init(document.querySelectorAll('select'));
   materialize.Tooltip.init(document.querySelectorAll('.tooltipped'));
   
-  let loginForm = document.querySelector('#login-form');
+  
   let utils = this.utils; // Store 'utils' in a new variable since 'this' inside the event listener is changed.
   let accountManager = this.accountManager; // Store 'accountManager' in a new variable since 'this' inside the event listener is changed.
-  let checkLoginInfo = this.checkLoginInfo;
+  let checkLoginInfo = this.checkLoginInfo; // function reference
+  let logger = this.logger;
+  let loginForm = document.querySelector('#login-form');
+
   loginForm.addEventListener('submit', 
     async function onLogin (e) {
       e.preventDefault();
+      // Check if the submitted form information have valid syntax.
       let formOK = checkLoginInfo(loginForm);
       if (formOK){
         document.querySelector('#error').innerHTML = '';
+        // Fetch and sanitize the form information.
         let details = utils.getItemsFromForm(loginForm);
-        accountManager.addAccount(details);
+        // Check if connection can be established to the IMAP and SMTP servers.
+        materialize.toast({html: 'Establishing connections to IMAP and SMTP servers...', displayLength : 3000 ,classes: 'rounded'});
+        let verified = await accountManager.testProvidedDetails(details);
+        if (verified){
+          logger.log('Credentials for the IMAP and SMTP servers validated successfully.');
+          logger.log('Proceeding to log user in.')
+          materialize.toast({html: 'Connections were established successfully.', displayLength : 3000 ,classes: 'rounded'});
+          accountManager.addAccount(details);
+        }
+        else {
+          document.querySelector('#error').innerHTML = "<span><strong>Could not connect to the IMAP and/or the SMTP server. Please check the provided details.</strong></span>"
+          materialize.toast({html: 'Connection was not possible. Check provided data.', displayLength : 3000 ,classes: 'rounded'});
+        }
       }
       else {
         document.querySelector('#error').innerHTML = "<span><strong>Some fields are either missing or have the wrong format.</strong></span>"

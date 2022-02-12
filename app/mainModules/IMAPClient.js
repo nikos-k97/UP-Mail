@@ -10,8 +10,6 @@ const Threader       = require('./Threader');
 const fs             = require('fs');
 const base64 = require('base64-stream');
 
-
-
 /**
  * Logs the user in to their email server.
  * @param  {object} app      [Mandatory application parameters for service choreography]
@@ -23,7 +21,7 @@ const base64 = require('base64-stream');
  * @param  {boolean} debug   [Optional - A boolean to enable verbose logging to console.]
  * @return {promise}         [This promise resolves when the client connection finishes.]
  */
-function IMAPClient(app, logger, utils, stateManager, accountManager, details, debug) {
+function IMAPClient(app, logger, utils, stateManager, accountManager, details) {
   this.app = app;
   this.logger = logger;
   this.utils = utils;
@@ -40,12 +38,20 @@ function IMAPClient(app, logger, utils, stateManager, accountManager, details, d
   return new Promise(
       (
         (resolve, reject) => {
+          const IMAPDetails = {
+            user: details.user,
+            password : details.password,
+            host : details.imap.host,
+            port : details.imap.port,
+            tls : details.imap.tls 
+          };
+
           // Login to the mail server using the details given to us.
           this.client = Promise.promisifyAll(
             // Connection - Creates and returns a new instance of Connection using the specified configuration object
             // debug - function - If set, the function will be called with one argument, a string containing some 
             // debug info. Default: (no debug output)
-            new IMAP(Object.assign(details) )//, { debug: this.logger() }))
+            new IMAP(IMAPDetails)
           );
 
           // 'ready' : Emitted when a connection to the server has been made and authentication was successful.
@@ -200,8 +206,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
 
   -----------------------------------------------------------------------------------------------------------------
   */
-  let parser = new MailParser();
-
+  
   return new Promise(function (resolve, reject) {
     this.logger.log("Total: " + this.mailbox.messages.total);
     this.logger.log("Seqno: " + seqno);
@@ -266,7 +271,6 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
     */
     fetchObject.on('message', (msg, seqno) => {
       let parsePromise, parsedHeaders, parsedData, parsedAttachments = [], attributes;
-
       /*
         msg (typeof : ImapMessage) -> 'body' event
           body(<ReadableStream> stream, <object> info) - Event emitted for each requested body. 
@@ -275,6 +279,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
             size (integer) :  The size of this body in bytes.
       */
       msg.on('body', (stream, info) => {
+        let parser = new MailParser();
         let attachmentNo = 0;
         parsePromise = new Promise(
           (resolve, reject) => {
@@ -317,6 +322,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
             .once('end', resolve)
           }
         );
+        parser = null;
       });
       
       /*
@@ -442,7 +448,6 @@ IMAPClient.prototype.buildAttMessageFunction = function(attachment) {
     
       let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
      
-
       writeStream.once('finish', function() {
         console.log('Done writing to file %s', filename);
         writeStream.destroy();
