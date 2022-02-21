@@ -1,8 +1,9 @@
+const jetpack    = require('fs-jetpack');
 const Datastore  = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
-const { resolve } = require('bluebird');
 const Promise    = require('bluebird');
 const IMAPClient = require('./IMAPClient');
 const SMTPClient = require('./SMTPClient');
+
 
 // BlueBird is used to make the NeDB module run asynchronously.
 // It's useful feature is that it allows us to “promisify” other Node modules in order to use them asynchronously. 
@@ -14,7 +15,6 @@ function AccountManager (app, logger, stateManager, utils) {
   this.logger = logger;
   this.stateManager = stateManager;
   this.utils = utils;
-
   // Load the database that stores the user accounts (Creates it if doesn't exist).
   const db = new Datastore(
     {
@@ -25,116 +25,105 @@ function AccountManager (app, logger, stateManager, utils) {
     }
   );
 	this.accounts = Promise.promisifyAll(db);
-
   // Use database indexing for 'user' field - mostly used to enforce uniqueness to the 'user' field.
   this.accounts.ensureIndex({ fieldName: 'user', unique: true });
 }
 
+
 // Check if we can procceed to log the user in.
-AccountManager.prototype.testProvidedDetails = async function (details) {
-  let user = {
-    imap: { 
-      host : details.host_incoming,
-      port : details.port_incoming,
-      tls : details.tls_incoming === 'tls' ? true : false
-    },
-    smtp: {
-      host : details.host_outgoing,
-      port : details.port_outgoing,
-      tls : details.tls_outgoing, //'starttls'-'tls'-'unencrypted' not true-false like IMAP
-      name: details.outgoing_name 
-    },
-    user: details.user,
-    password : details.password,
-    hash: this.utils.md5(details.user),
-    date: + new Date()
-  };
-
-  let imapClient = new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, user);
-  let smtpClient = new SMTPClient(user, this.logger);
-
+// Used by 'Welcome.js' for the case of a new user.
+AccountManager.prototype.testProvidedDetails = async function (loginDetails) {
+  let imapClient = new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, loginDetails);
+  let smtpClient = new SMTPClient(loginDetails, this.logger);
   try {
-    await imapClient;
-    smtpClient.createTransporterObject(user);
-    await smtpClient.verifyServerConnection(user);
+    let client = await imapClient;
+    smtpClient.createTransporterObject(loginDetails);
+    await smtpClient.verifyServerConnection(loginDetails);
+    client.client.end();
+    client = null;
     imapClient = null;
     smtpClient = null;
-    return true;
+    return true; // Connection to both server was established successfully.
   } catch (error) {
     this.logger.error(error);
     imapClient = null;
     smtpClient = null;
-    return false;
+    return false; // Could not establish connection to one of (or both) the servers.
   }
 }
 
-// Async functions always return a promise. Other values are wrapped in a resolved promise automatically.
-// Also enables the use of 'await', which is another way to wait for a promise to be resolved insted of
-// promise.then(). The 'await' keyword blocks the code under it from executing until the promise resolves.
-AccountManager.prototype.addAccount = async function (details) {
-   /*----------  OVERLAY PROCESSING MODAL  ----------*/
-  // The first time addAccount this run .mainarea class is refering to welcome.html
-  document.querySelector('.mainarea').innerHTML = `
-    <span id="doing"></span> 
-    <span id="number"></span><br>
-    <span id="mailboxes"></span>
-  `;
 
-  /*----------  REFORMAT DETAILS OBJECT (details -> user) TO STORE IN DATABASE  ----------*/
-  let user = {
-    imap: { 
-      host : details.host_incoming,
-      port : details.port_incoming,
-      tls : details.tls_incoming === 'tls' ? true : false
-    },
-    smtp: {
-      host : details.host_outgoing,
-      port : details.port_outgoing,
-      tls : details.tls_outgoing, //'starttls'-'tls'-'unencrypted' not true-false like IMAP
-      name: details.outgoing_name 
-    },
-    user: details.user,
-    password : details.password,
-    hash: this.utils.md5(details.user),
-    date: + new Date()
-  };
+AccountManager.prototype.existingAccount = async function () {
+  // Retrieve this particular account's info to accounts.db (the accounts.db was created when the instance of
+  // AccountManager.js was created - in the constructor).
+  // If 'state === existing' but account is unknown, treat it as a new user (Welcome.js etc...).
+  if (typeof this.stateManager.state.account === 'undefined') {
+    this.stateManager.change('state', 'new');
+    this.stateManager.checkUserState();
+    // Re-emit window.load event so that the StateManager.style function can work properly.
+    // (it is waiting for the window.load event to apply style)
+    dispatchEvent(new Event('load'));
+  }
+  else {
+    // If 'state === existing' and account is known, get the loginDetails from the database.
+    // Because this is an existing account, the account also have folder information (account.folders)
+    // in addition to the login information.
+    let account = await this.findAccount(this.stateManager.state.account.user);
+    if (account.user === undefined){
+      // Account info can't be retrieved.
+      this.stateManager.change('state', 'new');
+      this.stateManager.checkUserState();
+      // Re-emit window.load event so that the StateManager.style function can work properly.
+      // (it is waiting for the window.load event to apply style)
+      dispatchEvent(new Event('load'));
+    }
+    else{
+    // Account info were retrieved, redirect to stateManager.
+    await this.stateManager.setup(account);
+    }
 
-  /*----------  TEST DETAILS USER PROVIDED - LOG USER IN  ----------*/
-  document.querySelector('#doing').innerText = 'Logging you in ...'; // innerText != textContent
-  let client = await new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, user);
-  this.logger.log(`Successfully logged in to user ${user.user}.`);
+  }
+}
 
 
-  /*----------  CREATE EMAIL DATABASE  ----------*/
-  // Stores the emails for this particular account.
-  document.querySelector('#doing').innerText = 'Initializing the database for your email ...';
-  // Create a database for the emails (only of it doesn't already exist).
-  client.createEmailDatabase(user.user);
-  this.logger.log(`Initialization for ${user.user} account was successfull.`);
- 
-
-  /*----------  SAVE ACCOUNT TO ACCOUNTS DB  ----------*/
-  // Inserts this particular account to accounts.db.
+AccountManager.prototype.newAccount = async function(loginInfo) {
+  // Inserts this particular account's info to accounts.db (the accounts.db was created when the instance of
+  // AccountManager.js was created - in the constructor).
   try {
-    document.querySelector('#doing').innerText = 'Saving your account for the future ...';
     // Await for the promisified NeDB's 'insert' function to resolve.
     // NeDB automatically adds an '_id' field for each document.
-  	await this.accounts.insertAsync(user);
-    this.logger.log(`Added ${user.user} to the accounts database.`)
+  	await this.accounts.insertAsync(loginInfo);
+    this.logger.log(`Added user: '${loginInfo.user}' to the accounts database.`)
   } catch(e) {
     // Throw error if 'user' field already exists (due to the indexing - unique = true).
     // The user is not saved again.
-    this.logger.warning(`User ${user.user} was already found in the database. `)
+    this.logger.warning(`User '${loginInfo.user}' was already found in the database. Updating info...`);
+    await this.editAccount(loginInfo.user, loginInfo);
+    this.logger.log(`Info for user '${loginInfo.user}' updated.`)
   }
 
-  /*----------  UPDATE MAIL ITEMS FOR ACCOUNT  ----------*/
-  await client.updateAccount()
+  let user = loginInfo.user;
+  let hash = user.includes('@') ? this.utils.md5(user) : user;
 
-  /*----------  SWITCH TO THAT USER  ----------*/
-  //StateManager.change('account', { hash: user.hash, email: user.user })
-  //StateManager.change('state', 'mail')
-  //StateManager.update()
+  // Create the folders where the mail bodies for this specific user will be stored.
+  // (If they dont already exist)
+  let fs = jetpack.cwd(this.app.getPath('userData'));
+  fs.dir(`mail`).dir(`${hash}`);
+  fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
+  let allUids = fs.find(`.`);
+  allUids.forEach(jsonFile => {
+    fs.remove(`${jsonFile}`, 'json');
+    console.log(`Removed ${jsonFile} from mail/${hash}.`);
+  });
+
+  // Change state to 'existing' and add the 'user' and 'hash' fields to state.json.
+  this.stateManager.change('state', 'existing');
+  this.stateManager.change('account', {hash, user});
+
+  // Account was inserted, redirect to stateManager.
+  await this.stateManager.setup(loginInfo);
 }
+
 
 AccountManager.prototype.listAccounts = async function () {
   return this.accounts.findAsync({});
@@ -153,10 +142,10 @@ AccountManager.prototype.removeAccount = async function (email) {
 	return this.accounts.removeAsync({ user: email });
 }
 
+
 AccountManager.prototype.getIMAP = async function (email) {
   let account = await this.findAccount(email);
   let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, account));
-  console.log(client)
   return client;
 }
 

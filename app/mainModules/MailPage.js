@@ -1,164 +1,451 @@
 const { timeout, TimeoutError }     = require('promise-timeout');
+const merge                         = require('merge-deep');
 const materialize                   = require("../helperModules/materialize.min.js");
 const Header                        = require('./Header');
+const _                             = require('lodash');
 const Clean                         = require('./Clean');
+const Utils                         = require('./Utils');
+const Threader                      = require('./Threader');
+const IMAPClient                    = require('./IMAPClient');
 
-function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager) {
+
+function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager, mailStore) {
   this.ipcRenderer = ipcRenderer;
   this.app = app;
   this.logger = logger;
   this.stateManager = stateManager;
   this.utils = utils;
   this.accountManager = accountManager;
-  // this.client ->  defined in MailPage.prototype.reload()
-  // this.mailStore -> defined in MailPage.prototype.render() = client.mailStore
+  this.mailStore = mailStore;
+  //this.imapClient -> defined in 'initializeIMAP()'
 }
 
-MailPage.prototype.load = async function () {
-  if (!this.utils.testLoaded('mailbox')) return;
 
-  // Change internal state to 'mail'.
-  this.stateManager.page('mailbox', new Array('basic','mailbox'));
-  this.logger.debug('Mailbox Page is now loading...');
+MailPage.prototype.initializeIMAP = async function(accountInfo) {
+  /*
+    Try to establish an IMAP connection with the server. If it fails, return to the welcome page to log in again.
+    > For example, a reason of not being able to connect is that the user is an existing user that
+      has changed their password since their last login, but their old password is saved in the accounts.db.
+      If this scenario happens, the user is considered a new user (state = new). The accounts database has already
+      an entry with the user's email, so because of the unique constraint on the 'user' field, the user's account
+      details in the database are updated with the new ones that the user entered in the login form.
+  */
+  let client = new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this.accountManager, accountInfo);
+  // Attempts to connect and authenticate with the IMAP server.
+  try {
+    // [resolved_value] = await [Y_Promise] <=> [Y_Promise].then( [resolved_value] => ... )
+    this.imapClient = await client;
+    client = null;
+    this.logger.info(`User : '${accountInfo.user}' successfully connected to IMAP server.`);
+    return true;
+  } catch (error) {
+    // Revert back to 'new' state if the connection is not possible.
+    this.logger.error(error);
+    client = null;
+    this.imapClient = null;
+    materialize.toast({html: 'Could not connect to IMAP server. Navigating back to login screen ...', displayLength : 3000 ,classes: 'rounded'});
+    this.logger.warn('Could not connect to IMAP server. Navigating back to login screen ...');
+    this.stateManager.change('state', 'new');
+    this.stateManager.checkUserState();
+    // Re-emit window.load event so that the StateManager.style function can work properly.
+    // (it is waiting for the window.load event to apply style)
+    dispatchEvent(new Event('load'));
+    return false;
+  }
+}
 
 
-  /*----------  ENSURE ACCOUNT SET IN STATE  ----------*/
-  if (typeof this.stateManager.state.account === 'undefined') {
-    let account = (await this.accountManager.listAccounts())[0];
-    this.stateManager.change('account', Object.assign(this.stateManager.state.account, { hash: account.hash, email: account.user }))
+MailPage.prototype.checkIMAPStatus = async function (accountInfo) {
+  // Possible client / connection states are: 'connected', 'authenticated', 'disconnected'. 
+  // We always want to be in the 'authenticated' state in order to be able to perform IMAP operations.
+  if (this.imapClient.client.state === 'disconnected' || this.imapClient.client.state === 'connected') {
+    this.logger.log('Client disconnected. Reconnecting...');
+    //this.imapClient.client.end();
+    this.imapClient = null;
+    let initialized = await this.initializeIMAP(accountInfo);
+    if (initialized) return true;
+    else return false;
+  }
+  else return true;
+}
+
+MailPage.prototype.reload = async function (accountInfo){
+  this.logger.log('Reloading mail messages...')
+  // await this.accountManager.editAccount(accountInfo, {'personalFolders' : ''}); --> accountinfo update
+  //this.mailStore.deleteEmails(); -> more arguements
+  this.getImapInfo(accountInfo);
+}
+
+MailPage.prototype.renderMailPage = function (accountInfo) {
+  if (!this.utils.testLoaded('mailbox')){
+    this.logger.warning('For some reason the setup is not completed. Redirecting to welcome page... ');
+    this.imapClient = null;
+    materialize.toast({html: 'A problem occured. Reperforming setup operations...', displayLength : 3000 ,classes: 'rounded'});
+    this.stateManager.checkUserState();
+    // Re-emit window.load event so that the StateManager.style function can work properly.
+    // (it is waiting for the window.load event to apply style)
+    dispatchEvent(new Event('load'));
+  }
+  else {
+    this.stateManager.page('mailbox', ['basic','mailbox']);
+    this.logger.debug('Mailbox page is now loading...');
+    dispatchEvent(new Event('load'));
+    document.querySelector('#mail').innerHTML = `
+      <span id="doing"></span> 
+      <span id="number"></span><br>
+      <span id="mailboxes"></span>
+    `;
+
+    // Activate send mail button
+    let composeButton = document.querySelector('.fixed-action-btn');
+    materialize.FloatingActionButton.init(composeButton, {
+      direction: 'left'
+    });
+    document.querySelector('#compose-button').addEventListener('click', (e) => {
+      this.ipcRenderer.send('open', { file: 'composeWindow' });
+    });
+ 
+    // Activate reload button
+    document.querySelector('#refresh-button').addEventListener('click', () => {
+      this.reload(accountInfo);
+    });
+
+    // Get the necessary information from the IMAP server in order to render the mailPage.
+    this.getImapInfo(accountInfo);
+  } 
+}
+
+MailPage.prototype.getImapInfo = async function(accountInfo){
+  // Get namespaces - they may be used for fetching emails from other mailboxes using the necessary prefix and delimiter.
+  let statusOK = await this.checkIMAPStatus(accountInfo);
+  if ( !statusOK ) return;
+  let namespaces = await this.imapClient.fetchNamespaces();
+  this.logger.debug(`Number of available namespaces that probably contain mailboxes : ${namespaces.prefix.length}`);
+
+  // Get mailboxes/ folders of all namespaces.
+  statusOK = await this.checkIMAPStatus(accountInfo);
+  if ( !statusOK ) return;
+  document.querySelector('#doing').innerText = 'Grabbing your mailboxes ...';
+  let personalBoxes = {};
+  // ...
+  for (let i=0 ; i < namespaces.prefix.length; i++){
+    if (namespaces.type[i] === 'personal'){
+      personalBoxes = merge(personalBoxes, await this.imapClient.getBoxes(namespaces.prefix[i]));
+    }
   }
 
-  /*----------  RETRIEVE & SETUP ACCOUNT  ----------*/
-  // Retrive data from accounts.db
-  let account = await this.accountManager.findAccount(this.stateManager.state.account.emailAddress);
-  let folders = account.folders;
+  // Merge current folders (information stored in account database for an existing user) with the new folder
+  // information we obtained via the IMAP getBoxes() call. Each conficting field is overrided with the new info.
+  /* 
+    > Structure of the value returned by 'this.utils.removeCircular(personalBoxes)'
+      (in other words this is the new folder infromation we obtain from IMAP.getboxes() -> personalBoxes)
+      {
+        Inbox: {
+        attribs: (2) ['\Marked', '\HasNoChildren']
+        children: null
+        delimiter: "/"
+        parent: null }
+      },
+      {
+        Sent: ...
+      }
+
+    > Structure of the value stored in accountInfo.personalFolders (from an existing user - the previous time
+      they used the application). The extra values (like 'uidvalidity') are retrived from IMAP.openBox() -> this.imapClient.mailbox
+      {
+        Inbox: {
+          attribs: (2) ['\Marked', '\HasNoChildren']
+          children: null
+          delimiter: "/"
+          flags: (6) ['\Seen', '\Answered', '\Flagged', '\Deleted', '\Draft', '$MDNSent']
+          highest: 1
+          keywords: []
+          messages: {total: 3, new: 3}
+          name: "Inbox"
+          newKeywords: false
+          nomodseq: false
+          parent: null
+          permFlags: []
+          persistentUIDs: true
+          readOnly: true
+          uidnext: 23
+          uidvalidity: 14,
+          highestSeqNo : 1,
+          messageCount : 1,
+          UIDSequence : [1,3,4]
+        }
+      }
+  */
+
+  let personalFolders = accountInfo.personalFolders || {};
+  personalFolders = merge(personalFolders, this.utils.removeCircular(personalBoxes));
+  this.logger.log(`Retrieved all mailboxes from ${accountInfo.user}.`);
+
+  // Get the boxes/ folders with a different structure and keep only the 'delimeter' and 'name' fields.
+  // The linear box structure is used for easier traversal of the the folders in the below for loop - fetch emails.
+  let personalBoxesLinear = IMAPClient.linearBoxes(personalBoxes);
+  personalBoxesLinear.reverse();
+  personalBoxesLinear = personalBoxesLinear.filter((n) => { return n != undefined && JSON.stringify(n) != '[]' });
+
+  // Grab user emails only for personal namespace.
+  document.querySelector('#doing').innerText = 'Grabbing your emails ...';
+  let totalEmails = 0;
+  for (let i = 0; i < personalBoxesLinear.length; i++) {
+    // personalBoxesLinear[i] (Linear Box Path) : [ {"delimiter": "/" ,"name": "Inbox"} ]
+    // path                                     : Inbox
+    // objectPath                               : ["Inbox"]
+    let path = this.imapClient.compilePath(personalBoxesLinear[i]);  
+    let objectPath = IMAPClient.compileObjectPath(personalBoxesLinear[i]);  
+
+    /*
+    'folderInfo' contains all the information we got from merging the folder info stored in accounts.db and
+    the new folder info we got from fetching the folders inside the personal namespace. Because 
+    IMAP.openBox() hasnt been used yet, the UIDValidity value of each folder is the old one (the one saved
+    from a previous session, so we use that to see if we need to re-fetch the emails or load them from the db)
+    The only updated fields of the 'personalFolders' variable are:
+        attribs: (2) ['\Marked', '\HasNoChildren']
+        children: null
+        delimiter: "/"
+        parent: null }
+    due to the merge with the new values gained from IMAP.getBoxes().
+    */
+    // The line '_get(personalFolders, objectPath)' is the same as the line 'personalFolders[personalBoxesLinear[i][personalBoxesLinear[i].length - 1].name]'
+    // The core concept is that we get the attributes of the 'personalFolders[specificFolder]' using the more
+    // convenient way of personalBoxesLinear since we can't iterate using the personalFolders object itself.
+    // _.get is an even more convenient way of doing it.
+    let folderInfo = _.get(personalFolders, objectPath);
+    
+    // From every personal folder get the 'highest message sequence number' value from the last session 
+    // If it is a new user then 'highest' defaults to 1.
+    let highestSeqNo = folderInfo.highestSeqNo || 1;
+    // From every personal folder get the mailbox length = message count from the last session.
+    let messageCount = folderInfo.messageCount || undefined;
+    // From every personal folder get the array containing all the UIDs from the last session.
+    let UIDSequence = folderInfo.UIDSequence || undefined;
+    // From every personal folder get the UIDValidity and UIDNext values from the last session.
+    let previousUIDValidity = folderInfo.uidvalidity || undefined;
+    let previousUIDNext = folderInfo.uidnext || undefined;
+
+    // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
+    let promises = []; // For each mailbox's message.
+  
+    statusOK = await this.checkIMAPStatus(accountInfo);
+    if ( !statusOK ) return;
+    document.querySelector('#doing').innerText = `Grabbing mail from : '${path}' ...`;
+    let serverMessageCount;
+    let serverUidSequence;
+    let uidsToDelete;
+    try {
+      let checkResult = await this.imapClient.checkUID(path, true, previousUIDValidity, previousUIDNext, highestSeqNo, messageCount, UIDSequence);
+      serverUidSequence = this.imapClient.mailbox.serverUidSequence;
+      delete this.imapClient.mailbox.serverUidSequence;
+      serverMessageCount = this.imapClient.mailbox.messages.total;
+      switch (checkResult) {
+        case 'Sync':
+          this.logger.log(`Folder '${path}' is up to date with server.`);
+          break;
+        case 'SyncDelete':
+          this.logger.log(`Folder '${path}' has no messages. Deleting all the locally stored mails, if there are any.`);
+          this.mailStore.deleteEmails(path);
+          highestSeqNo = 1;
+          break;
+        case 'DeleteSelected':
+          this.logger.log(`Folder '${path}' has deleted messages. Deleting the necessary emails from the local cache.`);
+          uidsToDelete = Utils.findMissing(UIDSequence,serverUidSequence);
+          uidsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
+          highestSeqNo = serverUidSequence.length + 1;
+          break;
+        case 'UpdateFirstTime':
+          this.logger.log(`Folder '${path}' needs to be updated. Deleting local cache and fetching all emails.`);
+          this.mailStore.deleteEmails(path); // For safety
+          highestSeqNo = 1; // For safety
+          try {
+            await this.imapClient.getEmails(path, true, true, highestSeqNo, 
+              {
+              // fetch(source, options). For options we use the 'options' object which 
+              // contains the 'bodies','envelope' and 'struct' options.
+                /*
+                  An envelope includes the following fields (a value is only included in the response if it is set).
+                    -date :         is a date (string) of the message
+                    -subject :      is the subject of the message
+                    -from :         is an array of addresses from the from header
+                    -sender :       is an array of addresses from the sender header
+                    -reply-to :     is an array of addresses from the reply-to header
+                    -to :           is an array of addresses from the to header
+                    -cc :           is an array of addresses from the cc header
+                    -bcc :          is an array of addresses from the bcc header
+                    -in-reply-to :  is the message-id of the message is message is replying to
+                    -message-id :   is the message-id of the message
+                */
+                bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
+                envelope: true
+              }, 
+              // The 'onLoad' function is run for each message inside a mailbox.
+              // (highestSeqNo, parsedContent from mailParser, attribues)
+              function onLoad(seqno, msg, attributes) {  
+                promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
+                if (seqno > highestSeqNo) highestSeqNo = seqno;
+                document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
+              }.bind(this)
+            );
+          } catch (error) {
+            this.logger.error(error);
+            // Skip the emails fetch for this particular mailbox.
+            continue;
+          }
+          break;
+        case 'Update':
+          this.logger.log(`Folder '${path}' needs to be updated. Deleting and fetching the necessary emails.`);
+          // Every UID that is locally stored but not on the server is deleted from local cache.
+          uidsToDelete = Utils.findMissing(UIDSequence, serverUidSequence);
+          uidsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
+          // We deleted the mails that were incorrectly stored locally. Now we need to fetch the new emails.
+          // So we make the highestSeqNo = Number of locally stored emails prior to deletion - number of deleted emails
+          highestSeqNo = (UIDSequence.length - uidsToDelete.length) + 1 ;
+          let newUids = Utils.findMissing(serverUidSequence, UIDSequence);
+          if (newUids.length !== 0) {
+            try {
+              await this.imapClient.getEmails(path, true, true, highestSeqNo, 
+                {
+                  bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
+                  envelope: true
+                }, 
+                function onLoad(seqno, msg, attributes) {  
+                  promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
+                  if (seqno > highestSeqNo) highestSeqNo = seqno;
+                  document.querySelector('#number').innerText = `Total emails fetched: ${++totalEmails}`;
+                }.bind(this)
+              );
+            } catch (error) {
+              this.logger.error(error);
+              continue;
+            }
+          }
+          break;
+      }
+    }
+    catch (error) { // Example of error is inability to openBox -> we skip fetching emails for this box and use only the locally stored..
+      this.logger.error(error);
+      // Skip the emails fetch for this particular mailbox.
+      continue;
+    }
+
+    // Wait for all the database inserts/ updated to be resolved.
+    await Promise.all(promises);
+
+    // Check for flag changes since last login.
+    //let checkFlagsResult = await this.imapClient.checkFlags(path, true, previousUIDValidity, previousUIDNext, highestSeqNo, messageCount, UIDSequence);
+   
+ 
+    _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
+    _.set(personalFolders, objectPath.concat(['UIDSequence']), serverUidSequence);
+    _.set(personalFolders, objectPath.concat(['messageCount']), serverMessageCount);
+  
+    // 'this.imapClient.mailbox' is an object representing the currently open mailbox, defined in getEmails() method.
+    let boxKeys = Object.keys(this.imapClient.mailbox);
+    for (let j = 0; j < boxKeys.length; j++) {
+      _.set(personalFolders, objectPath.concat([boxKeys[j]]), this.imapClient.mailbox[boxKeys[j]]);
+    }
+  }
+
+  // Save all the folders data in the accounts database for the next client session.
+  await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : this.utils.removeCircular(personalFolders)});
+
+  // Get the new info that we just stored in the accounts database.
+  accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
 
-  /*----------  ENSURE FOLDER SET IN STATE  ----------*/
+  // Delete all the email bodies (.json files in mail/emailHash directory) that are not relevant anymore.
+  // (the emails we deleted from this.mailStore.db need to have their bodies deleted too).
+  // The emails present in this.mailstore.db are useful, since we just updated it. So we dont delete them.
+  // The mails that are present in mail/emailHash directory and not present in this.mailStore.db are deleted
+  let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1, _id : 0 });
+  await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
+ 
+
+  // Look for threads.
+  document.querySelector('#number').innerText = '';
+  document.querySelector('#doing').innerText = 'Looking for threads ...';
+  // threads : object containing arrays with parent messages. 
+  // These arrays contain all the children that originated for each of the parents.
+  let threads = Threader.applyThreads(await this.mailStore.findEmails());
+  for (let parentUid in threads) {
+    // Add a field 'threadMsg' to every email in the database that is a parent email.
+    // The 'threadMsg' field contains an array with the children of the email.
+    await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
+    // Add a 'isThreadChild' field to each children email.
+    // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
+    for (let i = 0; i < threads[parentUid].length; i++) {
+      await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
+    }
+  }
+  this.load();
+}
+
+
+MailPage.prototype.load = async function () {
+  let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+  // Ensure folder is set in state.json
   if (typeof this.stateManager.state.account.folder === 'undefined') {
     // Due to companies not all naming their main inbox "INBOX" (as defined in the RFC),
     // we have to search through them, looking for one which contains the word "inbox".
-    for (let folder in folders) {
+    for (let folder in accountInfo.personalFolders) {
       if (folder.toLowerCase() === 'inbox') {
          /*
           {"state": "mail","account": {"hash": "9c6abxxxxxxxxxxxxxx19477","email": "test-mail@test.com",
             "folder": [ {"name": "Inbox","delimiter": "/"}]  }}
         */
         this.stateManager.change('account', Object.assign(this.stateManager.state.account, {
-          folder: [{ name: folder, delimiter: account.folders[folder].delimiter }]
+          'folder': [{ 'name': folder, 'delimiter': accountInfo.personalFolders[folder].delimiter }]
         }));
       }
     }
   }
-   
-  /*----------  ACTIVATE SEND MAIL BUTTON  ----------*/
-  let composeButton = document.querySelector('.fixed-action-btn');
-  materialize.FloatingActionButton.init(composeButton, {
-    direction: 'left'
-  });
-  document.querySelector('#compose-button').addEventListener('click', (e) => {
-    this.ipcRenderer.send('open', { file: 'composeWindow' });
-  });
-     
 
- 
-  /*----------  ACTIVATE RELOAD BUTTON  ----------*/
-  document.querySelector('#refresh-button').addEventListener('click', () => {
-    this.reload();
-  });
-
-  /*----------  SET FOLDER LIST  ----------*/
-  // The false in the third argument position defines whether folders should have depth or not.
-  document.querySelector('#folders').innerHTML = await (this.generateFolderList(undefined, folders, [], false));
+  // Generate folder list to render.
+  document.querySelector('#folders').innerHTML = await (this.generateFolderList(accountInfo.user, accountInfo.personalFolders, []));
   let firstChildren = document.querySelector('#folders').children;
   let secondChildren = [];
   for (let i=0; i<firstChildren.length; i++){
     let secondChild = firstChildren[i].children;
     secondChildren[i] = secondChild[0]; //Remove the HTMLCollection - get only its value
   };
-  this.linkFolders(secondChildren);
+  this.linkFolders(accountInfo, secondChildren);
  
-  // Highlight (css) the folder that is selected as current in 'state.json' .
+  // Highlight (css) the folder that is selected as current in 'state.json'.
   this.highlightFolder();
 
-/*----------  ADD MAIL ITEMS  ----------*/
-  this.render();
-}
-
-MailPage.prototype.reload = async function() {
-  // Add the fields that we were using (dynamically) in 'welcome.html' to 'mail.html', since we 
-  // need them for not breaking the code that uses them (IMAP.updateAccount)
-  document.querySelector('.wrapper').innerHTML = `
-    <span id="doing"></span> 
-    <span id="number"></span><br>
-    <span id="mailboxes"></span>
-  `;
-  this.logger.log('Reloading mail messages...');
-  let client = (await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress));
-  await client.updateAccount();
-  this.client = client;
+  // Render email items.
+  this.render(accountInfo);
 }
 
 
-MailPage.prototype.generateFolderList = async function (email, folders, journey, depth) {
-  if (typeof email === 'undefined') {
-    // Get all the accouns present in the accounts db.
-    let accounts = await this.accountManager.listAccounts();
-    let html = '';
-    for (let i = 0; i < accounts.length; i++) {
-      // If 'depth' leave the <div> elements open, otherwise close them.
-      if (depth) {
-        html += `
-          <div class="col s12 no-padding center-align">
-            <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
-              ${accounts[i].name || accounts[i].user}
-        `;
-      } else {
-        html += `
-          <div class="col s12 no-padding center-align">
-            <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
-              ${accounts[i].name || accounts[i].user}
-            </div>
-          </div>
-        `;
-      }
-      html += await this.generateFolderList(accounts[i].user, accounts[i].folders, [], depth);
-      if (depth) {
-        html += `
-            </div>
-          </div>
-        `
-      }
-      // html += await MailPage.generateFolderList(accounts[i].user, accounts[i].folders, [], depth)
-    }
-    return html
-  }
+MailPage.prototype.generateFolderList = async function (email, folders, journey) {
   let html = '';
+  if (email){
+    html += `
+    <div class="col s12 no-padding center-align">
+      <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
+        ${email}
+      </div>
+    </div>
+    `;
+  }
   for (let folder in folders) {
     let pathSoFar = journey.concat({ name: folder, delimiter: folders[folder].delimiter });
     let id = btoa(JSON.stringify(pathSoFar));
-    if (depth) {
-      html += `
-        <div class="col s12 no-padding center-align">
-          <div class="waves-effect waves-teal btn-flat wide folder-tree" id="${id}">
-            ${folder} ${await this.generateFolderList(email, folders[folder].children, pathSoFar, depth)}
-          </div>
-        </div>
-      `;
-    } else {
-      html += `
+    html += `
         <div class="col s12 no-padding center-align">
           <div class="waves-effect waves-teal btn-flat wide folder-tree" id="${id}">${folder}
           </div>
         </div>
       `;
-      html += await this.generateFolderList(email, folders[folder].children, pathSoFar, depth);
+    html += await this.generateFolderList(undefined, folders[folder].children, pathSoFar);
     }
-  }
   return html;
 }
 
-MailPage.prototype.linkFolders = function (children) {
+MailPage.prototype.linkFolders = function (accountInfo, children) {
   // Children are all the (inside - second level) div elements 
   // with id either the (base64) email hash or the (base64) folder path.
   children.forEach( 
@@ -184,10 +471,10 @@ MailPage.prototype.linkFolders = function (children) {
             otherFolders[i].classList.remove('teal','lighten-2');
           }
           document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('teal','lighten-2');
-          this.render();                     
+          this.render(accountInfo);                     
         });
       }
-      // Search for child forlders.
+      // Search for child folders.
       let firstChildren = document.querySelector(`#${element.id.replace(/=/g, '\\=')}`).children;
       let secondChildren = [];
       for (let i=0; i<firstChildren.length; i++){
@@ -195,7 +482,7 @@ MailPage.prototype.linkFolders = function (children) {
         secondChildren[i] = secondChild[0]; //Remove the HTMLCollection - get only its value
       };
       if (secondChildren.length) {
-        this.linkFolders(secondChildren);
+        this.linkFolders(accountInfo, secondChildren);
       }
     }
   );
@@ -211,27 +498,18 @@ MailPage.prototype.highlightFolder = function () {
 }
 
 // Render the currently selected folder (in state.json). Render is also called each time we click a folder.
-MailPage.prototype.render = async function(folderPage) {
-  // For a returning user we go straight into the /mail route so the ImapClient and MailStore are not
-  // initialized, unless we perform a reload.
-  if (this.mailStore === undefined){
-    await this.reload();
-    let client = this.client; // this.client is defined in MailPage.prototype.reload()
-    this.mailStore = client.mailStore;
-    return; //dont do recursion (when reload is called the rest of the function will run a second time)
-  }
+MailPage.prototype.render = async function(accountInfo, folderPage) {
   let page = folderPage || 0;
 
   // Get the UID and the 'isThreadChild' fields of all the emails inside the current folder (folder stored in state.json).
-  let mail = await this.mailStore.findEmails(this.stateManager.state.account.folder, { uid: 1, isThreadChild: 1 }, page * 250, 250);
+  let mail = await this.mailStore.findEmails(this.imapClient.compilePath(this.stateManager.state.account.folder), { uid: 1, isThreadChild: 1 }, page * 250, 250);
   // Show in header the emailAddress followed by the folder currently selected.
-  Header.setLoc([this.stateManager.state.account.emailAddress].concat(this.stateManager.state.account.folder.map((val) => { return val.name })));
+  Header.setLoc([accountInfo.user].concat(this.stateManager.state.account.folder.map((val) => { return val.name })));
 
   // If this is the first mail page initialize the html content.
-  let mailDiv = document.querySelector('#mail');
+  let mailDiv = document.getElementById('mail');
   if (!page) {
     mailDiv.innerHTML = '';
-    //document.querySelector('#message-holder').innerHTML = '<div id="message"></div>';
   }
 
   // Create <e-mail> tags equal to mailbox length.
@@ -242,7 +520,7 @@ MailPage.prototype.render = async function(folderPage) {
     }
   }
   if (mail.length === 0) html = 'This folder is empty.';
-  if (await this.mailStore.countEmails(this.stateManager.state.account.folder) > 250 * (page + 1)) {
+  if (await this.mailStore.countEmails(this.imapClient.compilePath(this.stateManager.state.account.folder)) > 250 * (page + 1)) {
     html += `<button class='load-more'>Load more...</button>`;
   }
   document.querySelector('#mail').innerHTML = html;
@@ -267,10 +545,8 @@ MailPage.prototype.render = async function(folderPage) {
                 - using getAttribute() with their full HTML name to read them.
                 --------------------------------------------------------------------------------------------
                 */
-    // We're able to assume some values from the current state.
-    // However, we don't rely on it, preferring instead to find it in the email itself.
 
-    let email = emailCustomElements[i].getAttribute('data-email') || this.stateManager.state.account.emailAddress;
+    let email = emailCustomElements[i].getAttribute('data-email') || accountInfo.user;
     let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
     this.mailStore.loadEmail(uid).then((mail) => {
       // NOTE: All of these *have* to be HTML escaped -> `Clean.escape(string)`.
@@ -384,13 +660,11 @@ MailPage.prototype.render = async function(folderPage) {
   }
 
   // Get the email details when a user clicks on the email.
-  // Inside the event the state of the Imap client is disconnected.
   if (mail.length > 0){
     let emailItems = document.querySelectorAll('.email-item');
     for (let i=0; i<emailItems.length; i++){
       emailItems[i].addEventListener('click', (e) => {
-        this.renderEmail(unescape(e.currentTarget.attributes['data-uid'].nodeValue));
-        //this.renderEmail(unescape(document.querySelector('.email-item').attributes['data-uid'].nodeValue));
+        this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
       });
     }
   }
@@ -400,7 +674,7 @@ MailPage.prototype.render = async function(folderPage) {
   let loadMoreButton = document.querySelector('.load-more');
   if (loadMoreButton) {
     loadMoreButton.addEventListener('click', (e) => {
-      this.render(page + 1);
+      this.render(accountInfo, page + 1);
       // Remove it after press. If it's needed again it will be rendered again in the next page's render call.
       loadMoreButton.remove();
     });
@@ -409,10 +683,10 @@ MailPage.prototype.render = async function(folderPage) {
   //this.retrieveEmailBodies();
 }
 
-MailPage.prototype.renderEmail = async function (uid, childNumber) {
+MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) {
   let number = childNumber || 0;
   let metadata = await this.mailStore.loadEmail(uid);
- 
+
   let emailElements = document.querySelectorAll('e-mail');
   if ( ! number ) {
     for (i=0 ; i < emailElements.length; i++){
@@ -428,7 +702,6 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
         let selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
         // If user clicks an already selected mail -> deselect it
         if (selectedMailItem.classList.contains('selected-mail-item')){
-          console.log('already')
           selectedMailItem.querySelector('div#message-holder').innerHTML = '';
           return;
         }
@@ -447,7 +720,7 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
             appendedDiv.setAttribute('id',`message-${i}`);
             appendedDiv.classList.add('message-wrapper');
             selectedItemWrapper.appendChild(appendedDiv);
-            this.renderEmail(metadata.threadMsg[i - 1], i);
+            this.renderEmail(accountInfo, metadata.threadMsg[i - 1], i);
           }
         }
       }
@@ -473,17 +746,23 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
     }
   }
 
-  let emailContent = await this.mailStore.loadEmailBody(uid, this.stateManager.state.account.emailAddress);
-
-  //The mail content is not yet stored in the database.
+  let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
+  // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
     selectedItemMessage.innerHTML = 'Loading email content ...';
-    // The original client is now disconnected since renderEmail() is called via an event listener.
-    let client = await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress);
-    emailContent = await client.getEmailBody(uid);
-    this.client.client.end();
+    statusOK = await this.checkIMAPStatus(accountInfo);
+    if ( !statusOK ) return;
+    let message = await this.mailStore.loadEmail(uid, accountInfo.user);
+    try {
+      await this.fetchEmailBody(accountInfo, message);
+      emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
+    } catch (error) {
+      this.logger.error(error);
+      return;
+    }
   }
 
+  
   const app = this.app;
   let dirtyContent;
   if (emailContent.html){
@@ -495,11 +774,15 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
         for (let j=0; j < emailContent.attachments.length; j++){
           let attachmentCID = emailContent.attachments[j].cid;
           if (src.includes(attachmentCID)){
-            src = `${app.getAppPath()}\\mailAttachments\\${emailContent.attachments[j].filename}`;;
+            try {
+              src = `${app.getAppPath()}\\mailAttachments\\${emailContent.attachments[j].filename}`;
+            } catch (error) {
+              this.logger.error(error);
+            }
             break;
           }
         }
-        images[i].setAttribute('src',src);
+        images[i].setAttribute('src', src);
       }
       // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
       dirtyContent = dirtyHTML.outerHTML;
@@ -516,6 +799,30 @@ MailPage.prototype.renderEmail = async function (uid, childNumber) {
   selectedItemMessage.innerHTML = cleanContent;
 
 }
+
+
+MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
+  let fetchedPromise = new Promise(async function(resolve,reject){
+    try {
+      emailContent = await this.imapClient.getEmails(message.folder, true, false, message.seqno, 
+        {bodies: '', struct: true, envelope: true}, 
+        async function (seqno, content, attributes) {
+          let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
+          await this.mailStore.saveMailBody(message.uid, compiledContent, accountInfo.user);
+          this.mailStore.updateEmailByUid( message.uid, { 'retrieved': true });
+          this.logger.log(`Added ${accountInfo.user}:${message.uid} to the file system.`);  
+          resolve(); 
+        }.bind(this)
+      );
+  
+    } catch (error) {
+      this.logger.error(error);
+      reject(error);
+    }
+  }.bind(this));
+  return fetchedPromise;
+}
+
 
 // Retrieve some bodies in the background (store them in mail/hash.json) so that they are marked as 
 // 'retrieved' -> we dont fetch the body when user clicks on the email since the body is stored in the

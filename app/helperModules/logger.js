@@ -82,6 +82,7 @@ Logger.prototype.capitalise = function (string) {
 
 Logger.prototype.error = function () { if (this.logLevel >= 0) this.print(arguments, 'error') };
 Logger.prototype.warning = function () { if (this.logLevel >= 1) this.print(arguments, 'warning') };
+Logger.prototype.warn = function () { if (this.logLevel >= 1) this.print(arguments, 'warning') };
 Logger.prototype.success = function () { if (this.logLevel >= 2) this.print(arguments, 'success') };
 Logger.prototype.log = function () { if (this.logLevel >= 3) this.print(arguments, 'log') };
 Logger.prototype.info = function () { if (this.logLevel >= 4) this.print(arguments, 'info') };
@@ -148,6 +149,8 @@ function getDate() {
   let year = today.getFullYear();
   return `${year}-${month}-${day}`;
 };
+
+
 
 module.exports = Logger;
 

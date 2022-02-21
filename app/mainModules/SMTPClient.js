@@ -72,7 +72,7 @@ SMTPClient.prototype.createTransporterObject = async function (account) {
       disableFileAccess : true,    /* Does not allow to use files as content. Use it when you want to use JSON data 
                                       from untrusted source as the email. If an attachment or message node tries
                                       to fetch something from a file the sending returns an error */
-      disableUrlAccess : true      /* Does not allow to use Urls as content. */
+      disableUrlAccess : true,      /* Does not allow to use Urls as content. */
     });
   }
 };

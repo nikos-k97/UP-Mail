@@ -5,13 +5,8 @@ const {app, BrowserWindow}          = require('@electron/remote');
 const Navigo                        = require("navigo");
 const Logger                        = require('./helperModules/logger'); 
 const StateManager                  = require('./mainModules/StateManager'); //Contains the current state
-const Threader                      = require('./mainModules/Threader'); //Handles email threading
 const Utils                         = require('./mainModules/Utils'); //Contains many utility functions
 const Header                        = require('./mainModules/Header');
-const SetupPage                     = require('./mainModules/SetupPage');
-const WelcomePage                   = require('./mainModules/WelcomePage');
-const AccountManager                = require('./mainModules/AccountManager');
-const MailPage                      = require('./mainModules/MailPage');
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload
@@ -22,12 +17,9 @@ const MailPage                      = require('./mainModules/MailPage');
 const router = new Navigo('/');
 const logger = new Logger({}, app); 
 const utils = new Utils(app, logger);
-const stateManager = new StateManager(app, logger, router);
 const header = new Header(app, BrowserWindow);
-const setupPage = new SetupPage(app, logger, stateManager);
-const accountManager = new AccountManager(app, logger, stateManager, utils);
-const welcomePage = new WelcomePage(logger, stateManager, utils, accountManager); // <<<<<<<<<<<<< !!!!
-const mailPage = new MailPage(ipcRenderer, app, logger, stateManager, utils, accountManager);
+const stateManager = new StateManager(app, ipcRenderer, logger, utils, router);
+
 
 router.on(
     {
@@ -35,15 +27,16 @@ router.on(
         // It's just a reference to a plain function. The 'this' keyword inside 'setupPage.load' method (SetupPage.js)
         // is therefore 'global' (in this particular occasion) and not equal to the parent object/ "class". 
         // So 'bind' method is neccesary in order to set the correct context for 'this' keyword.
-        '/setup': () => { utils.time(setupPage.load.bind(setupPage)) },
-        '/welcome': () => { utils.time(welcomePage.load.bind(welcomePage)) },
-        '/mail': () => { utils.time(mailPage.load.bind(mailPage)) } 
+        '/initialize': () => { utils.time(stateManager.initialize.bind(stateManager)) },
+        '/new': () => { utils.time(stateManager.welcomePage.load.bind(stateManager.welcomePage)) },
+        '/existing': () => { utils.time(stateManager.accountManager.existingAccount.bind(stateManager.accountManager)) } 
     }
-).resolve()
+).resolve();
+
 
 // Add an 'already' hook to the 'mail' route. When we reload the mail page via 'MailPage.prototype.reload()'
 // router is already on the 'mail' path. So the 'already' hook matches the 'mail' route again.
-router.addAlreadyHook('mail', () => {
+router.addAlreadyHook('/existing', () => {
     utils.time(mailPage.load.bind(mailPage))
 });
 
@@ -67,7 +60,7 @@ contextBridge.exposeInMainWorld(
                 ipcRenderer.on(channel, (event,...args) => {return func(...args)});
             }
         },
-        logger : (mode,data) => {
+        logger : (mode, data) => {
             if (mode === 'success') logger.success(data);
             else if (mode === 'error') logger.error(data);
             else if (mode === 'warning') logger.warning(data);

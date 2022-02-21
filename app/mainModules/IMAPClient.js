@@ -2,13 +2,10 @@ const MailParser     = require('mailparser').MailParser;
 const simpleParser   = require('mailparser').simpleParser;
 const Promise        = require('bluebird');
 const jetpack        = require('fs-jetpack');
-const merge          = require('merge-deep');
 const IMAP           = require('node-imap');
-const _              = require('lodash');
-const MailStore      = require('./MailStore');
-const Threader       = require('./Threader');
 const fs             = require('fs');
-const base64 = require('base64-stream');
+const base64         = require('base64-stream');
+const Utils          = require('./Utils');
 
 /**
  * Logs the user in to their email server.
@@ -27,115 +24,181 @@ function IMAPClient(app, logger, utils, stateManager, accountManager, details) {
   this.utils = utils;
   this.stateManager = stateManager;
   this.accountManager = accountManager;
-  this.mailStore = new MailStore(this.app,this.utils, this); 
   // Jetpack is used in order to write to the log files, which are organised by day (yyyy-mm-dd.log).
   this.jetpack = jetpack.cwd(this.app.getPath('userData'), 'logs');
   // Grabs the current day, for use in writing to the log files.
   this.currentDate = this.getDate();
-  // Set current account details.
-  this.emailAddress = details.user; 
+  
+  return new Promise((resolve, reject) => {
+    const IMAPDetails = {
+      user: details.user,
+      password : details.password,
+      host : details.imap.host,
+      port : details.imap.port,
+      tls : details.imap.tls,
+      autotls: details.imap.tls === true ? 'always' : 'never',
+      keepalive: {
+        interval: 10000,
+        idleInterval: 300000,
+        forceNoop: true
+      },
+      debug : console.warn
+    };
 
-  return new Promise(
-      (
-        (resolve, reject) => {
-          const IMAPDetails = {
-            user: details.user,
-            password : details.password,
-            host : details.imap.host,
-            port : details.imap.port,
-            tls : details.imap.tls 
-          };
+    // Connection - Creates and returns a new instance of Connection using the specified configuration object
+    this.client = Promise.promisifyAll(new IMAP(IMAPDetails));
 
-          // Login to the mail server using the details given to us.
-          this.client = Promise.promisifyAll(
-            // Connection - Creates and returns a new instance of Connection using the specified configuration object
-            // debug - function - If set, the function will be called with one argument, a string containing some 
-            // debug info. Default: (no debug output)
-            new IMAP(IMAPDetails)
-          );
+    // 'ready' : Emitted when a connection to the server has been made and authentication was successful.
+    // which means that client.connect() is called before.
+    this.client.once('ready', () => { 
+      // If server supports IDLE extension , we dont use polling via NOOP command to keep the session alive.
+      if (this.client.serverSupports('IDLE')){
+        this.client._config.keepalive.forceNoop = false;
+      }
+      /* Since 'this' is bound to the IMAPClient (not the promise itself) via bind()
+         the result of the Promise's resolve(result) function is 'this' (the IMAPClient)
+         In other words we pass the 'this' keyword forward so we get it when we need it
+         -> promise.then( (this) => do something with this)
+      */
+      resolve(this); 
+    });
+          
+    this.client.once('error', (err) => {
+      this.logger.error('Connection state is : ' + this.client.state); // Connected - Not authenticated (the other states are disconnected, authenticated)
+      reject(err);
+    });
 
-          // 'ready' : Emitted when a connection to the server has been made and authentication was successful.
-          // which means that client.connect() is called before.
-          this.client.once('ready', 
-            () => { 
-              // Since 'this' is bound to the IMAPClient (not the promise itself) via bind()
-              // the result of the Promise's resolve(result) function is 'this' (the IMAPClient)
-              // In other words we pass the 'this' keyword forward so we get it when we need it
-              // -> promise.then( (this) => do something with this )
-              resolve(this); 
-            }
-          );
-          this.client.once('error', 
-            (err) => {
-              this.logger.error('Connection state is : '+this.client.state); // Connected - Not authenticated (the other states are disconnected, authenticated)
-              reject(err);
-            }
-          );
-          // this.client.on('mail' , () => {
-          //   console.log('new mail arrived')
-          // })
+    // this.client.on('mail' , () => {
+    //   console.log('new mail arrived')
+    // })
 
-          this.client.once('end', () => {
-            this.logger.log('Connection ended');
-          });
+    // Emitted when the connection has ended.
+    // Typically 'end' is only emitted if the connection was torn down "properly" 
+    // 'Close' is always emitted, no matter the cause of disconnection.
+    this.client.once('end', () => {
+      this.client.end();
+      this.client.state = 'disconnected';
+      this.logger.log('Connection ended gracefully.');
+    });
 
-          // Attempts to connect and authenticate with the IMAP server.
-          this.client.connect();
-        }
-    ).bind(this) // Sets the Promise() `this` to the object `this`.
-  ); 
+    // Emitted when the connection has completely closed.
+    // Typically 'end' is only emitted if the connection was torn down "properly" 
+    // 'Close' is always emitted, no matter the cause of disconnection.
+    this.client.once('close', () => {
+      this.client.end();
+      this.client.state = 'disconnected';
+      this.logger.log('Connection closed.');
+    });
+
+    this.client.connect();
+
+  }).bind(this); // Sets the Promise() `this` to the object `this`.
 }
 
-IMAPClient.prototype.createEmailDatabase = async function (email){
-  await this.mailStore.createEmailDB(email);
-}
+/*
+---------------------------------------- [RFC 2342] -------------------------------------------------
+- Personal Namespace: A namespace that the server considers within the personal scope of the authenticated user 
+   on a particular connection. Typically, only the authenticated user has access to mailboxes in their
+   Personal Namespace. If an INBOX exists for a user, it MUST appear within the user's personal namespace.
+- Other Users' Namespace: A namespace that consists of mailboxes from the Personal Namespaces of other users.  
+   To access mailboxes in the Other Users' Namespace, the currently authenticated user MUST be explicitly 
+   granted access rights.
+- Shared Namespace: A namespace that consists of mailboxes that are
+   intended to be shared amongst users and do not exist within a user's
+   Personal Namespace.
 
-/**
- * Turns an array of path components into a single string.
- * @param  {array}  path An array of path components
- * @return {string}      A string representing the path to a box
- */
-IMAPClient.prototype.compilePath = function (path) {
-  let compiledPath = '';
-  for (let i = 0; i < path.length - 1; i++) {
-    compiledPath += path[i].name + path[i].delimiter;
+Users are often required to manually enter the prefixes of various namespaces in order to view the mailboxes 
+located there. The NAMESPACE command allows a client to automatically discover the namespaces that are available
+on a server. A client could choose to initially display only personal mailboxes, or it may choose to display the
+complete list of mailboxes available, and initially position the user at the root of their Personal Namespace.
+
+   Example :
+   ===========
+      < A server that contains a Personal Namespace, Other Users'
+      Namespace and multiple Shared Namespaces.  Note that the hierarchy
+      delimiter used within each namespace can be different. >
+
+      C: A001 NAMESPACE
+      S: * NAMESPACE (("" "/")) (("~" "/")) (("#shared/" "/")
+         ("#public/" "/")("#ftp/" "/")("#news." "."))
+      S: A001 OK NAMESPACE command completed
+
+   The prefix string allows a client to do things such as automatically
+   creating personal mailboxes or LISTing all available mailboxes within
+   a namespace.
+--------------------------------------------------------------------------------------------------------
+*/ 
+IMAPClient.prototype.fetchNamespaces = async function() {
+  // There should always be at least one namespace entry in the personal namespace list, 
+  // with a blank namespace prefix.
+  let personalNamespaces = this.client.namespaces.personal;
+  let sharedNamespaces = this.client.namespaces.shared;
+  let otherNamespaces = this.client.namespaces.other;
+  let availableNamespaces = {'type' : [], 'prefix' : [], 'delimiter' : []};
+  if (sharedNamespaces !== null){
+    for (let i=0; i < sharedNamespaces.length; i++){
+      availableNamespaces.type[i] = 'shared';
+      availableNamespaces.prefix[i] = sharedNamespaces[i].prefix;
+      availableNamespaces.delimiter[i] = sharedNamespaces[i].delimiter;
+    }
   }
-  compiledPath += path[path.length - 1].name;
-  return compiledPath;
+  if (otherNamespaces !== null){
+    for (let i=0; i < otherNamespaces.length; i++){
+      availableNamespaces.type[i] = 'other';
+      availableNamespaces.prefix[i] = otherNamespaces[i].prefix;
+      availableNamespaces.delimiter[i] = otherNamespaces[i].delimiter;
+    }
+  }
+  if (personalNamespaces !== null) {
+    for (let i=0; i < personalNamespaces.length; i++){
+      availableNamespaces.type[i] = 'personal';
+      availableNamespaces.prefix[i] = personalNamespaces[i].prefix;
+      availableNamespaces.delimiter[i] = personalNamespaces[i].delimiter;
+    }
+  }
+  return availableNamespaces;
 }
 
-IMAPClient.compileObjectPath = function (path) {
-  let location = [];
-  for (let j = 0; j < path.length; j++) {
-    location.push(path[j].name);
-    if (j !== path.length - 1) location.push('children');
-  }
-  return location;
-}
-
-// Change the box structure and keep only the 'delimeter' and 'name' attributes of each mailbox.
-IMAPClient.linearBoxes = function (folders, path) {
-  let keys = folders ? Object.getOwnPropertyNames(folders) : [];
-  let results = [];
-  path = path || [];
-  for (let i = 0; i < keys.length; i++) {
-    results = results.concat(this.linearBoxes(folders[keys[i]].children, path.concat({
-      delimiter: folders[keys[i]].delimiter,
-      name: keys[i]
-    })));
-  }
-  results.push(path);
-  return results;
-}
 
 /**
  * Returns all boxes within a mail account.
  * @return {object} [An object containing all mailboxes]
  */
-IMAPClient.prototype.getBoxes = async function () {
-  await this.checkClient();
-  return this.client.getBoxesAsync();
+ IMAPClient.prototype.getBoxes = async function (nsPrefix) {
+  /*
+  Obtains the full list of mailboxes. If nsPrefix is not specified, the main personal namespace is used.
+  Returns : the following format (with example values):
+  { 
+    INBOX: {            // mailbox name
+      attribs: [],      // mailbox attributes. An attribute of 'NOSELECT' indicates the mailbox cannot be opened
+      delimiter: '/',   // hierarchy delimiter for accessing this mailbox's direct children.
+      children: null,   // an object containing another structure similar in format to this top level, otherwise null if no children
+      parent: null      // pointer to parent mailbox, null if at the top level
+    },
+    '[Gmail]': {
+      attribs: [ '\\NOSELECT' ],
+      delimiter: '/',
+      children:  { 
+         'All Mail': { 
+           attribs: [ '\\All' ],
+           delimiter: '/',
+           children: null,
+           parent: [Circular]
+         },
+         Drafts: { 
+           attribs: [ '\\Drafts' ],
+           delimiter: '/',
+           children: null,
+           parent: [Circular]
+         },
+     },
+     parent: null
+   }
+  }
+  */
+  return this.client.getBoxesAsync(nsPrefix);
 }
+
 
 /**
  * Opens a box on the server, given it's path.
@@ -143,17 +206,175 @@ IMAPClient.prototype.getBoxes = async function () {
  * @param  {boolean} readOnly [Whether the box is to be opened in read only mode or not]
  * @return {promise}          [A promise which resolves when the box has been opened]
  */
-IMAPClient.prototype.openBox = async function (path, readOnly) {
-  await this.checkClient();
+ IMAPClient.prototype.openBox = async function (path, readOnly) {
   return new Promise((async (resolve, reject) => {
     // Box is an object representing the currently open mailbox. It gets passed to 'getEmails' function
     // when the promise resolves, where it becomes 'this.mailbox'.
-    let box = await this.client.openBoxAsync(path, readOnly || false);
-    this.currentPath = path; // Set this box as the currently open mailbox.
-    if (box !== false) resolve(box);
-    else reject("Cannot open mailbox.");
+    try {
+      let box = await this.client.openBoxAsync(path, readOnly || false);
+      this.currentPath = path; // Set this box as the currently open mailbox.
+      resolve(box);
+    } catch (error) {
+      this.logger.error(error);
+      reject(error);
+    }
   }).bind(this))
 }
+
+
+IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, oldUidNext, highestlocalSeqNo, localMessageCount, localUIDsequence) {
+ // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
+ if (this.currentPath !== path) {  
+  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+    try {
+      this.mailbox = await this.openBox(path, readOnly);
+    } catch (error) {
+      this.logger.error(error);
+      return new Promise((resolve,reject) => {
+        reject(error);
+      });
+    }
+  }
+
+  // If the mailbox doesn't support persistent UIDs then each time we fetch emails from this mailbox,
+  // we delete the local cache first, make highestSeqNo = 1 and then grab all the emails from the server.
+  if (!this.mailbox.persistentUIDs) {
+    this.logger.info(`Mailbox '${path}' does not support persistent UIDs. All emails will be fetched from the server.`);
+    return new Promise((resolve) => {
+      resolve('UpdateFirstTime');
+    });
+  }
+
+  this.logger.info(`Total emails in the '${path}' mailbox (data from server): ${this.mailbox.messages.total}`);
+  let highestServerSeqNo = this.mailbox.messages.total;
+  this.logger.info(`[Mailbox '${path}'] - Highest seqNo (server) is : ${highestServerSeqNo}`);
+  this.logger.info(`[Mailbox '${path}'] - Highest seqNo (local) is : ${highestlocalSeqNo} `);
+
+  // Mailbox has no messages according to server. If the local copy of the mailbox has messages (that maybe
+  // were deleted and this is the reason why server detects 0 messages)) the client needs to be safe and 
+  // delete the all messages in the mailbox, revert the highestLocalSeqNo back to 1 and then fetch all the messages
+  // from the IMAP server.
+  if (highestServerSeqNo === 0) {
+    this.logger.log(`Mailbox has no messages according to server.`)
+    return new Promise((resolve) => {
+      resolve('SyncDelete');
+    })
+  }
+
+  let serverUidValidity = this.mailbox.uidvalidity;
+  let serverUidNext = this.mailbox.uidnext;
+  let search = new Promise((resolve,reject) => {
+    this.client.search( [['UID','1:*']] , (error, UIDs) => {
+      if (error) reject(error);
+      this.mailbox.serverUidSequence = UIDs;
+      resolve(UIDs);
+    });
+  })
+
+  let serverUidSequence;
+  try {
+    serverUidSequence = await search;
+  } catch (error) {
+    this.logger.error(error);
+    return new Promise((resolve) => {
+      resolve('UpdateFirstTime');
+    });
+  }
+ 
+  
+  this.logger.info('Folder: '+path);
+  this.logger.info('Server UIDValidity: '+serverUidValidity);
+  this.logger.info('Client UIDValidity: '+oldUidValidity);
+  this.logger.info('Server UIDNext: '+serverUidNext);
+  this.logger.info('Client UIDNext: '+oldUidNext);
+  this.logger.info('Server messageCount: '+this.mailbox.messages.total);
+  this.logger.info('Client messageCount: '+localMessageCount);
+
+
+
+
+  // 'New' user with mailbox.messages.total != 0 (otherwise the previous 'if' is relevant). In this case
+  // we are sure that the highestLocalSeqNo = 1, however, for safety we force highestSeqNo = 1, delete
+  // all the locally stored emails (if any) and then fetch every email from the IMAP server.
+  if (oldUidNext === undefined || oldUidValidity === undefined || localMessageCount === undefined || localUIDsequence === undefined){
+    this.logger.log(`Mailbox '${path}' does not have any new emails since last login.`);
+    return new Promise((resolve) => {
+      resolve('UpdateFirstTime');
+    });
+  }
+
+
+
+  // Compare UIDvalidity and UIDnext value for the current folder. If the UIDValidity is different we need
+  // to delete all locally cached emails. If not, then we check the UIDNext value of the specific mailbox,
+  // to see if new messages have arrived.
+  if (serverUidValidity === oldUidValidity){
+    if (serverUidNext === oldUidNext){
+      // Since the UIDValidity is not changed, and UIDNext value is not changed, there are no more
+      // emails in the server since our last session with this client. However we need to check if
+      // there are any deleted messages. If the Server's message count is the same as our locally saved
+      // message count is the same, there is a very high chance that no messages were deleted.
+      if (this.mailbox.messages.total === localMessageCount){
+        let same = Utils.compareArrays(localUIDsequence, serverUidSequence);
+        if (same) {
+          this.logger.log(`Mailbox '${path}' does not have any new emails since last login.`);
+          return new Promise((resolve) => {
+            resolve('Sync');
+          });
+        }
+        else {
+          this.logger.log(`Mailbox '${path}' does not have any new emails since last login.`);
+          return new Promise((resolve) => {
+            resolve('UpdateFirstTime');
+          });
+        }
+      }
+      // Since UIDnext is the same (server and client) no new message were added to the mailbox.
+      // However because server's messageCount < localMessageCount, some messages were deleted.
+      // In other words, the local cache contains some messages that are not present in the server.
+      // Delete the required mails from the local cache and dont fetch anything. Update the highestSeqNo    
+      // to the new value.
+      else if (this.mailbox.messages.total < localMessageCount) {
+        return new Promise((resolve) => {
+          resolve('DeleteSelected');
+        });
+      }
+      // If the UIDNext is same, but the localMessageCount < serverMessageCount, something is not right.
+      // Make highestSeqNo = 1, delete all local cache and fetch all messages.
+      else {
+        this.logger.log(`Mailbox '${path}' does not have any new emails since last login.`);
+        return new Promise((resolve) => {
+          resolve('UpdateFirstTime');
+        }); 
+      }
+    }
+    // Server's UIDNext > local UIDNext. There are new messages in the mailbox. 
+    else if (serverUidNext > oldUidNext) {
+      this.logger.log(`Mailbox '${path}' has new emails since last login.`);
+      return new Promise((resolve) => {
+        resolve('Update');
+      });
+    }
+    // Server's UIDNext < Local UID next so something is not right. Make highestSeqNo = 1, delete local
+    // cache and fetch all the messages from the IMAP server.
+    else {
+      this.logger.log(`Mailbox '${path}' does not have any new emails since last login.`);
+        return new Promise((resolve) => {
+          resolve('UpdateFirstTime');
+        }); 
+    }
+  }
+  else{
+    // Server's UIDValidity value for this particular mailbox has changed, so we cant trust the locally cached
+    // UIDs, and we are forced to delete all local cache. First we revert HighestSeqNo = 1, we delete all local
+    // cache and then fetch all emails from the server.
+    return new Promise((resolve) => {
+      this.logger.log(`UIDValidity values are different.`);
+      resolve('UpdateFirstTime');
+    })
+  }
+}
+
 
 /**
  * Retrieve some/ all of the emails from the server.
@@ -165,23 +386,21 @@ IMAPClient.prototype.openBox = async function (path, readOnly) {
  * @param  {function} onLoad    [A function which is called with each individual message]
  * @return {promise}            [Resolved when all messages have been retrieved, or a fatal error occurred]
  */
-
-// {
-//   bodies: '',
-//   struct: true,
-//   envelope: true
-// }
-
-
-IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqno, options, onLoad) {
-  //await this.client.checkClient();
-
+ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqno, options, onLoad) {
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
   if (this.currentPath !== path) {  
-    this.mailbox = await this.openBox(path, readOnly);
+    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+    try {
+      this.mailbox = await this.openBox(path, readOnly);
+    } catch (error) {
+      this.logger.error(error);
+      return new Promise((resolve,reject) => {
+        reject(error);
+      })
+    }
   }
-    /*
-    -------------------------------------------------------------------------------------------------------
+  /*
+  -------------------------------------------------------------------------------------------------------
     'this.mailbox' is an object representing the currently open mailbox, and has the following properties:
       -name (string) :            The name of this mailbox.
       -readOnly (boolean) :       True if this mailbox was opened in read-only mode. 
@@ -203,17 +422,12 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
                                   the first to see these messages).
           unseen (integer) :      (Only available with status() calls) Number of messages in this mailbox not having 
                                   the Seen flag (marked as not having been read).
-
   -----------------------------------------------------------------------------------------------------------------
   */
-  
   return new Promise(function (resolve, reject) {
-    this.logger.log("Total: " + this.mailbox.messages.total);
     this.logger.log("Seqno: " + seqno);
     this.logger.log("grabNewer: " + grabNewer);
     this.logger.log("Grabbing: " + `${seqno}${grabNewer ? `:*` : ``}`);
-    if (!this.mailbox.messages.total) return resolve();
-
     /*
      Fetches message(s) in the currently open mailbox. 
      ------------------------------------------------------------------------------------------------------
@@ -261,15 +475,14 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
             so we fetch emails via the second ('seqno') method and we use the '' options to fetch everything.
     ---------------------------------------------------------------------------------------------------------    
     */
-
     let fetchObject = this.client.seq.fetch(`${seqno}${grabNewer ? `:*` : ``}`, options); 
-
     /*
       fetchObject (typeof : ImapFetch) -> 'message' event.
         message(<ImapMessage> msg, <integer> seqno) - Event emitted for each message resulting from a fetch request. 
         seqno is the message's sequence number.
     */
     fetchObject.on('message', (msg, seqno) => {
+      // This 'seqno' is the one stored in the server. Not the one we pass as arguement in the function.
       let parsePromise, parsedHeaders, parsedData, parsedAttachments = [], attributes;
       /*
         msg (typeof : ImapMessage) -> 'body' event
@@ -311,7 +524,6 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
                 //   }
                 //   //file written successfully
                 // })
-               
                 parsedAttachments[attachmentNo] = data;
                 data.release();
                 attachmentNo++;
@@ -335,7 +547,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
           struct (array) :  The message's body structure (only set if requested with fetch() inside the options param).
           size (integer) :  The RFC822 message size (only set if requested with fetch() inside the options param).
       */
-      msg.once('attributes', (attrs) => {
+      msg.on('attributes', (attrs) => {
         attributes = attrs;
       });
 
@@ -388,7 +600,7 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
           ------------------------------------------------------------------------------------------------------
         */
         parsePromise.then(
-          () => {
+          async () => {
             const parsedContent = {};
             parsedContent.headers = parsedHeaders;
 
@@ -398,12 +610,45 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
               // Fetch attachments via fetch().
               for (let i = 0; i < parsedAttachments.length; i++) {
                 let attachment = parsedAttachments[i];
-                this.logger.log('Fetching attachment "%s" ...', attachment.filename);
+                this.logger.log(`Fetching attachment: ${attachment.filename}`);
                 let fetchAttachmentObject = this.client.fetch(`${attributes.uid}`, { //do not use imap.seq.fetch here
                   bodies: [attachment.partId]
                 }); 
-                // The buildAttMessageFunction returns a function.
-                fetchAttachmentObject.on('message', this.buildAttMessageFunction(attachment));
+                let fetchPromise = new Promise((resolve,reject) => {
+                  // The buildAttMessageFunction returns a function.
+                  fetchAttachmentObject.on('message', async (msg) => {
+                    let filename = attachment.filename;
+                    let encoding = attachment.headers.get('content-transfer-encoding');
+              
+                    msg.on('body', function(stream, info) {
+                      //Create a write stream so that we can stream the attachment to file;
+                      console.log('Streaming this attachment to file', filename, info);
+                          
+                      let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
+                          
+                      writeStream.once('finish', function() {
+                        console.log('Done writing to file %s', filename);
+                        writeStream.destroy();
+                      });
+                      
+                      //stream.pipe(writeStream); this would write base64 data to the file.
+                      //so we decode during streaming using 
+                      if (encoding === 'base64') {
+                        //the stream is base64 encoded, so here the stream is decode on the fly and piped to the write stream (file)
+                        stream.pipe(new base64.Base64Decode()).pipe(writeStream);
+                      } else  {
+                        //here we have none or some other decoding streamed directly to the file which renders it useless probably
+                        stream.pipe(writeStream);
+                      }
+                    });
+    
+                    msg.once('end', function() {
+                      console.log('Finished receiving attachment :', filename);
+                      resolve();
+                    });
+                  });
+                });
+                await fetchPromise;
               }
             }
             Object.assign(parsedContent, parsedData);
@@ -413,9 +658,9 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
         );
 
         parsePromise.catch( 
-          () => {
+          (error) => {
             this.logger.error('Mail parsing encountered a problem.');
-            return undefined;
+            reject(error);
           }
         )
       });
@@ -437,192 +682,87 @@ IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqn
   }.bind(this)) // Bind 'this' to point to the function not the promise.
 }
 
-IMAPClient.prototype.buildAttMessageFunction = function(attachment) {
-  let filename = attachment.filename;
-  let encoding = attachment.headers.get('content-transfer-encoding');
-  
-  return function (msg) {
-    msg.on('body', function(stream, info) {
-      //Create a write stream so that we can stream the attachment to file;
-      console.log('Streaming this attachment to file', filename, info);
-    
-      let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
-     
-      writeStream.once('finish', function() {
-        console.log('Done writing to file %s', filename);
-        writeStream.destroy();
+
+IMAPClient.prototype.checkFlags = async function (path, readOnly, oldUidValidity, oldUidNext, highestlocalSeqNo, localMessageCount, localUIDsequence){
+  // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
+ if (this.currentPath !== path) {  
+  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+    try {
+      this.mailbox = await this.openBox(path, readOnly);
+    } catch (error) {
+      this.logger.error(error);
+      return new Promise((resolve,reject) => {
+        reject(error);
       });
-   
-      //stream.pipe(writeStream); this would write base64 data to the file.
-      //so we decode during streaming using 
-      if (encoding === 'base64') {
-        //the stream is base64 encoded, so here the stream is decode on the fly and piped to the write stream (file)
-        stream.pipe(new base64.Base64Decode()).pipe(writeStream);
-      } else  {
-        //here we have none or some other decoding streamed directly to the file which renders it useless probably
-        stream.pipe(writeStream);
-      }
-    });
-    msg.once('end', function() {
-      console.log('Finished receiving attachment :', filename);
-    });
-  };
+    }
+  }
+
+  // let search = new Promise((resolve,reject) => {
+  //   this.client.search( [['UID','1:*']] , (error, UIDs) => {
+  //     if (error) reject(error);
+  //     this.mailbox.serverUidSequence = UIDs;
+  //     resolve(UIDs);
+  //   });
+  // })
+
+  // let serverUidSequence;
+  // try {
+  //   serverUidSequence = await search;
+  // } catch (error) {
+  //   this.logger.error(error);
+  //   return new Promise((resolve) => {
+  //     resolve('UpdateFirstTime');
+  //   });
+  // }
+}
+
+
+
+
+IMAPClient.prototype.buildAttMessageFunction = function(attachment) {
+
   
 }
 
-
-IMAPClient.prototype.getEmailBody = async function (uid) {
-  //await this.client.checkClient();
-  return new Promise(async function (resolve, reject) {
-    let email = this.client._config.user;
-    let message = await this.mailStore.loadEmail(uid, email);
-    await this.getEmails(message.folder, true, false, message.seqno, {
-      bodies: '', struct: true, envelope: true
-    }, async function (seqno, content, attributes) {
-          let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
-          console.log(compiledContent)
-          await this.mailStore.saveMailBody(uid, compiledContent, email);
-          await this.mailStore.updateEmailByUid(uid, { retrieved: true });
-          this.logger.log(`Added ${email}:${uid} to the file system.`);
-          resolve(compiledContent);
-    }.bind(this)) //we need this to point to ImapClient (inside the callback)
-  }.bind(this))
-}
 
 /**
- * Update all emails for a specific account, also used for the first
- * grab of emails.
- * @return {undefined}
+ * Turns an array of path components into a single string.
+ * @param  {array}  path An array of path components
+ * @return {string}      A string representing the path to a box
  */
-IMAPClient.prototype.updateAccount = async function () {
-  let emailAddress = this.client._config.user;
-  let hash = this.utils.md5(emailAddress);
-  /*----------  GRAB USER MAILBOXES  ----------*/
-  document.querySelector('#doing').innerText = 'Grabbing your mailboxes ...';
-  await this.checkClient();
-  let boxes = await this.getBoxes();
-  // Get the boxes with a different structure and keep only the 'delimeter' and 'name' fields.
-  let boxesLinear = IMAPClient.linearBoxes(boxes);
-  boxesLinear.reverse();
-  // Keep only the fields that are not empty after the restructuring.
-  boxesLinear = boxesLinear.filter((n) => { return n != undefined && JSON.stringify(n) != '[]' });
-
-
-  /*----------  MERGE NEW FOLDERS WITH OLD  ----------*/
-  let updateObject = (await this.accountManager.findAccount(emailAddress)).folders || {};
-  updateObject = merge(updateObject, this.utils.removeCircular(boxes));
-  this.logger.log(`Retrieved all mailboxes from ${emailAddress}.`);
-
-
-  /*----------  GRAB USER EMAILS  ----------*/
-  document.querySelector('#doing').innerText = 'Grabbing your emails ...';
-  let totalEmails = 0;
- 
-  for (let i = 0; i < boxesLinear.length; i++) {
-    let path = this.compilePath(boxesLinear[i]);
-    this.logger.debug("Path:", path);
-    this.logger.debug("Linear Box Path:", boxesLinear[i]);
-    let objectPath = IMAPClient.compileObjectPath(boxesLinear[i]);
-    this.logger.debug("Object Path:", objectPath);
-    let highest = _.get(updateObject, objectPath.concat(['highest']), 1);
-    this.logger.debug("Highest: " + highest);
-
-    // During the first grab of emails 'state' is 'new' (there is no 'stateManager.state.account' yet -> only when 
-    // state = 'mail') so 'isCurrentPath' is false.
-    // 'currentPath' is set in 'openBox' function of 'IMAPClient.js'
-    let isCurrentPath = this.stateManager.state && this.stateManager.state.account && this.compilePath(this.stateManager.state.account.folder) == path;
-    
-    // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
-    let promises = []; // For each mailbox's message.
-
-    document.querySelector('#doing').innerText = `Grabbing ${boxesLinear[i][boxesLinear[i].length - 1].name} ...`;
-    await this.getEmails(path, true, true, highest, 
-      {
-        // fetch(source, options). For options we use the 'options' object which 
-        // contains the 'bodies','envelope' and 'struct' options.
-        /*
-        An envelope includes the following fields (a value is only included in the response if it is set).
-          -date :         is a date (string) of the message
-          -subject :      is the subject of the message
-          -from :         is an array of addresses from the from header
-          -sender :       is an array of addresses from the sender header
-          -reply-to :     is an array of addresses from the reply-to header
-          -to :           is an array of addresses from the to header
-          -cc :           is an array of addresses from the cc header
-          -bcc :          is an array of addresses from the bcc header
-          -in-reply-to :  is the message-id of the message is message is replying to
-          -message-id :   is the message-id of the message
-        */
-        bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
-        envelope: true
-      }, 
-      // The 'onLoad' function is run for each message inside a mailbox.
-      function onLoad(seqno, msg, attributes) {  // msg = parsedContent (mailparser)
-        promises.push(this.mailStore.saveEmail(emailAddress, seqno, msg, attributes, path));
-        if (isCurrentPath) this.viewChanged = true;
-        if (seqno > highest) highest = seqno;
-        document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
-      }.bind(this)
-    );
-
-    // Wait for all the database inserts/ updated to be resolved.
-    await Promise.all(promises);
-
-    _.set(updateObject, objectPath.concat(['highest']), highest);
-
-    // 'this.mailbox' is an object representing the currently open mailbox, defined in getEmails() method.
-    let boxKeys = Object.keys(this.mailbox);
-    for (let j = 0; j < boxKeys.length; j++) {
-      _.set(updateObject, objectPath.concat([boxKeys[j]]), this.mailbox[boxKeys[j]]);
-    }
+ IMAPClient.prototype.compilePath = function (path) {
+  let compiledPath = '';
+  for (let i = 0; i < path.length - 1; i++) {
+    compiledPath += path[i].name + path[i].delimiter;
   }
-
-  /*----------  THREADING EMAILS  ----------*/
-  document.querySelector('#number').innerText = '';
-  document.querySelector('#doing').innerText = 'Looking for threads ...';
-  // threads : object containing arrays with parent messages. 
-  // These arrays contain all the children that originated for each of the parents.
-  let threads = Threader.applyThreads(await this.mailStore.findEmails());
- 
-  for (let parentUid in threads) {
-    // Add a field 'threadMsg' to every email in the database that is a parent email.
-    // The 'threadMsg' field contains an array with the children of the email.
-    await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
-    // Add a 'isThreadChild' field to each children email.
-    // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
-    for (let i = 0; i < threads[parentUid].length; i++) {
-      await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
-    }
-  }
-
-  /*----------  RENDER, SAVE & CLOSE  ----------*/
-
-  //Add a 'folders' field in the accounts database for the specific emailAddress. For example:
-  /*
-  "folders":{"Archive":{"attribs":["\\HasNoChildren"],"delimiter":"/","children":null,"parent":null,"highest":1,
-  "name":"Archive","flags":["\\Seen","\\Answered","\\Flagged","\\Deleted","\\Draft","$MDNSent"],"readOnly":true,
-  "uidvalidity":163,"uidnext":1,"permFlags":[],"keywords":[],"newKeywords":false,"persistentUIDs":true,
-  "nomodseq":false,"messages":{"total":0,"new":0}}, ... }
-  */
-  this.accountManager.editAccount(emailAddress, { folders: this.utils.removeCircular(updateObject) });
-
-  // Connection : end() - Emitted when the connection has ended.
-  this.client.end();
-  document.querySelector('#doing').innerText = 'Getting your inbox setup ...';
-  
-  this.stateManager.change('state', 'mail');
-  this.stateManager.change('account', { hash, emailAddress });
-  /*
-  {
-    "state": "mail",
-    "account": {
-      "hash": "9c6abxxxxxxxxxxxxxx19477",
-      "email": "test-mail@test.com",
-    }
-  }
-  */
-  this.stateManager.update();
+  compiledPath += path[path.length - 1].name;
+  return compiledPath;
 }
+
+IMAPClient.compileObjectPath = function (path) {
+  let location = [];
+  for (let j = 0; j < path.length; j++) {
+    location.push(path[j].name);
+    if (j !== path.length - 1) location.push('children');
+  }
+  return location;
+}
+
+// Change the box structure and keep only the 'delimeter' and 'name' attributes of each mailbox.
+IMAPClient.linearBoxes = function (folders, path) {
+  let keys = folders ? Object.getOwnPropertyNames(folders) : [];
+  let results = [];
+  path = path || [];
+  for (let i = 0; i < keys.length; i++) {
+    results = results.concat(this.linearBoxes(folders[keys[i]].children, path.concat({
+      delimiter: folders[keys[i]].delimiter,
+      name: keys[i]
+    })));
+  }
+  results.push(path);
+  return results;
+}
+
 
 /**
  * A function which logs the specified string to the disk (and also to console
@@ -656,21 +796,6 @@ IMAPClient.prototype.getDate = function () {
   return `${year}-${month}-${day}`;
 };
 
-IMAPClient.prototype.checkClient = async function () {
-  // Possible client/ connection states are: 'connected', 'authenticated', 'disconnected'. 
-  if (this.client.state === 'disconnected') {
-    this.logger.log('Client disconnected. Reconnecting...');
 
-    document.querySelector('.wrapper').innerHTML = `
-    <span id="doing"></span> 
-    <span id="number"></span><br>
-    <span id="mailboxes"></span>
-  `;
-  let client = (await this.accountManager.getIMAP(this.stateManager.state.account.emailAddress));
-  this.logger.log('Reloading mail messages...');
-  await client.updateAccount();
-  this.client = client;
-  }
-}
 
 module.exports = IMAPClient;

@@ -2,7 +2,7 @@
 // Has access only to the modules and functions exposed by contextBridge (via 'window.api.xxxxx').
 
 window.api.loadHeader();
-window.api.navigate('/setup');
+window.api.navigate('/initialize');
 
 
 // Autonomous custom element <e-mail>.

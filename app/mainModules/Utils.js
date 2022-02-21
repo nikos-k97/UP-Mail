@@ -1,8 +1,8 @@
-const {DateTime} = require("luxon"); //Wrapper for JavaScript dates and times - Replacement of 'moment.js'
-const crypto = require('crypto');
-const util   = require('util');
+const {DateTime}    = require("luxon"); //Wrapper for JavaScript dates and times - Replacement of 'moment.js'
+const crypto        = require('crypto');
+const util          = require('util');
 const Clean         = require("./Clean");
-
+const _             = require('lodash');
 
 function Utils (app,logger) {
   this.app = app;
@@ -28,8 +28,8 @@ Utils.prototype.stringToHTML = function (str) {
  * @return {undefined}
  */
 Utils.prototype.testLoaded = function(page) {
-  //setupComplete is a global variable defined in 'SetupPage.js' - it's set to true after a successful setup page load
-  if (typeof setupComplete === 'undefined' || !setupComplete) {
+  // setupComplete is a global variable defined in 'SetupPage.js' - it's set to true after a successful setup page load
+  if (typeof setupComplete === 'undefined' || ! setupComplete) {
     this.logger.warning(`Tried to load ${page}, but setup hasn't been completed yet, likely caused by the user refreshing the page.`);
     return false;
   }
@@ -96,13 +96,38 @@ Utils.prototype.time = async function (func) {
   return promise;
 }
 
+
+/**
+ * Compare arrays.
+ *
+ * @param {Array} a  First array
+ * @param {Array} b  Second array
+ * @return {boolean}   
+ */
+ Utils.compareArrays = function(a,b) {
+  return _.isEqual(a, b);
+ }
+
+/**
+ * Find elements which are there in a[] but not in b[].
+ *
+ * @param {Array} a  The array that contains the values
+ * @param {Array} b  The array that doesnt contain the values
+ * @return {Array}   Array with the values that are present in the first array but not in the second
+ */
+Utils.findMissing = function(a,b) {
+  let result = ( a.filter(x => !b.includes(x)) );
+  return result || [];
+}
+
+
 /**
  * Grab all the values from a form and returns them as an object.
  *
  * @param  {string} id
  * @return {object}
  */
-Utils.prototype.getItemsFromForm = (form) => {
+Utils.prototype.getItemsFromForm = function(form){
   let values = {};
 
   for (let i = 0; i < form.elements.length; i++) {
@@ -112,7 +137,27 @@ Utils.prototype.getItemsFromForm = (form) => {
       values[e.name] = Clean.cleanForm(e.type) && Clean.cleanForm(e.type) === 'checkbox' ? e.checked : Clean.cleanForm(e.value);
     }
   }
-  return values;
+
+  // Reformat data received from form.
+  let loginInfo = {
+    imap: { 
+      host : values.host_incoming,
+      port : values.port_incoming,
+      tls : values.tls_incoming === 'tls' ? true : false
+    },
+    smtp: {
+      host : values.host_outgoing,
+      port : values.port_outgoing,
+      tls : values.tls_outgoing, //'starttls'-'tls'-'unencrypted' not true-false like IMAP
+      name: values.outgoing_name 
+    },
+    user: values.user,
+    password : values.password,
+    hash: this.md5(values.user),
+    date: + new Date()
+  };
+
+  return loginInfo;
 }
 
 function isToday (date) {

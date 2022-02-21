@@ -110,7 +110,7 @@ FormValidator.checkUsername = (usernameEl) => {
     const max = 40;
     const username = Clean.cleanForm(usernameEl.value.trim());
     if (!FormValidator.isRequired(username)) {
-        FormValidator.showError(usernameEl, 'Name should be blank.');
+        FormValidator.showError(usernameEl, 'Name should not be blank.');
     } else if (!FormValidator.isBetween(username.length, min, max)) {
         FormValidator.showError(usernameEl, `Name length should have less than ${max} characters.`)
     } else {

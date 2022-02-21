@@ -24,8 +24,8 @@ Threader.applyThreads = (messages) => {
     */
     if (messages[i].envelope.messageId) {
       messageThreads[messages[i].uid] = {
-        messageId: messages[i].envelope.messageId, //is the message-id of the message
-        inReplyTo: messages[i].envelope.inReplyTo || undefined //is the message-id of the message this message is replying to
+        messageId: messages[i].envelope.messageId, // Is the message-id of the message
+        inReplyTo: messages[i].envelope.inReplyTo || undefined // Is the message-id of the message this message is replying to
       };
     }
   }
@@ -33,8 +33,7 @@ Threader.applyThreads = (messages) => {
 }
 
 /**
- * Retrieves all threads from an array of customised messages objects (likely from
- * Threader.applyThreads)
+ * Retrieves all threads from an array of customised messages objects (Threader.applyThreads)
  * @param  {array}  messages [An array of specialised message objects]
  * @return {array}           [An array of threads within that array of message objects]
  */

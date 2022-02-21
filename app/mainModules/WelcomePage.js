@@ -2,6 +2,7 @@ const materialize   = require("../helperModules/materialize.min.js");
 const FormValidator = require('../helperModules/formValidator');
 const domainList    = require('../generatedData/email_format_general');
 
+
 function WelcomePage (logger, stateManager, utils, accountManager) {
   this.logger = logger;
   this.stateManager = stateManager;
@@ -10,15 +11,11 @@ function WelcomePage (logger, stateManager, utils, accountManager) {
 }
 
 WelcomePage.prototype.load = function () { // No arrow functions. 'this' is bound via bind() in the preload script.
-	if (!this.utils.testLoaded('welcome')) return;
-
-	this.logger.log('Loading up the welcome page ...');
 	this.stateManager.page('welcome', ['basic','welcome']);
-  
+	this.logger.debug('Loading up the welcome page ...');
+
   materialize.CharacterCounter.init(document.querySelector('#outgoing_name'));
   materialize.FormSelect.init(document.querySelectorAll('select'));
-  materialize.Tooltip.init(document.querySelectorAll('.tooltipped'));
-  
   
   let utils = this.utils; // Store 'utils' in a new variable since 'this' inside the event listener is changed.
   let accountManager = this.accountManager; // Store 'accountManager' in a new variable since 'this' inside the event listener is changed.
@@ -29,6 +26,8 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
   loginForm.addEventListener('submit', 
     async function onLogin (e) {
       e.preventDefault();
+      // Disable login button temporarily.
+      document.querySelector('button.login').disabled = true;
       // Check if the submitted form information have valid syntax.
       let formOK = checkLoginInfo(loginForm);
       if (formOK){
@@ -42,15 +41,19 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
           logger.log('Credentials for the IMAP and SMTP servers validated successfully.');
           logger.log('Proceeding to log user in.')
           materialize.toast({html: 'Connections were established successfully.', displayLength : 3000 ,classes: 'rounded'});
-          accountManager.addAccount(details);
+          accountManager.newAccount(details);
         }
         else {
           document.querySelector('#error').innerHTML = "<span><strong>Could not connect to the IMAP and/or the SMTP server. Please check the provided details.</strong></span>"
           materialize.toast({html: 'Connection was not possible. Check provided data.', displayLength : 3000 ,classes: 'rounded'});
+          // Re - enable login button since the connection was not possible.
+          document.querySelector('button.login').disabled = false;
         }
       }
       else {
-        document.querySelector('#error').innerHTML = "<span><strong>Some fields are either missing or have the wrong format.</strong></span>"
+        document.querySelector('#error').innerHTML = "<span><strong>Some fields are either missing or have the wrong format.</strong></span>";
+        // Re - enable login button since the connection was not possible.
+        document.querySelector('button.login').disabled = false;
       }
     }
   );
