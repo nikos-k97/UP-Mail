@@ -73,7 +73,7 @@ StateManager.prototype.setup = async function (loginInfo) {
   // Create (or load if it exists) the database that stores the emails for the (newly created or already existing) 
   // email account.
   await this.mailStore.createEmailDB(loginInfo.user); // The email database can be accessed via 'mailStore.db'
-  this.logger.log(`Email database for user: '${loginInfo.user}' was initialized successfully.`)
+  this.logger.log(`Email database for user: '${loginInfo.user}' was initialized successfully.`);
 
   let emailsFound = await this.mailStore.findEmails();
 

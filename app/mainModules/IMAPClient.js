@@ -717,14 +717,6 @@ IMAPClient.prototype.checkFlags = async function (path, readOnly, oldUidValidity
 }
 
 
-
-
-IMAPClient.prototype.buildAttMessageFunction = function(attachment) {
-
-  
-}
-
-
 /**
  * Turns an array of path components into a single string.
  * @param  {array}  path An array of path components

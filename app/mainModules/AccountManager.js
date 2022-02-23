@@ -52,7 +52,7 @@ AccountManager.prototype.testProvidedDetails = async function (loginDetails) {
   }
 }
 
-
+// ('existingAccount' is called for an existing user that did not perform a 'logout' in the previous session.)
 AccountManager.prototype.existingAccount = async function () {
   // Retrieve this particular account's info to accounts.db (the accounts.db was created when the instance of
   // AccountManager.js was created - in the constructor).
@@ -85,10 +85,17 @@ AccountManager.prototype.existingAccount = async function () {
   }
 }
 
-
+// ('newAccount' can be called for an existing user after a logout.)
+// Inserts this particular account's info to accounts.db (the accounts.db was created when the instance of
+// AccountManager.js was created - in the constructor). If the user already exists, it updated only the required
+// information. 
 AccountManager.prototype.newAccount = async function(loginInfo) {
-  // Inserts this particular account's info to accounts.db (the accounts.db was created when the instance of
-  // AccountManager.js was created - in the constructor).
+  let user = loginInfo.user;
+  let hash = user.includes('@') ? this.utils.md5(user) : user;
+  let dataExistedBeforeInsertion = false;
+  let existingData = this.findAccount(user);
+  if (existingData !== undefined && existingData !== {}) dataExistedBeforeInsertion = true;
+    
   try {
     // Await for the promisified NeDB's 'insert' function to resolve.
     // NeDB automatically adds an '_id' field for each document.
@@ -101,9 +108,6 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
     await this.editAccount(loginInfo.user, loginInfo);
     this.logger.log(`Info for user '${loginInfo.user}' updated.`)
   }
-
-  let user = loginInfo.user;
-  let hash = user.includes('@') ? this.utils.md5(user) : user;
 
   // Create the folders where the mail bodies for this specific user will be stored.
   // (If they dont already exist)
@@ -120,8 +124,17 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
   this.stateManager.change('state', 'existing');
   this.stateManager.change('account', {hash, user});
 
-  // Account was inserted, redirect to stateManager.
-  await this.stateManager.setup(loginInfo);
+  // If the account was an existing one (after logout), then we fetch all the stored info from the previous 
+  // session, after the potential update to the login info we just did.
+  // Account was updated, redirect to stateManager.
+  if (dataExistedBeforeInsertion) {
+    existingData = await this.findAccount(user);
+    await this.stateManager.setup(existingData);
+  }
+  else {
+    // Account was inserted, redirect to stateManager.
+    await this.stateManager.setup(loginInfo);
+  }
 }
 
 

@@ -76,6 +76,37 @@ MailPage.prototype.reload = async function (accountInfo){
   this.getImapInfo(accountInfo);
 }
 
+
+MailPage.prototype.renderLogoutButton = function () {
+  let html = `
+    <button class="btn waves-effect waves-light logout" name="logout" value="Logout">
+      <span class="material-icons" title="Logout">
+        power_settings_new
+      </span>
+    </button>
+  `;
+
+  document.querySelector('.button-container').innerHTML = html;
+
+  // Add functionality to newly added 'Logout' button.
+  document.querySelector('.logout').addEventListener('click', (e) => {
+    let connectionEnded = new Promise (resolve => {
+      this.imapClient.client.end();
+      resolve();
+    });
+    connectionEnded.then(() => {
+      this.imapClient = null;
+      Header.setLoc('Login');
+      this.stateManager.change('state', 'new');
+      this.stateManager.checkUserState();
+      // Re-emit window.load event so that the StateManager.style function can work properly.
+      // (it is waiting for the window.load event to apply style)
+      dispatchEvent(new Event('load'));
+    });
+  });
+}
+
+
 MailPage.prototype.renderMailPage = function (accountInfo) {
   if (!this.utils.testLoaded('mailbox')){
     this.logger.warning('For some reason the setup is not completed. Redirecting to welcome page... ');
@@ -404,23 +435,6 @@ MailPage.prototype.load = async function () {
     }
   }
 
-  // Add functionality to 'Logout' button in 'mailbox.html'
-  document.querySelector('.logout').addEventListener('click', (e) => {
-    let connectionEnded = new Promise (resolve => {
-      this.imapClient.client.end();
-      resolve();
-    });
-    connectionEnded.then(() => {
-      this.imapClient = null;
-      Header.setLoc('Login');
-      this.stateManager.change('state', 'new');
-      this.stateManager.checkUserState();
-      // Re-emit window.load event so that the StateManager.style function can work properly.
-      // (it is waiting for the window.load event to apply style)
-      dispatchEvent(new Event('load'));
-    });
-  });
-
   // Generate folder list to render.
   document.querySelector('#folders').innerHTML = await (this.generateFolderList(accountInfo.user, accountInfo.personalFolders, []));
   let firstChildren = document.querySelector('#folders').children;
@@ -433,6 +447,10 @@ MailPage.prototype.load = async function () {
  
   // Highlight (css) the folder that is selected as current in 'state.json'.
   this.highlightFolder();
+
+  // Render logout button since page content is now loaded.
+  this.renderLogoutButton();
+
 
   // Render email items.
   this.render(accountInfo);
