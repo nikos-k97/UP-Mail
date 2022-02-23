@@ -18,6 +18,12 @@ function StateManager (app, ipcRenderer, logger, utils, router) {
     app.getPath('userData'):    C:\Users\xxx\AppData\Roaming\project-xxx (OS: Windows)
     app.getAppPath():           C:\Users\xxx\Desktop\project-xxx (the directory where the project is saved)
   */
+
+  this.accountManager = new AccountManager(this.app, this.logger, this, this.utils);
+  this.welcomePage = new WelcomePage(this.logger, this, this.utils, this.accountManager); 
+  this.mailStore = new MailStore(this.app,this.utils); 
+  this.mailPage = new MailPage(this.ipcRenderer, this.app, this.logger, this, this.utils, this.accountManager, this.mailStore);
+    
   this.storeDir = jetpack.cwd(this.app.getPath('userData'));
   this.appDir = jetpack.cwd(this.app.getAppPath());
   this.state = this.storeDir.read('./state.json', 'json') || { state: 'new' };
@@ -49,12 +55,6 @@ StateManager.prototype.initialize = function(){
     Exe Path  - ${this.app.getPath('exe')}`
   );
 
-  // Now that 'stateManager' instance has been created in 'preload_app.js', create the following instances:
-  this.accountManager = new AccountManager(this.app, this.logger, this, this.utils);
-  this.welcomePage = new WelcomePage(this.logger, this, this.utils, this.accountManager); 
-  this.mailStore = new MailStore(this.app,this.utils); 
-  this.mailPage = new MailPage(this.ipcRenderer, this.app, this.logger, this, this.utils, this.accountManager, this.mailStore);
-  
   /*
    Check 'state' to determine if we have a new or an existing user.
    New user -> Welcome.js (fill login data) -> AccountManager.js (add Account to DB) -> StateManager.js (setup())

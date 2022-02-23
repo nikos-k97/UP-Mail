@@ -34,11 +34,17 @@ router.on(
 ).resolve();
 
 
-// Add an 'already' hook to the 'mail' route. When we reload the mail page via 'MailPage.prototype.reload()'
-// router is already on the 'mail' path. So the 'already' hook matches the 'mail' route again.
-router.addAlreadyHook('/existing', () => {
-    utils.time(mailPage.load.bind(mailPage))
+// Add an 'already' hook to the each route. When the router is already at the given path, it is redirected again.
+router.addAlreadyHook('/initialize', () => {
+    utils.time(stateManager.initialize.bind(stateManager));
 });
+router.addAlreadyHook('/new', () => {
+    utils.time(stateManager.welcomePage.load.bind(stateManager.welcomePage));
+});
+router.addAlreadyHook('/existing', () => {
+    utils.time(stateManager.accountManager.existingAccount.bind(stateManager.accountManager));
+});
+
 
 // Expose protected methods that allow the renderer process to use the ipcRenderer without exposing the entire object.
 // Proxy-like API -> instead of assigning values straight to window object - functions can be ovverriden in javascript. 

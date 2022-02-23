@@ -90,6 +90,8 @@ MailPage.prototype.renderMailPage = function (accountInfo) {
     this.stateManager.page('mailbox', ['basic','mailbox']);
     this.logger.debug('Mailbox page is now loading...');
     dispatchEvent(new Event('load'));
+    Header.setLoc([accountInfo.user]);
+    
     document.querySelector('#mail').innerHTML = `
       <span id="doing"></span> 
       <span id="number"></span><br>
@@ -401,6 +403,23 @@ MailPage.prototype.load = async function () {
       }
     }
   }
+
+  // Add functionality to 'Logout' button in 'mailbox.html'
+  document.querySelector('.logout').addEventListener('click', (e) => {
+    let connectionEnded = new Promise (resolve => {
+      this.imapClient.client.end();
+      resolve();
+    });
+    connectionEnded.then(() => {
+      this.imapClient = null;
+      Header.setLoc('Login');
+      this.stateManager.change('state', 'new');
+      this.stateManager.checkUserState();
+      // Re-emit window.load event so that the StateManager.style function can work properly.
+      // (it is waiting for the window.load event to apply style)
+      dispatchEvent(new Event('load'));
+    });
+  });
 
   // Generate folder list to render.
   document.querySelector('#folders').innerHTML = await (this.generateFolderList(accountInfo.user, accountInfo.personalFolders, []));

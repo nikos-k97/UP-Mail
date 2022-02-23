@@ -119,11 +119,13 @@ function openWindow (file) {
 
     remoteMain.enable(appWindows[index].webContents);
 
-    appWindows[index].webContents.on('new-window', function(e, url) {
-        e.preventDefault();
+    //  Force external links (URLs) to be opened in the OS default browser insted of beeing opened inside electon.
+    // 'new-window' is fired when external links are clicked. 
+    appWindows[index].webContents.setWindowOpenHandler(({ url }) => {
         shell.openExternal(url);
-    });
-
+        return { action: 'deny' };
+      });
+      
     //Load .html content from html folder.
     //The file:// protocol is used to load a file from the local filesystem.
     //loadURL method can also use 'http' protocol to load a webpage etc.

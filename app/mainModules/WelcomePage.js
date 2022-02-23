@@ -1,7 +1,7 @@
 const materialize   = require("../helperModules/materialize.min.js");
 const FormValidator = require('../helperModules/formValidator');
 const domainList    = require('../generatedData/email_format_general');
-
+const Header        = require('./Header');
 
 function WelcomePage (logger, stateManager, utils, accountManager) {
   this.logger = logger;
@@ -14,6 +14,7 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
 	this.stateManager.page('welcome', ['basic','welcome']);
 	this.logger.debug('Loading up the welcome page ...');
 
+  Header.setLoc('Login');
   materialize.CharacterCounter.init(document.querySelector('#outgoing_name'));
   materialize.FormSelect.init(document.querySelectorAll('select'));
   
