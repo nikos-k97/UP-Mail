@@ -7,7 +7,7 @@
 'use strict'
 const path = require("path");
 const electron = require('electron');
-const {app, BrowserWindow, Menu, ipcMain} = electron;
+const {app, BrowserWindow, Menu, ipcMain, shell} = electron;
 const remoteMain = require("@electron/remote/main");
 remoteMain.initialize();
 const createWindow = require('./app/helperModules/window');
@@ -119,12 +119,17 @@ function openWindow (file) {
 
     remoteMain.enable(appWindows[index].webContents);
 
+    appWindows[index].webContents.on('new-window', function(e, url) {
+        e.preventDefault();
+        shell.openExternal(url);
+    });
+
     //Load .html content from html folder.
     //The file:// protocol is used to load a file from the local filesystem.
     //loadURL method can also use 'http' protocol to load a webpage etc.
     appWindows[index].loadURL(`file://${__dirname}/app/html/${file}.html`);
 
-    
+
     //Passing an arguement to the event listener is tricky since it invokes the function rather than declaring it.
     //without arguements - function is not invoked: appWindows[index].on('closed', testFunction);
     //with arguements - function is invoked: appWindows[index].on('closed', testFunction(arg1,arg2) );
