@@ -69,43 +69,6 @@ MailPage.prototype.checkIMAPStatus = async function (accountInfo) {
   else return true;
 }
 
-MailPage.prototype.reload = async function (accountInfo){
-  this.logger.log('Reloading mail messages...')
-  // await this.accountManager.editAccount(accountInfo, {'personalFolders' : ''}); --> accountinfo update
-  //this.mailStore.deleteEmails(); -> more arguements
-  this.getImapInfo(accountInfo);
-}
-
-
-MailPage.prototype.renderLogoutButton = function () {
-  let html = `
-    <button class="btn waves-effect waves-light logout" name="logout" value="Logout">
-      <span class="material-icons" title="Logout">
-        power_settings_new
-      </span>
-    </button>
-  `;
-
-  document.querySelector('.button-container').innerHTML = html;
-
-  // Add functionality to newly added 'Logout' button.
-  document.querySelector('.logout').addEventListener('click', (e) => {
-    let connectionEnded = new Promise (resolve => {
-      this.imapClient.client.end();
-      resolve();
-    });
-    connectionEnded.then(() => {
-      this.imapClient = null;
-      Header.setLoc('Login');
-      this.stateManager.change('state', 'new');
-      this.stateManager.checkUserState();
-      // Re-emit window.load event so that the StateManager.style function can work properly.
-      // (it is waiting for the window.load event to apply style)
-      dispatchEvent(new Event('load'));
-    });
-  });
-}
-
 
 MailPage.prototype.renderMailPage = function (accountInfo) {
   if (!this.utils.testLoaded('mailbox')){
@@ -128,20 +91,6 @@ MailPage.prototype.renderMailPage = function (accountInfo) {
       <span id="number"></span><br>
       <span id="mailboxes"></span>
     `;
-
-    // Activate send mail button
-    let composeButton = document.querySelector('.fixed-action-btn');
-    materialize.FloatingActionButton.init(composeButton, {
-      direction: 'left'
-    });
-    document.querySelector('#compose-button').addEventListener('click', (e) => {
-      this.ipcRenderer.send('open', { file: 'composeWindow' });
-    });
- 
-    // Activate reload button
-    document.querySelector('#refresh-button').addEventListener('click', () => {
-      this.reload(accountInfo);
-    });
 
     // Get the necessary information from the IMAP server in order to render the mailPage.
     this.getImapInfo(accountInfo);
@@ -448,12 +397,14 @@ MailPage.prototype.load = async function () {
   // Highlight (css) the folder that is selected as current in 'state.json'.
   this.highlightFolder();
 
+  // Render email items.
+  this.render(accountInfo);
+
   // Render logout button since page content is now loaded.
   this.renderLogoutButton();
 
-
-  // Render email items.
-  this.render(accountInfo);
+  // Render compose button and settings nested buttons.
+  this.addComposeButtonFunctionality(accountInfo);
 }
 
 
@@ -525,6 +476,7 @@ MailPage.prototype.linkFolders = function (accountInfo, children) {
   );
 }
 
+
 MailPage.prototype.highlightFolder = function () {
   let folders = document.querySelectorAll('.folder-tree');
   for (let i=0; i< folders.length; i++){
@@ -533,6 +485,64 @@ MailPage.prototype.highlightFolder = function () {
   let currentFolder = document.querySelector(`#${btoa(JSON.stringify(this.stateManager.state.account.folder)).replace(/=/g, '\\=')}`);
   currentFolder.classList.add('teal','lighten-2');
 }
+
+
+MailPage.prototype.reload = async function (accountInfo){
+  document.querySelector('#compose-button').classList.add('disabled');
+  this.logger.log('Reloading mail messages...')
+  this.renderMailPage(accountInfo);
+}
+
+
+MailPage.prototype.renderLogoutButton = function () {
+  let html = `
+    <button class="btn waves-effect waves-light logout" name="logout" value="Logout">
+      <span class="material-icons" title="Logout">
+        power_settings_new
+      </span>
+    </button>
+  `;
+
+  document.querySelector('.button-container').innerHTML = html;
+
+  // Add functionality to newly added 'Logout' button.
+  document.querySelector('.logout').addEventListener('click', (e) => {
+    let connectionEnded = new Promise (resolve => {
+      this.imapClient.client.end();
+      resolve();
+    });
+    connectionEnded.then(() => {
+      this.imapClient = null;
+      Header.setLoc('Login');
+      this.stateManager.change('state', 'new');
+      this.stateManager.checkUserState();
+      // Re-emit window.load event so that the StateManager.style function can work properly.
+      // (it is waiting for the window.load event to apply style)
+      dispatchEvent(new Event('load'));
+    });
+  });
+}
+
+
+MailPage.prototype.addComposeButtonFunctionality = async function(accountInfo) {
+  document.querySelector('#compose-button').classList.remove('disabled');
+
+  // Activate send mail button
+  let composeButton = document.querySelector('.fixed-action-btn');
+  materialize.FloatingActionButton.init(composeButton, {
+    direction: 'left'
+  });
+
+  document.querySelector('#compose-button').addEventListener('click', (e) => {
+    this.ipcRenderer.send('open', { file: 'composeWindow' });
+  });
+
+  // Activate reload button
+  document.querySelector('#refresh-button').addEventListener('click', () => {
+    this.reload(accountInfo);
+  });
+}
+
 
 // Render the currently selected folder (in state.json). Render is also called each time we click a folder.
 MailPage.prototype.render = async function(accountInfo, folderPage) {
@@ -812,7 +822,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) 
           let attachmentCID = emailContent.attachments[j].cid;
           if (src.includes(attachmentCID)){
             try {
-              src = `${app.getAppPath()}\\mailAttachments\\${emailContent.attachments[j].filename}`;
+              src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j].filename}`;
             } catch (error) {
               this.logger.error(error);
             }
@@ -846,8 +856,8 @@ MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
         async function (seqno, content, attributes) {
           let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
           await this.mailStore.saveMailBody(message.uid, compiledContent, accountInfo.user);
-          this.mailStore.updateEmailByUid( message.uid, { 'retrieved': true });
-          this.logger.log(`Added ${accountInfo.user}:${message.uid} to the file system.`);  
+          this.mailStore.updateEmailByUid(message.uid, { 'retrieved': true });
+          this.logger.log(`Added ${accountInfo.user} : ${message.uid} to the file system.`);  
           resolve(); 
         }.bind(this)
       );

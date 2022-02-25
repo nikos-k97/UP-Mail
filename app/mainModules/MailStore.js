@@ -155,14 +155,16 @@ MailStore.prototype.countEmails = async function (folder) {
 MailStore.prototype.saveMailBody = async function (uid, data, email) {
   const hash = String(email).includes('@') ? this.utils.md5(email) : email;
   const hashuid = this.utils.md5(uid);
-  const fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
+  let fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
+  fs.dir(`${hashuid}`);
+  fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`, `${hashuid}`);
   fs.write(`${hashuid}.json`, JSON.stringify(data));
 }
 
 MailStore.prototype.loadEmailBody = async function (uid, email) {
   const hashuid = this.utils.md5(uid);
   const hash = String(email).includes('@') ? this.utils.md5(email) : email;
-  const fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
+  const fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`, `${hashuid}`);
   return fs.read(`${hashuid}.json`, 'json');
 }
 
@@ -173,21 +175,20 @@ MailStore.prototype.deleteEmailBodies = async function (email, uidsNotToDelete) 
   let usefulUids = [];
   uidsNotToDelete.forEach(uid => {
     uid['uid'] = this.utils.md5(uid['uid']);
-    usefulUids.push(`${uid['uid']}.json`)
+    usefulUids.push(`${uid['uid']}`)
   });
   const hash = String(email).includes('@') ? this.utils.md5(email) : email;
   const fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
   try {
-    let allUids = fs.find(`.`);
+    let allUids = fs.find(`.`, {files : false, directories : true});
     let uidsToDelete = Utils.findMissing(allUids, usefulUids);
-    uidsToDelete.forEach(jsonFile => {
-      fs.remove(`${jsonFile}`, 'json');
-      console.log(`Removed ${jsonFile} from mail/${hash}.`);
+    uidsToDelete.forEach(uidFolder => {
+      fs.remove(`${uidFolder}`);
+      console.log(`Removed ${uidFolder} (and all possible attachments) from mail/${hash}.`);
     });
   } catch (error) {
     console.log(error);
   }
-
 }
 
 

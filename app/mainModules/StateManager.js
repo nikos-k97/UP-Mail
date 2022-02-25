@@ -79,7 +79,7 @@ StateManager.prototype.setup = async function (loginInfo) {
 
   if (emailsFound.length === 0 && loginInfo.personalFolders !== undefined){
     // The accounts database has folder information (uidvalidity etc) from a previous session, but the 
-    // email database is empty, so we revert back to 'new'.
+    // email database is empty, so we revert back to 'new'. 
     this.change('state', 'new');
     this.checkUserState();
     // Re-emit window.load event so that the StateManager.style function can work properly.

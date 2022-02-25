@@ -1,9 +1,7 @@
 const MailParser     = require('mailparser').MailParser;
-const simpleParser   = require('mailparser').simpleParser;
 const Promise        = require('bluebird');
 const jetpack        = require('fs-jetpack');
 const IMAP           = require('node-imap');
-const fs             = require('fs');
 const base64         = require('base64-stream');
 const Utils          = require('./Utils');
 
@@ -15,7 +13,6 @@ const Utils          = require('./Utils');
  * @param  {object} stateManager 
  * @param  {object} accountManager 
  * @param  {object} details  [An object which contains the server details and logon.]
- * @param  {boolean} debug   [Optional - A boolean to enable verbose logging to console.]
  * @return {promise}         [This promise resolves when the client connection finishes.]
  */
 function IMAPClient(app, logger, utils, stateManager, accountManager, details) {
@@ -425,6 +422,11 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
   -----------------------------------------------------------------------------------------------------------------
   */
   return new Promise(function (resolve, reject) {
+    let user = this.client._config.user;
+    let hash = user.includes('@') ? this.utils.md5(user) : user;
+    let appPath = this.app.getPath('userData');
+    const md5 = this.utils.md5;
+
     this.logger.log("Seqno: " + seqno);
     this.logger.log("grabNewer: " + grabNewer);
     this.logger.log("Grabbing: " + `${seqno}${grabNewer ? `:*` : ``}`);
@@ -599,6 +601,7 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
           type        : text, application etc...     
           ------------------------------------------------------------------------------------------------------
         */
+
         parsePromise.then(
           async () => {
             const parsedContent = {};
@@ -617,6 +620,7 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
                 let fetchPromise = new Promise((resolve,reject) => {
                   // The buildAttMessageFunction returns a function.
                   fetchAttachmentObject.on('message', async (msg) => {
+                  
                     let filename = attachment.filename;
                     let encoding = attachment.headers.get('content-transfer-encoding');
               
@@ -624,8 +628,15 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
                       //Create a write stream so that we can stream the attachment to file;
                       console.log('Streaming this attachment to file', filename, info);
                           
-                      let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
-                          
+                      //let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
+                   
+                      // The uid used here is the uid from the server, so since we locally use a combination
+                      // of folder and uid, we need to store it with the folderUid format.
+                      let hashuid = md5(`${path}${attributes.uid}`);
+                      const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
+                      fs.dir(`${hashuid}`);
+                      let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+
                       writeStream.once('finish', function() {
                         console.log('Done writing to file %s', filename);
                         writeStream.destroy();

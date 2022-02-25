@@ -109,20 +109,15 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
     this.logger.log(`Info for user '${loginInfo.user}' updated.`)
   }
 
+  // Change state to 'existing' and add the 'user' and 'hash' fields to state.json.
+  this.stateManager.change('state', 'existing');
+  this.stateManager.change('account', {hash, user});
+
   // Create the folders where the mail bodies for this specific user will be stored.
   // (If they dont already exist)
   let fs = jetpack.cwd(this.app.getPath('userData'));
   fs.dir(`mail`).dir(`${hash}`);
   fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
-  let allUids = fs.find(`.`);
-  allUids.forEach(jsonFile => {
-    fs.remove(`${jsonFile}`, 'json');
-    console.log(`Removed ${jsonFile} from mail/${hash}.`);
-  });
-
-  // Change state to 'existing' and add the 'user' and 'hash' fields to state.json.
-  this.stateManager.change('state', 'existing');
-  this.stateManager.change('account', {hash, user});
 
   // If the account was an existing one (after logout), then we fetch all the stored info from the previous 
   // session, after the potential update to the login info we just did.
@@ -132,6 +127,13 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
     await this.stateManager.setup(existingData);
   }
   else {
+    // Since its a new user (not an existing one after logout) we delete all mail bodies stored.
+    let allUids = fs.find(`.`);
+    allUids.forEach(jsonFile => {
+      fs.remove(`${jsonFile}`);
+      console.log(`Removed ${jsonFile} from mail/${hash}.`);
+    });
+
     // Account was inserted, redirect to stateManager.
     await this.stateManager.setup(loginInfo);
   }
@@ -155,11 +157,5 @@ AccountManager.prototype.removeAccount = async function (email) {
 	return this.accounts.removeAsync({ user: email });
 }
 
-
-AccountManager.prototype.getIMAP = async function (email) {
-  let account = await this.findAccount(email);
-  let client = await (new IMAPClient(this.app, this.logger, this.utils, this.stateManager, this, account));
-  return client;
-}
 
 module.exports = AccountManager;
