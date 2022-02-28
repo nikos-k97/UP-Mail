@@ -764,7 +764,8 @@ IMAPClient.prototype.checkFlags = async function (path, readOnly){
 
 IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags, newFlag){
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
-  if (this.currentPath !== path) {  
+  // Also ensure that the box is not opened in 'readOnly' mode since we are attempting to change flags.
+  if (this.currentPath !== path || (this.currentPath === path && this.mailbox.readOnly === true)) {  
     if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
       try {
         this.mailbox = await this.openBox(path, readOnly);
@@ -777,9 +778,12 @@ IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags,
   }
 
   if (! oldFlags.includes(newFlag)){
-  
-    await this.client.addFlagsAsync(this.utils.stripStringOfNonNumericValues(uid), newFlag);
-    oldFlags.push(newFlag);
+    try {
+      await this.client.addFlagsAsync(this.utils.stripStringOfNonNumericValues(uid), newFlag);
+      oldFlags.push(newFlag);
+    } catch (error) {
+      this.logger.error(error);
+    }
   }
   return oldFlags;
 }

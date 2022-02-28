@@ -58,6 +58,11 @@ body {
   height:100% !important;
 }
 
+#mail {
+  margin-left: 50px;
+  margin-right: 50px;
+}
+
 .sidebar {
   font-size: medium !important;
   background-color: rgb(97,97,97) !important;

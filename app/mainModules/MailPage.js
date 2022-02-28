@@ -18,6 +18,7 @@ function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager
   this.accountManager = accountManager;
   this.mailStore = mailStore;
   //this.imapClient -> defined in 'initializeIMAP()'
+  //this.personalBoxesLinear -> defined in 'getFolderInfo()'
 }
 
 
@@ -92,19 +93,21 @@ MailPage.prototype.renderMailPage = function (accountInfo) {
       <span id="mailboxes"></span>
     `;
 
-    // Get the necessary information from the IMAP server in order to render the mailPage.
-    this.getImapInfo(accountInfo);
+    // Get the mailboxes info for the particular user (along with potential out of date folder info
+    // from previous sessions).
+    this.getFolderInfo(accountInfo);
   } 
 }
 
-MailPage.prototype.getImapInfo = async function(accountInfo){
+
+MailPage.prototype.getFolderInfo = async function(accountInfo){
   // Get namespaces - they may be used for fetching emails from other mailboxes using the necessary prefix and delimiter.
   let statusOK = await this.checkIMAPStatus(accountInfo);
   if ( !statusOK ) return;
   let namespaces = await this.imapClient.fetchNamespaces();
   this.logger.debug(`Number of available namespaces that probably contain mailboxes : ${namespaces.prefix.length}`);
 
-  // Get mailboxes/ folders of all namespaces.
+  // Get mailboxes / folders of all namespaces.
   statusOK = await this.checkIMAPStatus(accountInfo);
   if ( !statusOK ) return;
   document.querySelector('#doing').innerText = 'Grabbing your mailboxes ...';
@@ -116,6 +119,15 @@ MailPage.prototype.getImapInfo = async function(accountInfo){
     }
   }
 
+  // // Get the boxes/ folders with a different structure and keep only the 'delimeter' and 'name' fields.
+  // // The linear box structure is used for easier traversal of the the folders while fetching emails.
+  // let personalBoxesLinear = IMAPClient.linearBoxes(personalBoxes);
+  // personalBoxesLinear.reverse();
+  // personalBoxesLinear = personalBoxesLinear.filter((n) => { return n != undefined && JSON.stringify(n) != '[]' });
+  
+  // // Store the new boxes format as a data member in the MailPage 'class'.
+  // this.personalBoxesLinear = personalBoxesLinear;
+  
   // Merge current folders (information stored in account database for an existing user) with the new folder
   // information we obtained via the IMAP getBoxes() call. Each conficting field is overrided with the new info.
   /* 
@@ -159,260 +171,56 @@ MailPage.prototype.getImapInfo = async function(accountInfo){
       }
   */
 
+  /* 
+    For new user the 'accountInfo.personalFolders' is undefined (no folder data from previous session).
+    For existing user the 'accountInfo.personalFolders' has the old/ potentially out of date folder data.
+    We merge the data we just got from 'client.getBoxes()' and the extra folder info from previous session
+    and store it again in the accounts.db so that both cases of new and existing users have folder info.
+    The 'extra' folder info like 'uidvalidity' etc. will be updated with the new values when we open each
+    individual box.
+  */
   let personalFolders = accountInfo.personalFolders || {};
-  personalFolders = merge(personalFolders, this.utils.removeCircular(personalBoxes));
+  //personalFolders = merge(personalFolders, this.utils.removeCircular(personalBoxes));
+  personalFolders = merge(personalFolders, personalBoxes);
   this.logger.log(`Retrieved all mailboxes from ${accountInfo.user}.`);
-
-  // Get the boxes/ folders with a different structure and keep only the 'delimeter' and 'name' fields.
-  // The linear box structure is used for easier traversal of the the folders in the below for loop - fetch emails.
-  let personalBoxesLinear = IMAPClient.linearBoxes(personalBoxes);
-  personalBoxesLinear.reverse();
-  personalBoxesLinear = personalBoxesLinear.filter((n) => { return n != undefined && JSON.stringify(n) != '[]' });
-
-  // Grab user emails only for personal namespace.
-  document.querySelector('#doing').innerText = 'Grabbing your emails ...';
-  let totalEmails = 0;
-  for (let i = 0; i < personalBoxesLinear.length; i++) {
-    // personalBoxesLinear[i] (Linear Box Path) : [ {"delimiter": "/" ,"name": "Inbox"} ]
-    // path                                     : Inbox
-    // objectPath                               : ["Inbox"]
-    let path = this.imapClient.compilePath(personalBoxesLinear[i]);  
-    let objectPath = IMAPClient.compileObjectPath(personalBoxesLinear[i]);  
-
-    /*
-    'folderInfo' contains all the information we got from merging the folder info stored in accounts.db and
-    the new folder info we got from fetching the folders inside the personal namespace. Because 
-    IMAP.openBox() hasnt been used yet, the UIDValidity value of each folder is the old one (the one saved
-    from a previous session, so we use that to see if we need to re-fetch the emails or load them from the db)
-    The only updated fields of the 'personalFolders' variable are:
-        attribs: (2) ['\Marked', '\HasNoChildren']
-        children: null
-        delimiter: "/"
-        parent: null }
-    due to the merge with the new values gained from IMAP.getBoxes().
-    */
-    // The line '_get(personalFolders, objectPath)' is the same as the line 'personalFolders[personalBoxesLinear[i][personalBoxesLinear[i].length - 1].name]'
-    // The core concept is that we get the attributes of the 'personalFolders[specificFolder]' using the more
-    // convenient way of personalBoxesLinear since we can't iterate using the personalFolders object itself.
-    // _.get is an even more convenient way of doing it.
-    let folderInfo = _.get(personalFolders, objectPath);
-    
-    // From every personal folder get the 'highest message sequence number' value from the last session 
-    // If it is a new user then 'highest' defaults to 1.
-    let highestSeqNo = folderInfo.highestSeqNo || 1;
-    // From every personal folder get the mailbox length = message count from the last session.
-    let messageCount = folderInfo.messageCount || undefined;
-    // From every personal folder get the array containing all the UIDs from the last session.
-    let UIDSequence = folderInfo.UIDSequence || undefined;
-    // From every personal folder get the UIDValidity and UIDNext values from the last session.
-    let previousUIDValidity = folderInfo.uidvalidity || undefined;
-    let previousUIDNext = folderInfo.uidnext || undefined;
-
-    // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
-    let promises = []; // For each mailbox's message.
   
-    // Check box status since last login.
-    statusOK = await this.checkIMAPStatus(accountInfo);
-    if ( !statusOK ) return;
-    document.querySelector('#doing').innerText = `Grabbing mail from : '${path}' ...`;
-    let serverMessageCount;
-    let serverUidSequence;
-    let uidsToDelete;
-    try {
-      let checkResult = await this.imapClient.checkUID(path, true, previousUIDValidity, previousUIDNext, highestSeqNo, messageCount, UIDSequence);
-      serverUidSequence = this.imapClient.mailbox.serverUidSequence;
-      delete this.imapClient.mailbox.serverUidSequence;
-      serverMessageCount = this.imapClient.mailbox.messages.total;
-      switch (checkResult) {
-        case 'Sync':
-          this.logger.log(`Folder '${path}' is up to date with server.`);
-          break;
-        case 'SyncDelete':
-          this.logger.log(`Folder '${path}' has no messages. Deleting all the locally stored mails, if there are any.`);
-          this.mailStore.deleteEmails(path);
-          highestSeqNo = 1;
-          break;
-        case 'DeleteSelected':
-          this.logger.log(`Folder '${path}' has deleted messages. Deleting the necessary emails from the local cache.`);
-          uidsToDelete = Utils.findMissing(UIDSequence,serverUidSequence);
-          uidsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
-          highestSeqNo = serverUidSequence.length + 1;
-          break;
-        case 'UpdateFirstTime':
-          this.logger.log(`Folder '${path}' needs to be updated. Deleting local cache and fetching all emails.`);
-          this.mailStore.deleteEmails(path); // For safety
-          highestSeqNo = 1; // For safety
-          try {
-            await this.imapClient.getEmails(path, true, true, highestSeqNo, 
-              {
-              // fetch(source, options). For options we use the 'options' object which 
-              // contains the 'bodies','envelope' and 'struct' options.
-                /*
-                  An envelope includes the following fields (a value is only included in the response if it is set).
-                    -date :         is a date (string) of the message
-                    -subject :      is the subject of the message
-                    -from :         is an array of addresses from the from header
-                    -sender :       is an array of addresses from the sender header
-                    -reply-to :     is an array of addresses from the reply-to header
-                    -to :           is an array of addresses from the to header
-                    -cc :           is an array of addresses from the cc header
-                    -bcc :          is an array of addresses from the bcc header
-                    -in-reply-to :  is the message-id of the message is message is replying to
-                    -message-id :   is the message-id of the message
-                */
-                bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
-                envelope: true
-              }, 
-              // The 'onLoad' function is run for each message inside a mailbox.
-              // (highestSeqNo, parsedContent from mailParser, attribues)
-              function onLoad(seqno, msg, attributes) {  
-                promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
-                if (seqno > highestSeqNo) highestSeqNo = seqno;
-                document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
-              }.bind(this)
-            );
-          } catch (error) {
-            this.logger.error(error);
-            // Skip the emails fetch for this particular mailbox.
-            continue;
-          }
-          break;
-        case 'Update':
-          this.logger.log(`Folder '${path}' needs to be updated. Deleting and fetching the necessary emails.`);
-          // Every UID that is locally stored but not on the server is deleted from local cache.
-          uidsToDelete = Utils.findMissing(UIDSequence, serverUidSequence);
-          uidsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
-          // We deleted the mails that were incorrectly stored locally. Now we need to fetch the new emails.
-          // So we make the highestSeqNo = Number of locally stored emails prior to deletion - number of deleted emails
-          highestSeqNo = (UIDSequence.length - uidsToDelete.length) + 1 ;
-          let newUids = Utils.findMissing(serverUidSequence, UIDSequence);
-          if (newUids.length !== 0) {
-            try {
-              await this.imapClient.getEmails(path, true, true, highestSeqNo, 
-                {
-                  bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
-                  envelope: true
-                }, 
-                function onLoad(seqno, msg, attributes) {  
-                  promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
-                  if (seqno > highestSeqNo) highestSeqNo = seqno;
-                  document.querySelector('#number').innerText = `Total emails fetched: ${++totalEmails}`;
-                }.bind(this)
-              );
-            } catch (error) {
-              this.logger.error(error);
-              continue;
-            }
-          }
-          break;
-      }
-    }
-    catch (error) { // Example of error is inability to openBox -> we skip fetching emails for this box and use only the locally stored..
-      this.logger.error(error);
-      // Skip the emails fetch for this particular mailbox.
-      continue;
-    }
-
-
-    // Check for flag changes since last login.
-    statusOK = await this.checkIMAPStatus(accountInfo);
-    if ( !statusOK ) return;
-    document.querySelector('#doing').innerText = `Checking flags ...`;
-    let flagInformation;
-    try {
-      flagInformation = await this.imapClient.checkFlags(path, true);
- 
-      // The UID returned from 'findEmails' is formatted 'folderUID'.
-      // The UIDs present in 'flagInformation' are not.
-      // So we strip the UIDs returned from 'findEmails' from all non numeric values to keep the real UID.
-      let emails = await this.mailStore.findEmails(path, { uid: 1, flags: 1, _id : 0 });
-      emails.forEach(email => {
-        let uid = parseInt(this.utils.stripStringOfNonNumericValues(email['uid']));
-        // The server says that the particular message that is stored in the db is marked as 'Seen'.
-        if (flagInformation.seenMessages.includes(uid)){
-          // If the local copy of the particular message is already marked as 'Seen' -> do nothing.
-          // Otherwise we mark it as seen.
-          if (! email['flags'].includes('\\Seen')) {
-            email['flags'].push('\\Seen');
-            console.log(email['flags'])
-            this.mailStore.updateEmailByUid(email['uid'], {'flags' : email['flags']})
-          }
-        }
-        // The server says that the particular message is not marked as 'Seen'.
-        else {
-          // If the local copy is marked as 'Seen', remove the flag.
-          // Otherwise do nothing.
-          if (email['flags'].includes('\\Seen')) {
-            let newFlags = email['flags'].filter(e => e !== '\\Seen');
-            this.mailStore.updateEmailByUid(email['uid'], {'flags' : newFlags})
-          }
-        }
-      });
-
-    } catch (error) {
-      this.logger.error(error);
-      continue;
-    }
-   
-
-
-    // Wait for all the database inserts/ updated to be resolved.
-    await Promise.all(promises);
-
-    _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
-    _.set(personalFolders, objectPath.concat(['UIDSequence']), serverUidSequence);
-    _.set(personalFolders, objectPath.concat(['messageCount']), serverMessageCount);
-    _.set(personalFolders, objectPath.concat(['flagInformation']), flagInformation)
-  
-    // 'this.imapClient.mailbox' is an object representing the currently open mailbox, defined in getEmails() method.
-    let boxKeys = Object.keys(this.imapClient.mailbox);
-    for (let j = 0; j < boxKeys.length; j++) {
-      _.set(personalFolders, objectPath.concat([boxKeys[j]]), this.imapClient.mailbox[boxKeys[j]]);
-    }
-  }
-
   // Save all the folders data in the accounts database for the next client session.
-  await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : this.utils.removeCircular(personalFolders)});
+  //await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : this.utils.removeCircular(personalFolders)});
+  await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
+  // Load the new data we just stored.
+  accountInfo = await this.accountManager.findAccount(accountInfo.user);
 
-  // Get the new info that we just stored in the accounts database.
-  accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+  // Find the last folder opened in the last session, or pick 'Inbox' as the folder to render emails.
+  this.pickFolderToRenderEmails(accountInfo);
 
-  // Delete all the email bodies (.json files in mail/emailHash directory) that are not relevant anymore.
-  // (the emails we deleted from this.mailStore.db need to have their bodies deleted too).
-  // The emails present in this.mailstore.db are useful, since we just updated it. So we dont delete them.
-  // The mails that are present in mail/emailHash directory and not present in this.mailStore.db are deleted
-  let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1 , _id : 0 });
-  await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
- 
+  // Render folders in the sidebar (mailbox.html)
+  await this.renderFolderStructure(accountInfo);
 
-  // Look for threads.
-  document.querySelector('#number').innerText = '';
-  document.querySelector('#doing').innerText = 'Looking for threads ...';
-  // threads : object containing arrays with parent messages. 
-  // These arrays contain all the children that originated for each of the parents.
-  let threads = Threader.applyThreads(await this.mailStore.findEmails());
-  for (let parentUid in threads) {
-    // Add a field 'threadMsg' to every email in the database that is a parent email.
-    // The 'threadMsg' field contains an array with the children of the email.
-    await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
-    // Add a 'isThreadChild' field to each children email.
-    // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
-    for (let i = 0; i < threads[parentUid].length; i++) {
-      await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
-    }
-  }
-  this.load();
+  // Render compose button since page content is now loaded.
+  this.renderComposeButton();
+
+  // Render actions button and nested buttons.
+  this.addActionsButtonFunctionality(accountInfo);
+
+  // Get the necessary information from the IMAP server in order to render the email inside the folder 
+  // that 'state.json' dictates.
+  this.getChosenFolderInfo(accountInfo, this.stateManager.state.account.folder);
 }
 
 
-MailPage.prototype.load = async function () {
-  let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+MailPage.prototype.pickFolderToRenderEmails = function(accountInfo){
+  /*
+    Choose the folder that is present in 'state.json' (the folder that was last opened 
+    in the previous session). If 'folder' is not specified in 'state.json' then we assign 'Inbox'
+    as the folder.
+  */
+
   // Ensure folder is set in state.json
   if (typeof this.stateManager.state.account.folder === 'undefined') {
     // Due to companies not all naming their main inbox "INBOX" (as defined in the RFC),
-    // we have to search through them, looking for one which contains the word "inbox".
+    // we have to search through them, looking for one which contains the word "inbox" or "incoming".
     for (let folder in accountInfo.personalFolders) {
-      if (folder.toLowerCase() === 'inbox') {
+      if (folder.toLowerCase() === 'inbox' || folder.toLowerCase() === 'incoming') {
          /*
           {"state": "mail","account": {"hash": "9c6abxxxxxxxxxxxxxx19477","email": "test-mail@test.com",
             "folder": [ {"name": "Inbox","delimiter": "/"}]  }}
@@ -423,28 +231,23 @@ MailPage.prototype.load = async function () {
       }
     }
   }
+}
 
+
+MailPage.prototype.renderFolderStructure = async function(accountInfo){
   // Generate folder list to render.
   document.querySelector('#folders').innerHTML = await (this.generateFolderList(accountInfo.user, accountInfo.personalFolders, []));
   let firstChildren = document.querySelector('#folders').children;
   let secondChildren = [];
   for (let i=0; i<firstChildren.length; i++){
     let secondChild = firstChildren[i].children;
-    secondChildren[i] = secondChild[0]; //Remove the HTMLCollection - get only its value
+    secondChildren[i] = secondChild[0]; //Remove the HTMLCollection - get only its value.
   };
+
   this.linkFolders(accountInfo, secondChildren);
- 
+
   // Highlight (css) the folder that is selected as current in 'state.json'.
   this.highlightFolder();
-
-  // Render email items.
-  this.render(accountInfo);
-
-  // Render compose button since page content is now loaded.
-  this.renderComposeButton();
-
-  // Render actions button and nested buttons.
-  this.addActionsButtonFunctionality(accountInfo);
 }
 
 
@@ -502,7 +305,7 @@ MailPage.prototype.linkFolders = function (accountInfo, children) {
             otherFolders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
           }
           document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('amber','lighten-1','grey-text','text-darken-1');
-          this.render(accountInfo);                     
+          this.getChosenFolderInfo(accountInfo, JSON.parse(atob(clickedElement.target.id)));                  
         });
       }
       // Search for child folders.
@@ -528,6 +331,257 @@ MailPage.prototype.highlightFolder = function () {
   let currentFolder = document.querySelector(`#${btoa(JSON.stringify(this.stateManager.state.account.folder)).replace(/=/g, '\\=')}`);
   currentFolder.classList.add('amber','lighten-1','grey-text','text-darken-1');
 }
+
+
+MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolder) {
+  document.querySelector('#mail').innerHTML = `
+    <span id="doing"></span> 
+    <span id="number"></span><br>
+    <span id="mailboxes"></span>
+  `;
+
+  // Grab user emails only for the selected folder.
+  document.querySelector('#doing').innerText = 'Grabbing your emails ...';
+
+  let personalFolders = accountInfo.personalFolders;
+  let totalEmails = 0;
+  // chosenFolder : [ {"delimiter": "/" ,"name": "Inbox"} ]
+  // path         : Inbox
+  // objectPath   : ["Inbox"]
+  let path = this.imapClient.compilePath(chosenFolder);  
+  let objectPath = IMAPClient.compileObjectPath(chosenFolder); 
+
+  /*
+    'folderInfo' contains all the information we got from merging the folder info stored in accounts.db and
+    the new folder info we got from fetching the folders inside the personal namespace. Because 
+    IMAP.openBox() hasnt been used yet, the UIDValidity value of each folder is the old one (the one saved
+    from a previous session, so we use that to see if we need to re-fetch the emails or load them from the db)
+    The only updated fields of the 'personalFolders' variable are:
+        attribs: (2) ['\Marked', '\HasNoChildren']
+        children: null
+        delimiter: "/"
+        parent: null }
+    due to the merge with the new values gained from IMAP.getBoxes().
+  */
+  // The line '_get(personalFolders, objectPath)' is the same as the line 'personalFolders[chosenFolder[chosenFolder.length - 1].name]'
+  // The core concept is that we get the attributes of the 'personalFolders[specificFolder]' using the more
+  // convenient way of personalBoxesLinear since we can't iterate using the personalFolders object itself.
+  // _.get is an even more convenient way of doing it.
+  let folderInfo = _.get(personalFolders, objectPath);
+
+  // Get the 'highest message sequence number' value from the last session 
+  // If it is a new user then 'highest' defaults to 1.
+  let highestSeqNo = folderInfo.highestSeqNo || 1;
+  // Get the mailbox length = message count from the last session.
+  let messageCount = folderInfo.messageCount || undefined;
+  // Get the array containing all the UIDs from the last session.
+  let UIDSequence = folderInfo.UIDSequence || undefined;
+  // Get the UIDValidity and UIDNext values from the last session.
+  let previousUIDValidity = folderInfo.uidvalidity || undefined;
+  let previousUIDNext = folderInfo.uidnext || undefined;
+
+  // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
+  let promises = []; // For each mailbox's message.
+
+  // Check box status since last login.
+  statusOK = await this.checkIMAPStatus(accountInfo);
+  if ( !statusOK ) return;
+
+  document.querySelector('#doing').innerText = `Grabbing '${path}' mail ...`;
+  let serverMessageCount;
+  let serverUidSequence;
+  let uidsToDelete;
+  try {
+    let checkResult = await this.imapClient.checkUID(path, true, previousUIDValidity, previousUIDNext, highestSeqNo, messageCount, UIDSequence);
+    serverUidSequence = this.imapClient.mailbox.serverUidSequence;
+    delete this.imapClient.mailbox.serverUidSequence;
+    serverMessageCount = this.imapClient.mailbox.messages.total;
+    switch (checkResult) {
+      case 'Sync':
+        this.logger.log(`Folder '${path}' is up to date with server.`);
+        break;
+      case 'SyncDelete':
+        this.logger.log(`Folder '${path}' has no messages. Deleting all the locally stored mails, if there are any.`);
+        this.mailStore.deleteEmails(path);
+        highestSeqNo = 1;
+        break;
+      case 'DeleteSelected':
+        this.logger.log(`Folder '${path}' has deleted messages. Deleting the necessary emails from the local cache.`);
+        uidsToDelete = Utils.findMissing(UIDSequence,serverUidSequence);
+        uidsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
+        highestSeqNo = serverUidSequence.length + 1;
+        break;
+      case 'UpdateFirstTime':
+        this.logger.log(`Folder '${path}' needs to be updated. Deleting local cache and fetching all emails.`);
+        this.mailStore.deleteEmails(path); // For safety
+        highestSeqNo = 1; // For safety
+        try {
+          await this.imapClient.getEmails(path, true, true, highestSeqNo, 
+            {
+            // fetch(source, options). For options we use the 'options' object which 
+            // contains the 'bodies','envelope' and 'struct' options.
+              /*
+                An envelope includes the following fields (a value is only included in the response if it is set).
+                  -date :         is a date (string) of the message
+                  -subject :      is the subject of the message
+                  -from :         is an array of addresses from the from header
+                  -sender :       is an array of addresses from the sender header
+                  -reply-to :     is an array of addresses from the reply-to header
+                  -to :           is an array of addresses from the to header
+                  -cc :           is an array of addresses from the cc header
+                  -bcc :          is an array of addresses from the bcc header
+                  -in-reply-to :  is the message-id of the message is message is replying to
+                  -message-id :   is the message-id of the message
+              */
+              bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
+              envelope: true
+            }, 
+            // The 'onLoad' function is run for each message inside a mailbox.
+            // (highestSeqNo, parsedContent from mailParser, attribues)
+            function onLoad(seqno, msg, attributes) {  
+              promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
+              if (seqno > highestSeqNo) highestSeqNo = seqno;
+              document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
+            }.bind(this)
+          );
+        } catch (error) {
+          this.logger.error(error);
+          // Skip the emails fetch for this particular mailbox.
+          return;
+        }
+        break;
+      case 'Update':
+        this.logger.log(`Folder '${path}' needs to be updated. Deleting and fetching the necessary emails.`);
+        // Every UID that is locally stored but not on the server is deleted from local cache.
+        uidsToDelete = Utils.findMissing(UIDSequence, serverUidSequence);
+        uidsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
+        // We deleted the mails that were incorrectly stored locally. Now we need to fetch the new emails.
+        // So we make the highestSeqNo = Number of locally stored emails prior to deletion - number of deleted emails
+        highestSeqNo = (UIDSequence.length - uidsToDelete.length) + 1 ;
+        let newUids = Utils.findMissing(serverUidSequence, UIDSequence);
+        if (newUids.length !== 0) {
+          try {
+            await this.imapClient.getEmails(path, true, true, highestSeqNo, 
+              {
+                bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
+                envelope: true
+              }, 
+              function onLoad(seqno, msg, attributes) {  
+                promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
+                if (seqno > highestSeqNo) highestSeqNo = seqno;
+                document.querySelector('#number').innerText = `Total emails fetched: ${++totalEmails}`;
+              }.bind(this)
+            );
+          } catch (error) {
+            this.logger.error(error);
+            return;
+          }
+        }
+        break;
+    }
+  }
+  catch (error) { // Example of error is inability to openBox -> we skip fetching emails for this box and use only the locally stored..
+    this.logger.error(error);
+    // Skip the emails fetch for this particular mailbox.
+    return;
+  }
+
+
+  // Check for flag changes since last login.
+  statusOK = await this.checkIMAPStatus(accountInfo);
+  if ( !statusOK ) return;
+  document.querySelector('#doing').innerText = `Checking flags ...`;
+  let flagInformation;
+  try {
+    flagInformation = await this.imapClient.checkFlags(path, true);
+
+    // The UID returned from 'findEmails' is formatted 'folderUID'.
+    // The UIDs present in 'flagInformation' are not.
+    // So we strip the UIDs returned from 'findEmails' from all non numeric values to keep the real UID.
+    let emails = await this.mailStore.findEmails(path, { uid: 1, flags: 1, _id : 0 });
+    emails.forEach(email => {
+      let uid = parseInt(this.utils.stripStringOfNonNumericValues(email['uid']));
+      // The server says that the particular message that is stored in the db is marked as 'Seen'.
+      if (flagInformation.seenMessages.includes(uid)){
+        // If the local copy of the particular message is already marked as 'Seen' -> do nothing.
+        // Otherwise we mark it as seen.
+        if (! email['flags'].includes('\\Seen')) {
+          email['flags'].push('\\Seen');
+          console.log(email['flags'])
+          this.mailStore.updateEmailByUid(email['uid'], {'flags' : email['flags']})
+        }
+      }
+      // The server says that the particular message is not marked as 'Seen'.
+      else {
+        // If the local copy is marked as 'Seen', remove the flag.
+        // Otherwise do nothing.
+        if (email['flags'].includes('\\Seen')) {
+          let newFlags = email['flags'].filter(e => e !== '\\Seen');
+          this.mailStore.updateEmailByUid(email['uid'], {'flags' : newFlags})
+        }
+      }
+    });
+
+  } catch (error) {
+    this.logger.error(error);
+    return;
+  }
+ 
+  // Wait for all the database inserts/ updated to be resolved.
+  await Promise.all(promises);
+
+  _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
+  _.set(personalFolders, objectPath.concat(['UIDSequence']), serverUidSequence);
+  _.set(personalFolders, objectPath.concat(['messageCount']), serverMessageCount);
+  _.set(personalFolders, objectPath.concat(['flagInformation']), flagInformation)
+
+  // 'this.imapClient.mailbox' is an object representing the currently open mailbox, defined in getEmails() method.
+  let boxKeys = Object.keys(this.imapClient.mailbox);
+  for (let j = 0; j < boxKeys.length; j++) {
+    _.set(personalFolders, objectPath.concat([boxKeys[j]]), this.imapClient.mailbox[boxKeys[j]]);
+  }
+
+  // Save all the folders data in the accounts database for the next client session.
+  //await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : this.utils.removeCircular(personalFolders)});
+  await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
+
+  // Get the new info that we just stored in the accounts database.
+  accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+
+  // Delete all the email bodies (.json files in mail/emailHash directory) that are not relevant anymore.
+  // (the emails we deleted from this.mailStore.db need to have their bodies deleted too).
+  // The emails present in this.mailstore.db are useful, since we just updated it. So we dont delete them.
+  // The mails that are present in mail/emailHash directory and not present in this.mailStore.db are deleted
+  let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1 , _id : 0 });
+  await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
+
+  // Look for threads.
+  document.querySelector('#number').innerText = '';
+  document.querySelector('#doing').innerText = 'Looking for threads ...';
+  // threads : object containing arrays with parent messages. 
+  // These arrays contain all the children that originated for each of the parents
+  let threads;
+  try {
+    threads = Threader.applyThreads(await this.mailStore.findEmails());
+  } catch (error) {
+    this.logger.error(error);
+    return;
+  }
+
+  for (let parentUid in threads) {
+    // Add a field 'threadMsg' to every email in the database that is a parent email.
+    // The 'threadMsg' field contains an array with the children of the email.
+    await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
+    // Add a 'isThreadChild' field to each children email.
+    // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
+    for (let i = 0; i < threads[parentUid].length; i++) {
+      await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
+    }
+  }
+  // Render email subject, sender and date for each email in the selected folder.
+  this.render(accountInfo);
+}
+
 
 
 MailPage.prototype.reload = async function (accountInfo){
@@ -588,7 +642,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
   let page = folderPage || 0;
 
   // Get the UID and the 'isThreadChild' fields of all the emails inside the current folder (folder stored in state.json).
-  let mail = await this.mailStore.findEmails(this.imapClient.compilePath(this.stateManager.state.account.folder), { uid: 1, isThreadChild: 1 }, page * 250, 250);
+  let mail = await this.mailStore.findEmails(this.imapClient.compilePath(this.stateManager.state.account.folder), { uid: 1, isThreadChild: 1 }, page * 100, 100);
   // Show in header the emailAddress followed by the folder currently selected.
   Header.setLoc([accountInfo.user].concat(this.stateManager.state.account.folder.map((val) => { return val.name })));
 
@@ -606,7 +660,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     }
   }
   if (mail.length === 0) html = 'This folder is empty.';
-  if (await this.mailStore.countEmails(this.imapClient.compilePath(this.stateManager.state.account.folder)) > 250 * (page + 1)) {
+  if (await this.mailStore.countEmails(this.imapClient.compilePath(this.stateManager.state.account.folder)) > 100 * (page + 1)) {
     html += `<button class='load-more'>Load more...</button>`;
   }
   document.querySelector('#mail').innerHTML = html;
@@ -673,6 +727,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
           min-width: 100%;
           width: 100%;
           border-radius : 3px;
+          border: 0.5px solid gray;
         }
         .mail-item:hover {
           filter: brightness(90%);
@@ -711,10 +766,10 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         }
         .mail-item .text .sender .sender-text {
           display: inline-block;
-          width: 100%;
+          width: 90%;
           text-overflow: ellipsis;
           white-space: nowrap;
-          overflow: auto;
+          overflow: hidden;
         }
         .mail-item .text .subject {
           display: flex;
@@ -724,16 +779,18 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         }
         .mail-item .text .subject .subject-text {
           display: inline-block;
-          width: 100%;
+          width: 90%;
           text-overflow: ellipsis;
           white-space: nowrap;
           overflow: hidden;
+          padding-left : 3px;
         }
         .mail-item .text .date {
           width: 10%;
           float: right;
           position: relative;
           right: 25.25px;
+          padding-left : 3px;
         }
         
         .selected-mail-item {
