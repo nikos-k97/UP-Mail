@@ -18,7 +18,7 @@ body {
 }
 
 .wrapper {
-  padding: 2em 2em 0px 2em;
+  padding: 0px;
   min-height: 100%;
   max-height: 100%;
 }
@@ -48,19 +48,70 @@ body {
   background-color: #F5F5F5;
 }
 
-.electron-in-page-search-window {
-  position: absolute !important;
-  top: 0 !important;
-  right: 0 !important;
-  width: 300px !important;
-  height: 36px !important;
-  background-color: white !important;
+
+/* Setting height of the .sidebar's parent element to 100% */
+.wrapper {
+  height: 100% !important;
+  width: 100% !important;
+}
+.row {
+  height:100% !important;
 }
 
-.electron-in-page-search-window.search-inactive {
-  visibility: hidden;
+.sidebar {
+  font-size: medium !important;
+  background-color: rgb(97,97,97) !important;
+  height: 100% !important;
+  box-sizing: border-box !important;
 }
 
-.electron-in-page-search-window.search-active {
-  visibility: visible;
+.mainarea{
+  font-size: medium !important;
+  box-sizing: border-box !important;
+  padding-top: 40px !important;
+}
+
+.folder-button {
+  background-color: rgb(97,97,97) !important; 
+  color : rgb(224, 224, 224) !important;
+  border-radius: 7em !important;
+}
+
+.folder-button:hover {
+  color: rgb(224, 224, 224) !important; 
+  background-color : rgb(146, 145, 145) !important;
+}
+
+
+.user-button {
+  background-color: rgb(189,189,189) !important; 
+  color : rgb(97,97,97) !important;
+  border-radius: 7em !important;
+  margin-top : 4em;
+  margin-bottom: 5px;
+  text-transform: unset !important;
+}
+
+#compose-button {
+  margin-top : 10px;
+  margin-bottom: 25px;
+}
+
+#compose-button:hover {
+  margin-top : 10px;
+  margin-bottom: 25px;
+  background-color : rgb(199, 152, 10) !important
+}
+
+
+#icompose {
+  color : rgb(97,97,97) !important;
+}
+
+#iactions {
+  color : rgb(199, 152, 10) !important;
+}
+
+#iactions-nested {
+  color : rgb(97,97,97) !important;
 }

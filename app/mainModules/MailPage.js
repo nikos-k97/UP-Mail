@@ -211,6 +211,7 @@ MailPage.prototype.getImapInfo = async function(accountInfo){
     // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
     let promises = []; // For each mailbox's message.
   
+    // Check box status since last login.
     statusOK = await this.checkIMAPStatus(accountInfo);
     if ( !statusOK ) return;
     document.querySelector('#doing').innerText = `Grabbing mail from : '${path}' ...`;
@@ -312,16 +313,56 @@ MailPage.prototype.getImapInfo = async function(accountInfo){
       continue;
     }
 
+
+    // Check for flag changes since last login.
+    statusOK = await this.checkIMAPStatus(accountInfo);
+    if ( !statusOK ) return;
+    document.querySelector('#doing').innerText = `Checking flags ...`;
+    let flagInformation;
+    try {
+      flagInformation = await this.imapClient.checkFlags(path, true);
+ 
+      // The UID returned from 'findEmails' is formatted 'folderUID'.
+      // The UIDs present in 'flagInformation' are not.
+      // So we strip the UIDs returned from 'findEmails' from all non numeric values to keep the real UID.
+      let emails = await this.mailStore.findEmails(path, { uid: 1, flags: 1, _id : 0 });
+      emails.forEach(email => {
+        let uid = parseInt(this.utils.stripStringOfNonNumericValues(email['uid']));
+        // The server says that the particular message that is stored in the db is marked as 'Seen'.
+        if (flagInformation.seenMessages.includes(uid)){
+          // If the local copy of the particular message is already marked as 'Seen' -> do nothing.
+          // Otherwise we mark it as seen.
+          if (! email['flags'].includes('\\Seen')) {
+            email['flags'].push('\\Seen');
+            console.log(email['flags'])
+            this.mailStore.updateEmailByUid(email['uid'], {'flags' : email['flags']})
+          }
+        }
+        // The server says that the particular message is not marked as 'Seen'.
+        else {
+          // If the local copy is marked as 'Seen', remove the flag.
+          // Otherwise do nothing.
+          if (email['flags'].includes('\\Seen')) {
+            let newFlags = email['flags'].filter(e => e !== '\\Seen');
+            this.mailStore.updateEmailByUid(email['uid'], {'flags' : newFlags})
+          }
+        }
+      });
+
+    } catch (error) {
+      this.logger.error(error);
+      continue;
+    }
+   
+
+
     // Wait for all the database inserts/ updated to be resolved.
     await Promise.all(promises);
 
-    // Check for flag changes since last login.
-    //let checkFlagsResult = await this.imapClient.checkFlags(path, true, previousUIDValidity, previousUIDNext, highestSeqNo, messageCount, UIDSequence);
-   
- 
     _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
     _.set(personalFolders, objectPath.concat(['UIDSequence']), serverUidSequence);
     _.set(personalFolders, objectPath.concat(['messageCount']), serverMessageCount);
+    _.set(personalFolders, objectPath.concat(['flagInformation']), flagInformation)
   
     // 'this.imapClient.mailbox' is an object representing the currently open mailbox, defined in getEmails() method.
     let boxKeys = Object.keys(this.imapClient.mailbox);
@@ -336,12 +377,11 @@ MailPage.prototype.getImapInfo = async function(accountInfo){
   // Get the new info that we just stored in the accounts database.
   accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
-
   // Delete all the email bodies (.json files in mail/emailHash directory) that are not relevant anymore.
   // (the emails we deleted from this.mailStore.db need to have their bodies deleted too).
   // The emails present in this.mailstore.db are useful, since we just updated it. So we dont delete them.
   // The mails that are present in mail/emailHash directory and not present in this.mailStore.db are deleted
-  let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1, _id : 0 });
+  let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1 , _id : 0 });
   await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
  
 
@@ -400,11 +440,11 @@ MailPage.prototype.load = async function () {
   // Render email items.
   this.render(accountInfo);
 
-  // Render logout button since page content is now loaded.
-  this.renderLogoutButton();
+  // Render compose button since page content is now loaded.
+  this.renderComposeButton();
 
-  // Render compose button and settings nested buttons.
-  this.addComposeButtonFunctionality(accountInfo);
+  // Render actions button and nested buttons.
+  this.addActionsButtonFunctionality(accountInfo);
 }
 
 
@@ -412,19 +452,22 @@ MailPage.prototype.generateFolderList = async function (email, folders, journey)
   let html = '';
   if (email){
     html += `
-    <div class="col s12 no-padding center-align">
-      <div class="waves-effect waves-teal btn-flat wide" id="${btoa(email)}">
-        ${email}
+    <div class="no-padding center-align">
+      <div class="user-button waves-effect waves-light btn-flat wide" id="${btoa(email)}">
+        ${email.toLowerCase()}
       </div>
+      <hr>
+      <div class="button-container no-padding center-align"></div>
     </div>
     `;
   }
+  
   for (let folder in folders) {
     let pathSoFar = journey.concat({ name: folder, delimiter: folders[folder].delimiter });
     let id = btoa(JSON.stringify(pathSoFar));
     html += `
-        <div class="col s12 no-padding center-align">
-          <div class="waves-effect waves-teal btn-flat wide folder-tree" id="${id}">${folder}
+        <div class="no-padding center-align">
+          <div class="folder-button waves-effect waves-light btn-flat wide folder-tree" id="${id}">${folder}
           </div>
         </div>
       `;
@@ -456,9 +499,9 @@ MailPage.prototype.linkFolders = function (accountInfo, children) {
           // Change the css for the currently selected / clicked folder.
           let otherFolders = document.querySelectorAll('.folder-tree');
           for (let i=0; i<otherFolders.length; i++){
-            otherFolders[i].classList.remove('teal','lighten-2');
+            otherFolders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
           }
-          document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('teal','lighten-2');
+          document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('amber','lighten-1','grey-text','text-darken-1');
           this.render(accountInfo);                     
         });
       }
@@ -480,33 +523,49 @@ MailPage.prototype.linkFolders = function (accountInfo, children) {
 MailPage.prototype.highlightFolder = function () {
   let folders = document.querySelectorAll('.folder-tree');
   for (let i=0; i< folders.length; i++){
-    folders[i].classList.remove('teal','lighten-2');
+    folders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
   }
   let currentFolder = document.querySelector(`#${btoa(JSON.stringify(this.stateManager.state.account.folder)).replace(/=/g, '\\=')}`);
-  currentFolder.classList.add('teal','lighten-2');
+  currentFolder.classList.add('amber','lighten-1','grey-text','text-darken-1');
 }
 
 
 MailPage.prototype.reload = async function (accountInfo){
-  document.querySelector('#compose-button').classList.add('disabled');
+  document.querySelector('#actions-button').classList.add('disabled');
   this.logger.log('Reloading mail messages...')
   this.renderMailPage(accountInfo);
 }
 
 
-MailPage.prototype.renderLogoutButton = function () {
+MailPage.prototype.renderComposeButton = function () {
   let html = `
-    <button class="btn waves-effect waves-light logout" name="logout" value="Logout">
-      <span class="material-icons" title="Logout">
-        power_settings_new
-      </span>
-    </button>
+    <a id='compose-button' class="btn-floating btn-large waves-effect waves-light amber lighten-1"><i id='icompose' class="material-icons">mode_edit</i></a>
   `;
-
   document.querySelector('.button-container').innerHTML = html;
 
-  // Add functionality to newly added 'Logout' button.
-  document.querySelector('.logout').addEventListener('click', (e) => {
+  document.querySelector('#compose-button').addEventListener('click', (e) => {
+    this.ipcRenderer.send('open', { file: 'composeWindow' });
+  });
+
+}
+
+
+MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
+  document.querySelector('#actions-button').classList.remove('disabled');
+
+  // Activate send mail button
+  let actionsButton = document.querySelector('.fixed-action-btn');
+  materialize.FloatingActionButton.init(actionsButton, {
+    direction: 'left'
+  });
+
+  // Activate reload button
+  document.querySelector('#refresh-button').addEventListener('click', () => {
+    this.reload(accountInfo);
+  });
+
+   // Add functionality to newly added 'Logout' button.
+   document.querySelector('#logout-button').addEventListener('click', (e) => {
     let connectionEnded = new Promise (resolve => {
       this.imapClient.client.end();
       resolve();
@@ -520,26 +579,6 @@ MailPage.prototype.renderLogoutButton = function () {
       // (it is waiting for the window.load event to apply style)
       dispatchEvent(new Event('load'));
     });
-  });
-}
-
-
-MailPage.prototype.addComposeButtonFunctionality = async function(accountInfo) {
-  document.querySelector('#compose-button').classList.remove('disabled');
-
-  // Activate send mail button
-  let composeButton = document.querySelector('.fixed-action-btn');
-  materialize.FloatingActionButton.init(composeButton, {
-    direction: 'left'
-  });
-
-  document.querySelector('#compose-button').addEventListener('click', (e) => {
-    this.ipcRenderer.send('open', { file: 'composeWindow' });
-  });
-
-  // Activate reload button
-  document.querySelector('#refresh-button').addEventListener('click', () => {
-    this.reload(accountInfo);
   });
 }
 
@@ -604,11 +643,13 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
             <label for="${mail.uid}"></label>
           </div>
           <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
-            <div class="subject">
-              <div class="subject-text">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}</div>
-            </div>
             <div class="sender">
-              <div class="sender-text">${Clean.escape((mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : `${mail.envelope.from[0].name} (${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host})`)}</div>
+              <div class="sender-text left-align">${Clean.escape(
+                (mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : 
+                `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`)}</div>
+            </div>
+            <div class="subject">
+              <div class="subject-text center-align">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}</div>
             </div>
             <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}</div>
           </div>
@@ -631,10 +672,12 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
           max-width: 100%;
           min-width: 100%;
           width: 100%;
+          border-radius : 3px;
         }
         .mail-item:hover {
           filter: brightness(90%);
         }
+      
         .mail-item label {
           padding-left: 1.7em;
         }
@@ -663,7 +706,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         .mail-item .text .sender {
           display: flex;
           align-items: center;
-          width: 25%;
+          width: 45%;
           height: 100%;
         }
         .mail-item .text .sender .sender-text {
@@ -671,12 +714,12 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
           width: 100%;
           text-overflow: ellipsis;
           white-space: nowrap;
-          overflow: hidden;
+          overflow: auto;
         }
         .mail-item .text .subject {
           display: flex;
           align-items: center;
-          width: 60%;
+          width: 45%;
           height: 100%;
         }
         .mail-item .text .subject .subject-text {
@@ -687,7 +730,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
           overflow: hidden;
         }
         .mail-item .text .date {
-          width: 15%;
+          width: 10%;
           float: right;
           position: relative;
           right: 25.25px;
@@ -709,8 +752,19 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
   // Get the email details when a user clicks on the email.
   if (mail.length > 0){
     let emailItems = document.querySelectorAll('.email-item');
-    for (let i=0; i<emailItems.length; i++){
+    for (let i=0; i < emailItems.length; i++){
       emailItems[i].addEventListener('click', (e) => {
+        /*
+          Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
+          the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
+          is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
+          then this means that the message is already seen from a previous session and is up to date.
+        */
+        emailItemText = e.target.shadowRoot.querySelector('.text');
+        if (emailItemText.classList.contains('unread')){
+          emailItemText.classList.remove('unread');
+          emailItemText.classList.add('read');
+        } 
         this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
       });
     }
@@ -808,7 +862,19 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) 
       return;
     }
   }
-
+  
+  // The user clicked on the email, so we can safely mark it as 'Seen' both to the server and to the local storage.
+  // uid and metadata.uid are in the format 'folderUID'
+    /*
+      If the message on the server is not flagged as 'Seen' then we flag it and update the local store
+      via 'updateMailByUid' (the mail body is not updated - it contains the flags too).
+      If the message on the server is flagged as 'Seen' then our local mail store is already up to date 
+      because of imapClient.checkFlags(). In other words we only need to update the local storage if this 
+      client is the first one to mark the message as seen.
+    */
+  let newFlag = '\\Seen';
+  let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
+  this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
   
   const app = this.app;
   let dirtyContent;
@@ -844,19 +910,22 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) 
   //let cleanContent = Clean.cleanHTML(dirtyContent);
   let cleanContent = dirtyContent; //allow images etc...
   selectedItemMessage.innerHTML = cleanContent;
-
 }
 
 
 MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
   let fetchedPromise = new Promise(async function(resolve,reject){
     try {
-      emailContent = await this.imapClient.getEmails(message.folder, true, false, message.seqno, 
+      emailContent = await this.imapClient.getEmails(message.folder, false, false, message.seqno, 
         {bodies: '', struct: true, envelope: true}, 
         async function (seqno, content, attributes) {
+          // The attributes.uid here is from the server so its not in the format 'folderUID'.
+          // The message.uid is in the format 'folderUID' since we got it from our local DB.
           let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
           await this.mailStore.saveMailBody(message.uid, compiledContent, accountInfo.user);
-          this.mailStore.updateEmailByUid(message.uid, { 'retrieved': true });
+          // Mark the mail body as retrived so that we dont fetch its body again with 
+          // 'MailPage.prototype.retrieveEmailBodies'.
+          this.mailStore.updateEmailByUid(message.uid, {'retrieved': true }, {flags : attributes.flags});
           this.logger.log(`Added ${accountInfo.user} : ${message.uid} to the file system.`);  
           resolve(); 
         }.bind(this)

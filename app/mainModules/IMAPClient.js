@@ -60,14 +60,27 @@ function IMAPClient(app, logger, utils, stateManager, accountManager, details) {
       resolve(this); 
     });
           
-    this.client.once('error', (err) => {
+    this.client.on('error', (err) => {
       this.logger.error('Connection state is : ' + this.client.state); // Connected - Not authenticated (the other states are disconnected, authenticated)
       reject(err);
     });
 
-    // this.client.on('mail' , () => {
-    //   console.log('new mail arrived')
-    // })
+    /*
+      Emitted when new mail arrives in the currently open mailbox.
+    */
+    this.client.on('mail' , (numNewMsgs) => {
+      console.log(`Number of new messages arrived: ${numNewMsgs}`);
+    })
+
+    /* 
+      Emitted when message metadata (e.g. flags) changes externally (eg. from another client).
+      (only for the mailbox that is currently open)
+    */
+    this.client.on('update', (seqno, info) => {
+      this.logger.info('CLIENT UPDATED')
+      this.logger.info(seqno);
+      this.logger.info(info);
+    })
 
     // Emitted when the connection has ended.
     // Typically 'end' is only emitted if the connection was torn down "properly" 
@@ -694,7 +707,7 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
 }
 
 
-IMAPClient.prototype.checkFlags = async function (path, readOnly, oldUidValidity, oldUidNext, highestlocalSeqNo, localMessageCount, localUIDsequence){
+IMAPClient.prototype.checkFlags = async function (path, readOnly){
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
  if (this.currentPath !== path) {  
   if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
@@ -708,23 +721,67 @@ IMAPClient.prototype.checkFlags = async function (path, readOnly, oldUidValidity
     }
   }
 
-  // let search = new Promise((resolve,reject) => {
-  //   this.client.search( [['UID','1:*']] , (error, UIDs) => {
-  //     if (error) reject(error);
-  //     this.mailbox.serverUidSequence = UIDs;
-  //     resolve(UIDs);
-  //   });
-  // })
+  let searchSeen = new Promise((resolve,reject) => {
+    this.client.search( ['SEEN'] , (error, UIDs) => {
+      if (error) reject(error);
+      resolve(UIDs);
+    });
+  });
+  let searchFlagged = new Promise((resolve,reject) => {
+    this.client.search( ['FLAGGED'] , (error, UIDs) => {
+      if (error) reject(error);
+      resolve(UIDs);
+    });
+  });
+  let searchDeleted = new Promise((resolve,reject) => {
+    this.client.search( ['DELETED'] , (error, UIDs) => {
+      if (error) reject(error);
+      resolve(UIDs);
+    });
+  });
 
-  // let serverUidSequence;
-  // try {
-  //   serverUidSequence = await search;
-  // } catch (error) {
-  //   this.logger.error(error);
-  //   return new Promise((resolve) => {
-  //     resolve('UpdateFirstTime');
-  //   });
-  // }
+  let seenMessages;
+  let flaggedMessages;
+  let deletedMessages;
+  let flagsResult = {};
+  try {
+    seenMessages = await searchSeen;
+    flaggedMessages = await searchFlagged;
+    deletedMessages = await searchDeleted;
+    flagsResult['seenMessages'] = seenMessages;
+    flagsResult['flaggedMessages'] = flaggedMessages;
+    flagsResult['deletedMessages'] = deletedMessages;
+    return new Promise((resolve) => {
+      resolve(flagsResult);
+    });
+  } catch (error) {
+    this.logger.error(error);
+    return new Promise((resolve) => {
+      reject(error);
+    });
+  }
+}
+
+IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags, newFlag){
+  // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
+  if (this.currentPath !== path) {  
+    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+      try {
+        this.mailbox = await this.openBox(path, readOnly);
+      } catch (error) {
+        this.logger.error(error);
+        return new Promise((resolve,reject) => {
+          reject(error);
+      });
+    }
+  }
+
+  if (! oldFlags.includes(newFlag)){
+  
+    await this.client.addFlagsAsync(this.utils.stripStringOfNonNumericValues(uid), newFlag);
+    oldFlags.push(newFlag);
+  }
+  return oldFlags;
 }
 
 

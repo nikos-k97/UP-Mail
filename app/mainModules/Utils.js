@@ -21,6 +21,10 @@ Utils.prototype.stringToHTML = function (str) {
 };
 
 
+Utils.prototype.stripStringOfNonNumericValues = function (str) {
+  return str.replace(/\D/g,'');
+}
+
 /**
  * Tests whether the setup has been completed.
  *
@@ -181,7 +185,7 @@ function isWithinAYear (date) {
 }
 
 Utils.prototype.alterDate = function (date) {
-  let messageTime = DateTime.fromISO(new Date(date).toISOString()).setLocale('el-gr');
+  let messageTime = DateTime.fromISO(new Date(date).toISOString()).setLocale('en-us');
   if (isToday(messageTime)) return messageTime.toFormat('hh:mm a');
   if (isWithinAWeek(messageTime)) return messageTime.toFormat('ccc hh:mm a');
   if (isWithinAMonth(messageTime)) return messageTime.toFormat('ccc dd/LL');
