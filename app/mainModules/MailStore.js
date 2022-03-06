@@ -171,14 +171,14 @@ MailStore.prototype.loadEmailBody = async function (uid, email) {
 // Delete all the email bodies (.json files in mail/emailHash directory) that are not relevant anymore.
 // (the emails we deleted from this.db need to have their bodies deleted too).
 
-MailStore.prototype.deleteEmailBodies = async function (email, uidsNotToDelete) {
+MailStore.prototype.deleteEmailBodies = async function (email, uidsNotToDelete, deleteFolder) {
   let usefulUids = [];
   uidsNotToDelete.forEach(uid => {
     uid['uid'] = this.utils.md5(uid['uid']);
     usefulUids.push(`${uid['uid']}`)
   });
   const hash = String(email).includes('@') ? this.utils.md5(email) : email;
-  const fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
+  let fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
   try {
     let allUids = fs.find(`.`, {files : false, directories : true});
     let uidsToDelete = Utils.findMissing(allUids, usefulUids);
@@ -188,6 +188,15 @@ MailStore.prototype.deleteEmailBodies = async function (email, uidsNotToDelete) 
     });
   } catch (error) {
     console.log(error);
+  }
+  // Also delete the folder that is named after the user's email hash (the folder that contains all the UID
+  // subfolders).)
+  if (deleteFolder){
+    fs = jetpack.cwd(this.app.getPath('userData'), `mail`);
+    let accountFolders = fs.find(`.`, {files : true, directories : true});
+    accountFolders.forEach(folder => {
+      fs.remove(`${folder}`);
+    });
   }
 }
 

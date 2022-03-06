@@ -46,4 +46,29 @@ Header.setLoc = function (parts) {
   document.querySelector('#title').innerHTML = html;
 }
 
+
+Header.showTLSBar = function (tls, serverName){
+  let tlsContainer = document.querySelector('.TLS-bar-container');
+  let tlsBar = document.querySelector('#TLS-bar');
+  tlsBar.classList.remove('hidden');
+  tlsContainer.classList.remove('hidden');
+  if (tls){
+    if (tlsBar.classList.contains("red")) tlsBar.classList.remove("red");
+    if (!tlsBar.classList.contains("green")) tlsBar.classList.add("green");
+    tlsBar.innerHTML = `Connected to server :&nbsp; <strong>${serverName}</strong>. Session is encrypted with TLS.`;
+  }
+  else {
+    if (tlsBar.classList.contains("green")) tlsBar.classList.remove("green");
+    if (!tlsBar.classList.contains("red")) tlsBar.classList.add("red");
+    tlsBar.innerHTML = `Connected to server :&nbsp; <strong>${serverName}</strong>. Session is not encrypted with TLS. `;
+  }
+}
+
+Header.hideTLSBar = function(){
+  let tlsBar = document.querySelector('#TLS-bar');
+  let tlsContainer = document.querySelector('.TLS-bar-container');
+  tlsBar.classList.add('hidden')
+  tlsContainer.classList.add('hidden')
+}
+
 module.exports = Header;

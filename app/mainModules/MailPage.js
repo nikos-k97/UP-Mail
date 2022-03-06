@@ -18,7 +18,6 @@ function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager
   this.accountManager = accountManager;
   this.mailStore = mailStore;
   //this.imapClient -> defined in 'initializeIMAP()'
-  //this.personalBoxesLinear -> defined in 'getFolderInfo()'
 }
 
 
@@ -38,6 +37,7 @@ MailPage.prototype.initializeIMAP = async function(accountInfo) {
     this.imapClient = await client;
     client = null;
     this.logger.info(`User : '${accountInfo.user}' successfully connected to IMAP server.`);
+
     return true;
   } catch (error) {
     // Revert back to 'new' state if the connection is not possible.
@@ -64,14 +64,21 @@ MailPage.prototype.checkIMAPStatus = async function (accountInfo) {
     //this.imapClient.client.end();
     this.imapClient = null;
     let initialized = await this.initializeIMAP(accountInfo);
-    if (initialized) return true;
-    else return false;
+    if (initialized) {
+      Header.showTLSBar(this.imapClient.client._sock.encrypted, this.imapClient.client._sock.servername);
+      return true;
+    }
+    else {
+      return false;
+    };
   }
   else return true;
 }
 
+// If this function is called from 'MailPage.reload()' then 'reloading' is true. If not its undefined.
+MailPage.prototype.renderMailPage = async function (reloading) {
+  let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
-MailPage.prototype.renderMailPage = function (accountInfo) {
   if (!this.utils.testLoaded('mailbox')){
     this.logger.warning('For some reason the setup is not completed. Redirecting to welcome page... ');
     this.imapClient = null;
@@ -86,7 +93,7 @@ MailPage.prototype.renderMailPage = function (accountInfo) {
     this.logger.debug('Mailbox page is now loading...');
     dispatchEvent(new Event('load'));
     Header.setLoc([accountInfo.user]);
-    
+    Header.showTLSBar(this.imapClient.client._sock.encrypted, this.imapClient.client._sock.servername, false);
     document.querySelector('#mail').innerHTML = `
       <span id="doing"></span> 
       <span id="number"></span><br>
@@ -95,12 +102,19 @@ MailPage.prototype.renderMailPage = function (accountInfo) {
 
     // Get the mailboxes info for the particular user (along with potential out of date folder info
     // from previous sessions).
-    this.getFolderInfo(accountInfo);
+    await this.getFolderInfo(accountInfo, reloading);
   } 
 }
 
 
-MailPage.prototype.getFolderInfo = async function(accountInfo){
+/*
+  We need the reloading variable (passed from 'MailPage.checkIMAPStatus') to determine how this function
+  was called. If it was because of a reload -> reloading = true. If reloading is true then we dont attach
+  new listeners for the mail and expunge events to the 'Connection' object (aka. this.imapClient.client).
+  Otherwise, each time we do a reload, there the 'Connection' object will have multiple mail and expunge events
+  handlers.
+*/
+MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   // Get namespaces - they may be used for fetching emails from other mailboxes using the necessary prefix and delimiter.
   let statusOK = await this.checkIMAPStatus(accountInfo);
   if ( !statusOK ) return;
@@ -204,7 +218,25 @@ MailPage.prototype.getFolderInfo = async function(accountInfo){
 
   // Get the necessary information from the IMAP server in order to render the email inside the folder 
   // that 'state.json' dictates.
-  this.getChosenFolderInfo(accountInfo, this.stateManager.state.account.folder);
+  await this.getChosenFolderInfo(this.stateManager.state.account.folder);
+
+  /*
+    We define the event listeners for the active mailbox here and not inside the 'getChosenFolderInfo'
+    function, otherwise we create another same listener each time we change folder.
+  */
+  if (!reloading){
+    // Listen for new mails in the active mailbox.
+    this.imapClient.client.on('mail', async (numNewMsgs) => {
+      this.logger.debug(`Number of new messages arrived: ${numNewMsgs}`);
+      await this.newMailReceived();
+    });
+    
+    // Listen for expunged mails in the active mailbox.
+    this.imapClient.client.on('expunge', async (deletedSeqNo) => {
+      this.logger.info(`Server message with seqno : '${deletedSeqNo}' was expunged externally.`);
+      await this.messageWasExpunged();
+    });
+  }
 }
 
 
@@ -305,7 +337,7 @@ MailPage.prototype.linkFolders = function (accountInfo, children) {
             otherFolders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
           }
           document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('amber','lighten-1','grey-text','text-darken-1');
-          this.getChosenFolderInfo(accountInfo, JSON.parse(atob(clickedElement.target.id)));                  
+          this.getChosenFolderInfo(JSON.parse(atob(clickedElement.target.id)));                  
         });
       }
       // Search for child folders.
@@ -333,7 +365,9 @@ MailPage.prototype.highlightFolder = function () {
 }
 
 
-MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolder) {
+MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
+  this.logger.debug(this.imapClient.client._events);
+
   document.querySelector('#mail').innerHTML = `
     <span id="doing"></span> 
     <span id="number"></span><br>
@@ -342,6 +376,8 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
 
   // Grab user emails only for the selected folder.
   document.querySelector('#doing').innerText = 'Grabbing your emails ...';
+
+  let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
   let personalFolders = accountInfo.personalFolders;
   let totalEmails = 0;
@@ -444,6 +480,7 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
               document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
             }.bind(this)
           );
+          highestSeqNo = highestSeqNo + 1;
         } catch (error) {
           this.logger.error(error);
           // Skip the emails fetch for this particular mailbox.
@@ -457,6 +494,7 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
         uidsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
         // We deleted the mails that were incorrectly stored locally. Now we need to fetch the new emails.
         // So we make the highestSeqNo = Number of locally stored emails prior to deletion - number of deleted emails
+        // We add 1 to prepare for the new mail that will come.
         highestSeqNo = (UIDSequence.length - uidsToDelete.length) + 1 ;
         let newUids = Utils.findMissing(serverUidSequence, UIDSequence);
         if (newUids.length !== 0) {
@@ -476,6 +514,7 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
             this.logger.error(error);
             return;
           }
+          highestSeqNo = highestSeqNo + 1;
         }
         break;
     }
@@ -485,7 +524,6 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
     // Skip the emails fetch for this particular mailbox.
     return;
   }
-
 
   // Check for flag changes since last login.
   statusOK = await this.checkIMAPStatus(accountInfo);
@@ -507,7 +545,6 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
         // Otherwise we mark it as seen.
         if (! email['flags'].includes('\\Seen')) {
           email['flags'].push('\\Seen');
-          console.log(email['flags'])
           this.mailStore.updateEmailByUid(email['uid'], {'flags' : email['flags']})
         }
       }
@@ -560,26 +597,27 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
   document.querySelector('#doing').innerText = 'Looking for threads ...';
   // threads : object containing arrays with parent messages. 
   // These arrays contain all the children that originated for each of the parents
-  let threads;
-  try {
-    threads = Threader.applyThreads(await this.mailStore.findEmails());
-  } catch (error) {
-    this.logger.error(error);
-    return;
-  }
+  // let threads;
+  // try {
+  //   threads = Threader.applyThreads(await this.mailStore.findEmails());
+  // } catch (error) {
+  //   this.logger.error(error);
+  //   return;
+  // }
 
-  for (let parentUid in threads) {
-    // Add a field 'threadMsg' to every email in the database that is a parent email.
-    // The 'threadMsg' field contains an array with the children of the email.
-    await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
-    // Add a 'isThreadChild' field to each children email.
-    // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
-    for (let i = 0; i < threads[parentUid].length; i++) {
-      await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
-    }
-  }
+  // for (let parentUid in threads) {
+  //   // Add a field 'threadMsg' to every email in the database that is a parent email.
+  //   // The 'threadMsg' field contains an array with the children of the email.
+  //   await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
+  //   // Add a 'isThreadChild' field to each children email.
+  //   // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
+  //   for (let i = 0; i < threads[parentUid].length; i++) {
+  //     await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
+  //   }
+  // }
   // Render email subject, sender and date for each email in the selected folder.
   this.render(accountInfo);
+
 }
 
 
@@ -587,7 +625,7 @@ MailPage.prototype.getChosenFolderInfo = async function(accountInfo, chosenFolde
 MailPage.prototype.reload = async function (accountInfo){
   document.querySelector('#actions-button').classList.add('disabled');
   this.logger.log('Reloading mail messages...')
-  this.renderMailPage(accountInfo);
+  this.renderMailPage(true); // 'reloading' = true
 }
 
 
@@ -624,9 +662,12 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
       this.imapClient.client.end();
       resolve();
     });
-    connectionEnded.then(() => {
+    connectionEnded.then( async () => {
+      await this.mailStore.deleteEmails();
+      await this.mailStore.deleteEmailBodies(accountInfo.user, [], true);
+      await this.accountManager.removeAccount(accountInfo.user);
       this.imapClient = null;
-      Header.setLoc('Login');
+      Header.hideTLSBar();
       this.stateManager.change('state', 'new');
       this.stateManager.checkUserState();
       // Re-emit window.load event so that the StateManager.style function can work properly.
@@ -652,178 +693,299 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     mailDiv.innerHTML = '';
   }
 
-  // Create <e-mail> tags equal to mailbox length.
+
   let html = "";
-  for (let i = 0; i < mail.length; i++) {
-    if (! mail[i].isThreadChild) {
-      html += `<e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>`; // data-uid 
+  if (mail.length === 0) {
+    html = 'This folder is empty.';
+    document.querySelector('#mail').innerHTML = html;
+  }
+  else {
+    // Create <e-mail> tags equal to mailbox length.
+    if (!page) html += `<e-mail class="email-item description"></e-mail>`; // For the menu - desciption
+    for (let i = 0; i < mail.length; i++) {
+      if (! mail[i].isThreadChild) {
+        html += `<e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>`; // data-uid 
+      }
     }
-  }
-  if (mail.length === 0) html = 'This folder is empty.';
-  if (await this.mailStore.countEmails(this.imapClient.compilePath(this.stateManager.state.account.folder)) > 100 * (page + 1)) {
-    html += `<button class='load-more'>Load more...</button>`;
-  }
-  document.querySelector('#mail').innerHTML = html;
+
+    if (await this.mailStore.countEmails(this.imapClient.compilePath(this.stateManager.state.account.folder)) > 100 * (page + 1)) {
+      html += `<button class='load-more'>Load more...</button>`;
+    }
+    document.querySelector('#mail').innerHTML = document.querySelector('#mail').innerHTML + html;
 
 
-  // Populate the <e-mail> tags with the mail content (header and title).
-  let emailCustomElements = document.getElementsByTagName('e-mail');
-  for (let i=0; i < emailCustomElements.length; i++){
-    let shadowRoot = emailCustomElements[i].shadowRoot;
-    
-    // Show loading message until mail has loaded.
-    shadowRoot.innerHTML = 'Loading...';
-
-                /*
-                ------------------------------ DATA ATTRIBUTES --------------------------------------------
-                Any attribute on any element whose attribute name starts with data- is a data attribute. 
-                Used to store some extra information that doesn't have any visual representation.
-                Reading the values of these attributes out in JavaScript is done by either:
-                - getting the property by the part of the attribute name after data- (dashes are converted to camelCase).
-                  example: <article id="electric-cars" data-columns="3" data-index-number="12314" </article>
-                            JS:       article.dataset.indexNumber // "12314"
-                - using getAttribute() with their full HTML name to read them.
-                --------------------------------------------------------------------------------------------
-                */
-
-    let email = emailCustomElements[i].getAttribute('data-email') || accountInfo.user;
-    let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
-    this.mailStore.loadEmail(uid).then((mail) => {
-      // NOTE: All of these *have* to be HTML escaped -> `Clean.escape(string)`.
-      shadowRoot.innerHTML = `
-        <div class="mail-item">
-          <div class="multi mail-checkbox">
-            <input type="checkbox" id="${mail.uid}">
-            <label for="${mail.uid}"></label>
-          </div>
-          <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
-            <div class="sender">
-              <div class="sender-text left-align">${Clean.escape(
-                (mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : 
-                `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`)}</div>
-            </div>
-            <div class="subject">
-              <div class="subject-text center-align">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}</div>
-            </div>
-            <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}</div>
-          </div>
-          <div id="message-holder"></div>
-        </div>
-        <style>
-        .read {
-          color: #A0A0A0;
-        }
-        
-        .unread {
-          font-weight: bolder;
-        }
-        
-        .mail-item {
-          cursor: pointer;
-          align-items: center;
-          padding: 2px 1rem 2px 1rem;
-          background-color: #FFF;
-          max-width: 100%;
-          min-width: 100%;
-          width: 100%;
-          border-radius : 3px;
-          border: 0.5px solid gray;
-        }
-        .mail-item:hover {
-          filter: brightness(90%);
-        }
+    // Populate the <e-mail> tags with the mail content (header and title).
+    let emailCustomElements = document.getElementsByTagName('e-mail');
+    for (let i=0; i < emailCustomElements.length; i++){
+      let shadowRoot = emailCustomElements[i].shadowRoot;
       
-        .mail-item label {
-          padding-left: 1.7em;
-        }
-        .mail-item .multi {
-          display: flex;
-          align-items: center;
-          display: inline-block;
-          height: 100%;
-          display: flex;
-          align-items: center;
-        }
-        .mail-item .star {
-          display: flex;
-          align-items: center;
-          display: inline-block;
-          height: 100%;
-        }
-        .mail-item .text {
-          display: flex;
-          align-items: center;
-          max-width: 100%;
-          min-width: 100%;
-          width: 100%;
-          height: 100%;
-        }
-        .mail-item .text .sender {
-          display: flex;
-          align-items: center;
-          width: 45%;
-          height: 100%;
-        }
-        .mail-item .text .sender .sender-text {
-          display: inline-block;
-          width: 90%;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          overflow: hidden;
-        }
-        .mail-item .text .subject {
-          display: flex;
-          align-items: center;
-          width: 45%;
-          height: 100%;
-        }
-        .mail-item .text .subject .subject-text {
-          display: inline-block;
-          width: 90%;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          overflow: hidden;
-          padding-left : 3px;
-        }
-        .mail-item .text .date {
-          width: 10%;
-          float: right;
-          position: relative;
-          right: 25.25px;
-          padding-left : 3px;
-        }
+      if (emailCustomElements[i].classList.contains('description') && !page){
+        shadowRoot.innerHTML = `
+          <div class="description-item">
+            <div class="text">
+              <div class="multi mail-checkbox">
+                <input type="checkbox" >
+                <label</label>
+              </div>
+              <div class="sender">
+                <div class="sender-text left-align">From</div>
+              </div>
+              <div class="subject">
+                <div class="subject-text center-align">Subject</div>
+              </div>
+              <div class="date right-align">Date</div>
+            </div>
+          </div>
+          <style>
+          .description-item {
+            display: flex;
+            align-items: center ;
+            padding: 2px 18px 2px 18px;
+            background-color: rgb(97,97,97) ; 
+            color : rgb(224, 224, 224) ;
+            max-width: 100% ;
+            min-width: 100% ;
+            min-height: 35px;
+            width: 100% ;
+            height : 100% ;
+            border-radius : 5px ;
+            border: 0.5px solid rgb(97,97,97) ;
+          }
+          
+          .description-item .multi {
+            width: 5%;
+            display: flex;
+            align-items: center;
+            height: 100%;
+          }
+
+          .description-item .text {
+            display: flex ;
+            align-items: center ;
+            max-width: 100% ;
+            min-width: 100% ;
+            width: 100% ;
+            height: 100% ;
+          }
+          .description-item .text .sender {
+            display: flex ;
+            align-items: center;
+            width: 40% ;
+            height: 100% ;
+          }
+          .description-item .text .sender .sender-text {
+            display: flex ;
+            width: 90% ;
+          }
+          .description-item .text .subject {
+            display: flex ;
+            align-items: center ;
+            width: 45% ;
+            height: 100% ;
+          }
+          .description-item .text .subject .subject-text {
+            display: flex ;
+            width: 90% ;
+            padding-left : 3px ;
+          }
+          .description-item .text .date {
+            width: 10% ;
+            display: flex ;
+            padding-left : 3px ;
+          }
+          
+          </style>
+        `;
+      }
+      else {
+        // Show loading message until mail has loaded.
+        shadowRoot.innerHTML = 'Loading...';
+
+        /*
+        ------------------------------ DATA ATTRIBUTES --------------------------------------------
+        Any attribute on any element whose attribute name starts with data- is a data attribute. 
+        Used to store some extra information that doesn't have any visual representation.
+        Reading the values of these attributes out in JavaScript is done by either:
+        - getting the property by the part of the attribute name after data- (dashes are converted to camelCase).
+          example: <article id="electric-cars" data-columns="3" data-index-number="12314" </article>
+                    JS:       article.dataset.indexNumber // "12314"
+        - using getAttribute() with their full HTML name to read them.
+        --------------------------------------------------------------------------------------------
+        */
+
+        let email = emailCustomElements[i].getAttribute('data-email') || accountInfo.user;
+        let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
+        this.mailStore.loadEmail(uid).then((mail) => {
+        // NOTE: All of these *have* to be HTML escaped -> `Clean.escape(string)`.
+        shadowRoot.innerHTML = `
+          <div class="mail-item">
+            <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
+              <div class="multi mail-checkbox">
+                <input type="checkbox" id="${mail.uid}">
+                <label for="${mail.uid}"></label>
+              </div>
+              <div class="sender">
+                <div class="sender-text left-align">${Clean.escape(
+                  (mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : 
+                  `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`)}
+                </div>
+              </div>
+              <div class="subject">
+                <div class="subject-text center-align">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}
+                </div>
+              </div>
+              <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}
+              </div>
+            </div>
+            <div id="message-holder"></div>
+          </div>
+
+          <style>
+            .read {
+              color: rgb(117, 117, 117);
+            }
+
+            .unread {
+              font-weight: bolder;
+            }
+
+            .mail-item {
+              cursor: pointer;
+              padding: 2px 18px 2px 18px;
+              background-color: #FFF;
+              max-width: 100%;
+              min-width: 100%;
+              width: 100%;
+              height: fit-content;
+              border-radius : 3px;
+              border: 0.5px solid rgb(224, 224, 224);
+            }
+    
+
+            .mail-item:hover {
+              filter: brightness(90%);
+            }
+  
+            .mail-item .multi {
+              width: 5%;
+              display: inline-block;
+              align-items: center;
+              height: 100%;
+            }
+
+            .mail-item .star {
+              display: flex;
+              align-items: center;
+              display: inline-block;
+              height: 100%;
+            }
+
+            .mail-item .text {
+              display: flex;
+              align-items: center;
+              max-width: 100%;
+              min-width: 100%;
+              width: 100%;
+              height: 100%;
+              min-height: 35px;
+            }
+
+            .mail-item .text .sender {
+              display: flex;
+              align-items: center;
+              width: 40%;
+              height: 100%;
+            }
+
+            .mail-item .text .sender .sender-text {
+              display: inline-block;
+              width: 90%;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              overflow: hidden;
+            }
+
+  
+            .mail-item .text .subject {
+              display: flex;
+              align-items: center;
+              width: 45%;
+              height: 100%;
+            }
+            .mail-item .text .subject .subject-text {
+              display: inline-block;
+              width: 90%;
+              text-overflow: ellipsis ;
+              white-space: nowrap;
+              overflow: hidden;
+              padding-left : 3px;
+            }
+
+            .mail-item .text .date {
+              width: 10%;
+              display: inline-block;
+              padding-left : 3px;
+              white-space: nowrap;
+              overflow : hidden;
+              text-overflow: ellipsis;
+            }
+
+            .selected-mail-item {
+              cursor: inherit;
+              filter: brightness(100%) !important;
+              align-items: center;
+              padding: 2px 18px 2px 18px;
+              max-width: 100%;
+              min-width: 100%;
+              width: 100%;
+              border-radius : 3px;
+              border: 1.5px solid rgb(255, 193, 7);
+              background-color: rgb(250, 250, 250)
+            }
+
+
+            .selected-mail-item .text {
+              cursor: default;
+              align-items: center;
+              font-weight: bolder;
+              max-width: 100%;
+              min-width: 100%;
+              width: 100%;
+              border-radius : 3px;
+            }
+
+            .padding {
         
-        .selected-mail-item {
-          cursor: inherit;
-          filter: brightness(100%) !important;
-        }
-        
-        .padding {
-          padding: 10px 10px 10px 10px;
-        }
-        </style>`;
-        
-    })
+              padding: 10px 10px 10px 10px;
+            }
+
+          </style>`;
+        })
+      }
+    }
   }
 
   // Get the email details when a user clicks on the email.
   if (mail.length > 0){
     let emailItems = document.querySelectorAll('.email-item');
     for (let i=0; i < emailItems.length; i++){
-      emailItems[i].addEventListener('click', (e) => {
-        /*
-          Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
-          the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
-          is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
-          then this means that the message is already seen from a previous session and is up to date.
-        */
-        emailItemText = e.target.shadowRoot.querySelector('.text');
-        if (emailItemText.classList.contains('unread')){
-          emailItemText.classList.remove('unread');
-          emailItemText.classList.add('read');
-        } 
-        this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
-      });
+      if (i !== 0){
+        emailItems[i].addEventListener('click', (e) => {
+          /*
+            Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
+            the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
+            is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
+            then this means that the message is already seen from a previous session and is up to date.
+          */
+          emailItemText = e.target.shadowRoot.querySelector('.text');
+          if (emailItemText.classList.contains('unread')){
+            emailItemText.classList.remove('unread');
+            emailItemText.classList.add('read');
+          } 
+          this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+        });
+      }
+      
     }
   }
 
@@ -837,9 +999,382 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
       loadMoreButton.remove();
     });
   }
-
-  //this.retrieveEmailBodies();
 }
+
+/*
+  For this function to run, it means the folder that the new Mail just arrived, has been opened
+  at least once in the current session, so we have the mailbox info from the server (UIDValidity etc)
+  However we need to check these values because there is a chance that UIDValidity changes during the 
+  current session, and the other values (UIDNext, MessageCount etc.) change too every time a new mail arrives.
+  The change in UIDValidity is handled by another function. -> 'MailPage.UIDValidityChanged()'
+  In the case that a message is deleted and and then a new message arrives , the deletion is handled by
+  the function 'MailPage.messageWasExpunged()', followed by the current function.
+*/
+// This function runs as many times as the new mails in the currently selected mailbox.
+MailPage.prototype.newMailReceived = async function (){
+  let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+  let statusOK = await this.checkIMAPStatus(accountInfo);
+  if ( !statusOK ) return;
+
+  let personalFolders = accountInfo.personalFolders;
+  let path = this.imapClient.compilePath(this.stateManager.state.account.folder);  
+  let objectPath = IMAPClient.compileObjectPath(this.stateManager.state.account.folder); 
+  // This is the folder info got from 'MailPage.getChosenFolderInfo()' , in other words the updated info
+  // from the IMAP server. However for each new mail that the current mailbox receives, we need to also
+  // update the local store.
+  let folderInfo = _.get(personalFolders, objectPath);
+
+  // Get information from the current session (before the new mail was received).
+  let highestSeqNo = folderInfo.highestSeqNo;
+  let storedMessageCount = folderInfo.messageCount;
+  let storedUIDSequence = folderInfo.UIDSequence;
+
+  this.logger.info(`Highest seqno from the local store : ${highestSeqNo}`);
+  this.logger.info(`Message count from the local store : ${storedMessageCount}`);
+  this.logger.info(`Highest seqno from the server : ${this.imapClient.mailbox.messages.total}`);
+  this.logger.info(`Message count from the server : ${this.imapClient.mailbox.messages.total}`);
+  this.logger.info(`Server has : ${this.imapClient.mailbox.messages.new} new messages.`);
+
+
+  let checkPassed = false;
+  /*
+    Check if the message count in the server is indeed higher than the locally stored one.
+    If it's not, then a possible case is that an email was expunged externally and it was not
+    observed by 'MailPage.messageWasExpunged()'. Also check that the new messages in the mailbox
+    (in the server side) is indeed > 0. If they are not, then no new mails arrived, we just somehow
+    got the new mail event, and for some reason the locally stored message count < server's message count.
+    Also check the UIDNext (must be higher than the stored value) and the UIDValidity (must be same).
+    In both cases we do nothing. The new mails will arrive when the mailbox is reloaded.
+  */
+
+  if (this.imapClient.mailbox.messages.total > storedMessageCount && this.imapClient.mailbox.messages.new > 0){
+      checkPassed = true;
+  }
+
+  if ( !checkPassed ) return;
+
+  // Fetch the new mail.
+  let uid ; // Will have the format 'folderUID'
+  let pureUid; // Just the number.
+  try {
+    await this.imapClient.getEmails(path, true, false, highestSeqNo, 
+      {
+        bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
+        envelope: true
+      }, 
+      async function onLoad(seqno, msg, attributes) {  
+        if (storedUIDSequence.includes(attributes.uid)) return ;
+        await this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path);
+        this.logger.info(`Saved email with ${attributes.uid} to mailstore`)
+        if (seqno > highestSeqNo) highestSeqNo = seqno;
+        this.logger.info(`Was highest seqno incremented again? -> ${highestSeqNo}`)
+        pureUid = attributes.uid;
+        uid = `${path}${attributes.uid}`;
+      }.bind(this)
+    );
+  } catch (error) {
+    this.logger.error(error);
+    return;
+  }
+
+  if (!uid) return;
+
+  /*
+    The mailStore is already updated when we fetched the new mail. The 'personalFolders' field in the 
+    accounts.db needs to also be updated with the new UIDNext, messageCount, highestseqNo and 
+    UIDsequence array. 
+  */
+  // We know that the server's UIDsequence array and the locally store UIDsequence array are the same.
+  // So we just push the new UID to the local array.
+  // Prepare the hightestseqno for the new mail
+  storedMessageCount = this.imapClient.mailbox.messages.total;
+  storedUIDSequence.push(pureUid);
+  // Prepare the highestseqno for new emails.
+  highestSeqNo = highestSeqNo + 1;
+
+  this.logger.info(`Highest seqno from the local store after finish: ${highestSeqNo}`);
+  this.logger.info(`Message count from the local store after finish: ${storedMessageCount}`);
+  this.logger.info(`Highest seqno from the server after finish: ${this.imapClient.mailbox.messages.total}`);
+  this.logger.info(`Message count from the server after finish : ${this.imapClient.mailbox.messages.total}`);
+  this.logger.info(`Server has : ${this.imapClient.mailbox.messages.new} new messages after finish.`);
+
+
+  // No need to check for flagInformation, since the email is new and we just got it. So the account.db's 
+  // 'personalFolders.flagInformation' attribute has not changed.
+
+  _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
+  _.set(personalFolders, objectPath.concat(['UIDSequence']), storedUIDSequence);
+  _.set(personalFolders, objectPath.concat(['messageCount']), storedMessageCount);
+  
+  try {
+    // Reload box to get the new uidnext
+    await this.imapClient.reloadBox(path,false);
+  } catch (error) {
+    this.logger.error(error);
+    return;
+  }
+  let boxKeys = Object.keys(this.imapClient.mailbox);
+  for (let j = 0; j < boxKeys.length; j++) {
+    _.set(personalFolders, objectPath.concat([boxKeys[j]]), this.imapClient.mailbox[boxKeys[j]]);
+  }
+  
+  // Save all the folders data in the accounts database.
+  await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
+  
+  // Get the new info that we just stored in the accounts database.
+  accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+  
+  // Look for threads.
+  // threads : object containing arrays with parent messages. 
+  // These arrays contain all the children that originated for each of the parents
+  // let threads;
+  // try {
+  //   threads = Threader.applyThreads(await this.mailStore.findEmails());
+  // } catch (error) {
+  //   this.logger.error(error);
+  //   return;
+  // }
+  
+  // for (let parentUid in threads) {
+  //   // Add a field 'threadMsg' to every email in the database that is a parent email.
+  //   // The 'threadMsg' field contains an array with the children of the email.
+  //   await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
+  //   // Add a 'isThreadChild' field to each children email.
+  //   // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
+  //   for (let i = 0; i < threads[parentUid].length; i++) {
+  //     await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
+  //   }
+  // }
+
+  // Insert new mail node just beneath the description node. (The new mail must appear first in the mailbox).
+  let html = '';
+  html += `<e-mail class="email-item new" data-uid="${escape(uid)}"></e-mail>`; // data-uid 
+  document.querySelector('.description').insertAdjacentHTML("afterend", html);
+
+  let newEmailTag = document.querySelector('.new');
+  let shadowRoot = newEmailTag.shadowRoot;
+  console.log(uid)
+  uid = unescape(newEmailTag.getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
+  await this.mailStore.loadEmail(uid).then((mail) => {
+  // NOTE: All of these *have* to be HTML escaped -> `Clean.escape(string)`.
+    shadowRoot.innerHTML = `
+        <div class="mail-item">
+        <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
+          <div class="multi mail-checkbox">
+            <input type="checkbox" id="${mail.uid}">
+            <label for="${mail.uid}"></label>
+          </div>
+          <div class="sender">
+            <div class="sender-text left-align">${Clean.escape(
+              (mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : 
+              `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`)}
+            </div>
+          </div>
+          <div class="subject">
+            <div class="subject-text center-align">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}
+            </div>
+          </div>
+          <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}
+          </div>
+        </div>
+        <div id="message-holder"></div>
+      </div>
+
+      <style>
+        .read {
+          color: rgb(117, 117, 117);
+        }
+
+        .unread {
+          font-weight: bolder;
+        }
+
+        .mail-item {
+          cursor: pointer;
+          padding: 2px 18px 2px 18px;
+          background-color: #FFF;
+          max-width: 100%;
+          min-width: 100%;
+          width: 100%;
+          height: fit-content;
+          border-radius : 3px;
+          border: 0.5px solid rgb(224, 224, 224);
+        }
+
+
+        .mail-item:hover {
+          filter: brightness(90%);
+        }
+
+        .mail-item .multi {
+          width: 5%;
+          display: inline-block;
+          align-items: center;
+          height: 100%;
+        }
+
+        .mail-item .star {
+          display: flex;
+          align-items: center;
+          display: inline-block;
+          height: 100%;
+        }
+
+        .mail-item .text {
+          display: flex;
+          align-items: center;
+          max-width: 100%;
+          min-width: 100%;
+          width: 100%;
+          height: 100%;
+          min-height: 35px;
+        }
+
+        .mail-item .text .sender {
+          display: flex;
+          align-items: center;
+          width: 40%;
+          height: 100%;
+        }
+
+        .mail-item .text .sender .sender-text {
+          display: inline-block;
+          width: 90%;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+
+
+        .mail-item .text .subject {
+          display: flex;
+          align-items: center;
+          width: 45%;
+          height: 100%;
+        }
+        .mail-item .text .subject .subject-text {
+          display: inline-block;
+          width: 90%;
+          text-overflow: ellipsis ;
+          white-space: nowrap;
+          overflow: hidden;
+          padding-left : 3px;
+        }
+
+        .mail-item .text .date {
+          width: 10%;
+          display: inline-block;
+          padding-left : 3px;
+          white-space: nowrap;
+          overflow : hidden;
+          text-overflow: ellipsis;
+        }
+
+        .selected-mail-item {
+          cursor: inherit;
+          filter: brightness(100%) !important;
+          align-items: center;
+          padding: 2px 18px 2px 18px;
+          max-width: 100%;
+          min-width: 100%;
+          width: 100%;
+          border-radius : 3px;
+          border: 1.5px solid rgb(255, 193, 7);
+          background-color: rgb(250, 250, 250)
+        }
+
+
+        .selected-mail-item .text {
+          cursor: default;
+          align-items: center;
+          font-weight: bolder;
+          max-width: 100%;
+          min-width: 100%;
+          width: 100%;
+          border-radius : 3px;
+        }
+
+        .padding {
+
+          padding: 10px 10px 10px 10px;
+        }
+
+      </style>`;
+    });
+
+
+    // The new mail tag has no event listener. Add one.
+    newEmailTag.addEventListener('click', (e) => {
+      /*
+        Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
+        the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
+        is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
+        then this means that the message is already seen from a previous session and is up to date.
+      */
+      emailItemText = e.target.shadowRoot.querySelector('.text');
+      if (emailItemText.classList.contains('unread')){
+        emailItemText.classList.remove('unread');
+        emailItemText.classList.add('read');
+      } 
+      this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+    });
+}
+
+
+/*
+  This function is run when a change in UIDValidity of the current mailbox is observed during the current
+  session. It means that the user has not refreshed the mailbox yet, and has not changed folder. If the user
+  changes the folder , the function 'MailPage.getChosenFolderInfo()' also detects the change in UIDValidity
+  so this function is not used in this case.
+*/
+MailPage.prototype.UIDValidityChanged = async function(){
+
+}
+
+/*
+  This function is run when an external message deletion (EXPUNGE) is observed.
+*/
+MailPage.prototype.messageWasExpunged = async function(){
+  let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+  let statusOK = await this.checkIMAPStatus(accountInfo);
+  if ( !statusOK ) return;
+
+  let personalFolders = accountInfo.personalFolders;
+  let path = this.imapClient.compilePath(this.stateManager.state.account.folder);  
+  let objectPath = IMAPClient.compileObjectPath(this.stateManager.state.account.folder); 
+
+  let folderInfo = _.get(personalFolders, objectPath);
+
+  // Get information from the current session (before the new mail was received).
+  let highestSeqNo = folderInfo.highestSeqNo;
+  let storedMessageCount = folderInfo.messageCount;
+  let storedUIDSequence = folderInfo.UIDSequence;
+
+  this.logger.info(`Highest seqno from the local store : ${highestSeqNo}`);
+  this.logger.info(`Message count from the local store : ${storedMessageCount}`);
+  this.logger.info(`Highest seqno from the server : ${this.imapClient.mailbox.messages.total}`);
+  this.logger.info(`Message count from the server : ${this.imapClient.mailbox.messages.total}`);
+
+  let checkPassed = false;
+  /*
+    Check if the message count in the server is indeed higher than the locally stored one.
+    If it's not, then a possible case is that an email was expunged externally and it was not
+    observed by 'MailPage.messageWasExpunged()'. Also check that the new messages in the mailbox
+    (in the server side) is indeed > 0. If they are not, then no new mails arrived, we just somehow
+    got the new mail event, and for some reason the locally stored message count < server's message count.
+    Also check the UIDNext (must be higher than the stored value) and the UIDValidity (must be same).
+    In both cases we do nothing. The new mails will arrive when the mailbox is reloaded.
+  */
+
+  if (this.imapClient.mailbox.messages.total < storedMessageCount){
+      checkPassed = true;
+  }
+
+  if ( !checkPassed ) return;
+
+
+}
+
 
 MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) {
   let number = childNumber || 0;

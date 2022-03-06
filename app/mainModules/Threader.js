@@ -7,6 +7,7 @@ function Threader () {}
  * @return {array}           [An array of threads found within the messages array]
  */
 Threader.applyThreads = (messages) => {
+  console.log(messages)
   let messageThreads = {};
   for (let i = 0; i < messages.length; i++) {
     /*
@@ -28,7 +29,9 @@ Threader.applyThreads = (messages) => {
         inReplyTo: messages[i].envelope.inReplyTo || undefined // Is the message-id of the message this message is replying to
       };
     }
+
   }
+  console.log(messageThreads)
   return Threader.generateReplyMap(messageThreads);
 }
 

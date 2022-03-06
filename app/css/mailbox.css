@@ -59,9 +59,17 @@ body {
 }
 
 #mail {
-  margin-left: 50px;
-  margin-right: 50px;
+  margin-left: 40px;
+  margin-right: 75px;
 }
+
+
+
+
+.padding {
+  padding: 10px 10px 10px 10px;
+}
+
 
 .sidebar {
   font-size: medium !important;

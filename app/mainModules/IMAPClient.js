@@ -65,13 +65,6 @@ function IMAPClient(app, logger, utils, stateManager, accountManager, details) {
       reject(err);
     });
 
-    /*
-      Emitted when new mail arrives in the currently open mailbox.
-    */
-    this.client.on('mail' , (numNewMsgs) => {
-      console.log(`Number of new messages arrived: ${numNewMsgs}`);
-    })
-
     /* 
       Emitted when message metadata (e.g. flags) changes externally (eg. from another client).
       (only for the mailbox that is currently open)
@@ -761,6 +754,20 @@ IMAPClient.prototype.checkFlags = async function (path, readOnly){
     });
   }
 }
+
+
+IMAPClient.prototype.reloadBox = async function(path,readOnly){
+  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+    try {
+      this.mailbox = await this.openBox(path, readOnly);
+    } catch (error) {
+      this.logger.error(error);
+      return new Promise((resolve,reject) => {
+        reject(error);
+    });
+  }
+}
+
 
 IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags, newFlag){
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).

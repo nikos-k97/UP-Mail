@@ -80,6 +80,9 @@ StateManager.prototype.setup = async function (loginInfo) {
   if (emailsFound.length === 0 && loginInfo.personalFolders !== undefined){
     // The accounts database has folder information (uidvalidity etc) from a previous session, but the 
     // email database is empty, so we revert back to 'new'. 
+    await this.mailStore.deleteEmails();
+    await this.mailStore.deleteEmailBodies(loginInfo.user, [], true);
+    await this.accountManager.removeAccount(loginInfo.user);
     this.change('state', 'new');
     this.checkUserState();
     // Re-emit window.load event so that the StateManager.style function can work properly.
@@ -115,7 +118,7 @@ StateManager.prototype.setup = async function (loginInfo) {
       (The old cycle is terminated when it reaches stateManager.setup() after the renderMailPage call, after
       which no more methods are called).
     */
-    if (initialized) this.mailPage.renderMailPage(loginInfo);
+    if (initialized) this.mailPage.renderMailPage();
   }
 }
 

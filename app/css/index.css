@@ -6793,7 +6793,7 @@ header h1 {
   width: 100vw;
  }
 
- #settings-bar {
+ #amber-bar {
   z-index: 1000;
   -webkit-app-region: drag;
   height: 3px;
@@ -6804,12 +6804,37 @@ header h1 {
   width: 100vw;
  }
 
+.TLS-bar-container {
+  display: flex;
+  justify-content:space-around;
+  align-content: center;
+}
+
+ #TLS-bar {
+  display: flex;
+  justify-self: center + 30px;
+  align-items: center;
+  -webkit-app-region: drag;
+  height: 25px;
+  padding-right: 5px;
+  padding-left: 5px;
+  margin: 0px;
+  position: fixed;
+  top: 33px;
+  width: fit-content;
+  border-radius: 8px;
+ }
+
 #title {
   z-index: 1001;
   position: fixed;
   top: 0px;
   left: 6px; 
  }
+
+.hidden {
+  display: none;
+}
 
 #title-bar-btns {
   z-index: 1002;

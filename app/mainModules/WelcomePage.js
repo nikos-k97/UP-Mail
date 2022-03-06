@@ -14,6 +14,7 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
 	this.stateManager.page('welcome', ['basic','welcome']);
 	this.logger.debug('Loading up the welcome page ...');
 
+  Header.hideTLSBar();
   Header.setLoc('Login');
   materialize.CharacterCounter.init(document.querySelector('#outgoing_name'));
   materialize.FormSelect.init(document.querySelectorAll('select'));

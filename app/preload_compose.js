@@ -51,7 +51,7 @@ contextBridge.exposeInMainWorld(
             document.querySelector('#content').innerHTML = appDir.read(`./app/html/mailForm.html`);
         },
         formatFormSelectElement : async () => {
-            let account = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.emailAddress);
+            let account = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
             let option = document.createElement('option');
             option.setAttribute('value', account._id);
             option.setAttribute('selected', true); //Don't allow user to specify a fake name.
