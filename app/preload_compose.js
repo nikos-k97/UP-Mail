@@ -88,7 +88,7 @@ contextBridge.exposeInMainWorld(
                 }
             }));
 
-            document.querySelector('#send').addEventListener('click', (e) => {
+            document.querySelector('#send').addEventListener('click', async (e) => {
                 // Prevent form POST HTTP behaviour.
                 e.preventDefault();
                 
@@ -117,7 +117,7 @@ contextBridge.exposeInMainWorld(
                         materialize.toast({html: 'Sending message ...', displayLength : 3000 ,classes: 'rounded'});
                         // Disable the button again after pressing send.
                         document.querySelector('#send').disabled = true;
-                        let sent = smtpClient.queueMailForSend(message);
+                        let sent = await smtpClient.queueMailForSend(message);
                         if (!sent) {
                             // Reenable the send button since message was not sent.
                             materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
@@ -126,7 +126,7 @@ contextBridge.exposeInMainWorld(
                         else materialize.toast({html: 'Message sent!', displayLength : 3000 ,classes: 'rounded'});
                     }
                     else {
-                        document.querySelector('.toast-no-subject').addEventListener('click' , (e) => {
+                        document.querySelector('.toast-no-subject').addEventListener('click' , async (e) => {
                             materialize.Toast.getInstance(document.querySelector('.toast')).dismiss();
                             let message = {
                                 from: form.elements['from'].value,
@@ -138,7 +138,7 @@ contextBridge.exposeInMainWorld(
                             materialize.toast({html: 'Sending message ...', displayLength : 3000 ,classes: 'rounded'});
                             // Disable the button again after pressing send.
                              document.querySelector('#send').disabled = true;
-                            let sent = smtpClient.queueMailForSend(message);
+                            let sent = await smtpClient.queueMailForSend(message);
                             if (!sent) {
                                 materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
                                 // Reenable the send button since message was not sent.

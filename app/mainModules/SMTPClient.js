@@ -30,11 +30,14 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
       text: message.message, // plain text body
       html: message.message // html body
     };
-    console.log(mailOptions);
-    
-    const messageSent = this.send(accountDetails, mailOptions);
-    if (messageSent) return true;
-    else return false;
+
+    try {
+      const messageSent = await this.send(accountDetails, mailOptions);
+      return true;
+    } catch (error) {
+      this.logger.error(error);
+      return false;
+    }
   }
   else return false;
 };
@@ -94,13 +97,17 @@ SMTPClient.prototype.verifyServerConnection = async function (account){
 
 SMTPClient.prototype.send = async function (account, mailMessage){
     // Send mail with the reusable transport object.
-    this.transporters[account.user].sendMail(mailMessage, (error, info) => {
-      if (error) {
-        return this.logger.error(error);
-      }
-      this.logger.log(`Message ${info.messageId} sent: ${info.response}`);
-      return true;
-    });
+    return new Promise((resolve,reject) => {
+      this.transporters[account.user].sendMail(mailMessage, (error, info) => {
+        if (error) {
+          return this.logger.error(error);
+          reject(error);
+        }
+        this.logger.log(`Message ${info.messageId} sent: ${info.response}`);
+        resolve(info.response);
+      });
+    })
+
 };
 
 module.exports = SMTPClient;

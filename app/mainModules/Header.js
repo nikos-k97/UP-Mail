@@ -54,11 +54,11 @@ Header.showTLSBar = function (tls, serverName){
   tlsContainer.classList.remove('hidden');
   if (tls){
     if (tlsBar.classList.contains("red")) tlsBar.classList.remove("red");
-    if (!tlsBar.classList.contains("green")) tlsBar.classList.add("green");
+    if (!tlsBar.classList.contains("yellow")) tlsBar.classList.add("yellow");
     tlsBar.innerHTML = `Connected to server :&nbsp; <strong>${serverName}</strong>. Session is encrypted with TLS.`;
   }
   else {
-    if (tlsBar.classList.contains("green")) tlsBar.classList.remove("green");
+    if (tlsBar.classList.contains("yellow")) tlsBar.classList.remove("yellow");
     if (!tlsBar.classList.contains("red")) tlsBar.classList.add("red");
     tlsBar.innerHTML = `Connected to server :&nbsp; <strong>${serverName}</strong>. Session is not encrypted with TLS. `;
   }

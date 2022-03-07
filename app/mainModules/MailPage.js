@@ -238,6 +238,13 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
       this.logger.info(`Server message with seqno : '${deletedSeqNo}' was expunged externally.`);
       await this.messageWasExpunged();
     });
+
+    // Listen for UIDValidity change in the active mailbox. This should never happen. 
+    this.imapClient.client.on('uidvalidity', async (uidvalidity) => {
+      this.logger.info(`UIDValidity value for the current mailbox changed from: ${this.imapClient.mailbox.uidvalidity} to: ${uidvalidity}`);
+      this.logger.info(`Reloading all the folder data...`);
+      await this.UIDValidityChanged();
+    });
   }
 }
 
@@ -322,7 +329,6 @@ MailPage.prototype.generateFolderList = async function (email, folders, journey)
 MailPage.prototype.linkFolders = function (accountInfo, children) {
   // Children are all the (inside - second level) div elements 
   // with id either the (base64) email hash or the (base64) folder path.
-  console.log(children)
   children.forEach( 
     (element) => {
       // Replace every '=' in the div id with the escaped '\='.
@@ -370,8 +376,8 @@ MailPage.prototype.highlightFolder = function () {
   for (let i=0; i< folders.length; i++){
     folders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
   }
-  //CSS.escape(btoa(JSON.stringify(this.stateManager.state.account.folder)))
   
+  //CSS.escape(btoa(JSON.stringify(this.stateManager.state.account.folder)))
   let currentFolder = document.querySelector(`#${CSS.escape(btoa(unescape(encodeURIComponent(JSON.stringify(this.stateManager.state.account.folder)))))}`);
   currentFolder.classList.add('amber','lighten-1','grey-text','text-darken-1');
 }
@@ -536,6 +542,10 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
     // Skip the emails fetch for this particular mailbox.
     return;
   }
+
+  this.logger.info(`Highest Local SeqNo after switch: ${highestSeqNo}`);
+  this.logger.info(`Highest Server SeqNo after switch: ${this.imapClient.mailbox.messages.total}`);
+  
 
   // Check for flag changes since last login.
   statusOK = await this.checkIMAPStatus(accountInfo);
@@ -820,9 +830,10 @@ MailPage.prototype.newMailReceived = async function (){
   let folderInfo = _.get(personalFolders, objectPath);
 
   // Get information from the current session (before the new mail was received).
-  let highestSeqNo = folderInfo.highestSeqNo;
-  let storedMessageCount = folderInfo.messageCount;
-  let storedUIDSequence = folderInfo.UIDSequence;
+  let highestSeqNo = folderInfo.highestSeqNo || 1;
+  let storedMessageCount = folderInfo.messageCount || 0;
+  let storedUIDSequence = folderInfo.UIDSequence || [];
+
 
   this.logger.info(`Highest seqno from the local store : ${highestSeqNo}`);
   this.logger.info(`Message count from the local store : ${storedMessageCount}`);
@@ -858,6 +869,7 @@ MailPage.prototype.newMailReceived = async function (){
         envelope: true
       }, 
       async function onLoad(seqno, msg, attributes) {  
+        // If the UID is already present we dont fetch it again.
         if (storedUIDSequence.includes(attributes.uid)) return ;
         await this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path);
         this.logger.info(`Saved email with ${attributes.uid} to mailstore`)
@@ -872,7 +884,17 @@ MailPage.prototype.newMailReceived = async function (){
     return;
   }
 
-  if (!uid) return;
+  // UID is undefined since we didnt fetch any emails (the mail was already in the DB)
+  // If multiple mail come at the same time, there might be some problems with the highestSeqNo (local < server)
+  // even after reloading the mailbox via clicking the folder again. 
+  // So we increment the highestSeqNo and call this function again until there is no problem.
+  if (!uid){
+    this.logger.info('Uid was not found.');
+    _.set(personalFolders, objectPath.concat(['highestSeqNo']), ++highestSeqNo);
+    await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
+    this.newMailReceived();
+    return;
+  } 
 
   /*
     The mailStore is already updated when we fetched the new mail. The 'personalFolders' field in the 
@@ -944,11 +966,22 @@ MailPage.prototype.newMailReceived = async function (){
   // Insert new mail node just beneath the description node. (The new mail must appear first in the mailbox).
   let html = '';
   html += `<e-mail class="email-item new" data-uid="${escape(uid)}"></e-mail>`; // data-uid 
-  document.querySelector('.description').insertAdjacentHTML("afterend", html);
+  let description = document.querySelector('.description');
+
+  if (description) {
+    description.insertAdjacentHTML("afterend", html);
+  }
+  // This means that the folder was empty and this is the first email to come so the description item is not there yet.
+  else {
+    document.querySelector('#mail').innerHTML = `<e-mail class="email-item description"></e-mail>`;
+    description = document.querySelector('.description');
+    let shadow = description.shadowRoot;
+    shadow.innerHTML = this.utils.createDescriptionItem();
+    description.insertAdjacentHTML("afterend", html);
+  }
 
   let newEmailTag = document.querySelector('.new');
   let shadowRoot = newEmailTag.shadowRoot;
-  console.log(uid)
   uid = unescape(newEmailTag.getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
   
   await this.mailStore.loadEmail(uid).then((mail) => {
@@ -981,7 +1014,8 @@ MailPage.prototype.newMailReceived = async function (){
   so this function is not used in this case.
 */
 MailPage.prototype.UIDValidityChanged = async function(){
-
+  this.getChosenFolderInfo(this.stateManager.state.account.folder);
+  return;
 }
 
 /*

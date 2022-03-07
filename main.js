@@ -76,7 +76,7 @@ function openWindow (file) {
             show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
             webPreferences: {
                 preload: path.join(__dirname, "/app/preload_app.js"), // use a preload script - safely get and set file system and 
-                                                                  // operating system values on behalf of the browser window.
+                                                                      // operating system values on behalf of the browser window.
                 sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
                                 // (only in conjunction with preload script - otherwise only IPC messages are permitted)
                 contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /

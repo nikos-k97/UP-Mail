@@ -1,24 +1,22 @@
 <!DOCTYPE html>
-<div class="wrapper" style="width: 100%">
+<div class="wrapper">
   <div class="row">
-    <div class="col m12 overflow">
-      <div >
+    <div class="col s10 mainarea overflow">
+      <div>
         <div id="mail">
-          <form id='send-mail-form' class="col s12">
-            <div class="form-field input-field col s12">
+          <form id='send-mail-form' >
+            <div class="form-field input-field">
               <label for="from">From: </label>
               <select id="from" name='from'> 
               </select>
             </div>
-            <div class="form-field input-field col s11">
+            <div class="form-field input-field ">
               <label for='to'>To: </label>
               <input type="email" name="to" id="to" autocomplete="off">
               <small></small>
             </div>
-            <button class=" btn waves-effect waves-light" id="addTo">
-              <i class="material-icons right">send</i>
-            </button>
-            <div class="form-field input-field col s12">
+
+            <div class="form-field input-field">
               <label for='subject'>Subject: </label>
               <input type="text" name="subject" id="subject" autocomplete="off">
               <small></small>
@@ -44,6 +42,8 @@
           </form>
         </div>
       </div>
+    </div>
+    <div class="col s2 sidebar overflow">
     </div>
   </div>
 </div>
