@@ -36,7 +36,31 @@
         "requiretls" : "yes"
       }
     }
+  },
+
+  "gmail.com": {
+    "smtp": {
+      "tls": {
+        "host": "smtp.gmail.com",
+        "port": "465",
+        "requiretls" : "yes"
+      },
+      "startls" : {
+        "host": "smtp.gmail.com",
+        "port": "587",
+        "requiretls" : "yes"
+      }
+    },
+    "imap": {
+      "tls": {
+        "host": "imap.gmail.com",
+        "port": "993",
+        "requiretls" : "yes"
+      }
+    }
   }
+
+
 
   
 }

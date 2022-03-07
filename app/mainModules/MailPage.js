@@ -120,16 +120,18 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   if ( !statusOK ) return;
   let namespaces = await this.imapClient.fetchNamespaces();
   this.logger.debug(`Number of available namespaces that probably contain mailboxes : ${namespaces.prefix.length}`);
-
+ 
   // Get mailboxes / folders of all namespaces.
   statusOK = await this.checkIMAPStatus(accountInfo);
   if ( !statusOK ) return;
   document.querySelector('#doing').innerText = 'Grabbing your mailboxes ...';
   let personalBoxes = {};
   // ...
+  
   for (let i=0 ; i < namespaces.prefix.length; i++){
+    let boxes = JSON.parse(JSON.stringify(await this.imapClient.getBoxes(namespaces.prefix[i]),this.utils.getCircularReplacer()));
     if (namespaces.type[i] === 'personal'){
-      personalBoxes = merge(personalBoxes, await this.imapClient.getBoxes(namespaces.prefix[i]));
+      personalBoxes = merge(personalBoxes, boxes);
     }
   }
 
@@ -284,6 +286,7 @@ MailPage.prototype.renderFolderStructure = async function(accountInfo){
 
 
 MailPage.prototype.generateFolderList = async function (email, folders, journey) {
+
   let html = '';
   if (email){
     html += `
@@ -299,36 +302,43 @@ MailPage.prototype.generateFolderList = async function (email, folders, journey)
   
   for (let folder in folders) {
     let pathSoFar = journey.concat({ name: folder, delimiter: folders[folder].delimiter });
-    let id = btoa(JSON.stringify(pathSoFar));
-    html += `
-        <div class="no-padding center-align">
-          <div class="folder-button waves-effect waves-light btn-flat wide folder-tree" id="${id}">${folder}
-          </div>
-        </div>
-      `;
-    html += await this.generateFolderList(undefined, folders[folder].children, pathSoFar);
+
+    let id = btoa(unescape(encodeURIComponent(JSON.stringify(pathSoFar))));
+    if (folders[folder].children){
+      html += await this.generateFolderList(undefined, folders[folder].children, pathSoFar);
     }
+    else {
+      html += `
+      <div class="no-padding center-align">
+        <div class="folder-button waves-effect waves-light btn-flat wide folder-tree" id="${id}">${folder}
+        </div>
+      </div>
+    `;
+    }
+  }
   return html;
 }
 
 MailPage.prototype.linkFolders = function (accountInfo, children) {
   // Children are all the (inside - second level) div elements 
   // with id either the (base64) email hash or the (base64) folder path.
+  console.log(children)
   children.forEach( 
     (element) => {
       // Replace every '=' in the div id with the escaped '\='.
-      let divElement = document.querySelector(`#${element.id.replace(/=/g,'\\=')}`);
+      let divElement = document.querySelector(`#${CSS.escape(element.id)}`);
+
       // Add 'click' functionality only on folders- not on accounts. 
       if (divElement.classList.contains('folder-tree')){
         divElement.addEventListener('click', (clickedElement) => {
           // example: Switching page to [{"name": "Inbox", "delimeter":"/""}]
-          this.logger.log(`Switching page to ${atob(clickedElement.target.id)}`);
+          this.logger.log(`Switching page to ${decodeURIComponent(escape(atob(clickedElement.target.id)))}`);
   
           // Store in 'state.json' the folder that user has selected last.
           // example: {"state": "mail","account": {"hash": "9xxxxxxxxxxxxxxxxx77","emailAddress": "test@test.com",
           //           "folder": [{"name": "Inbox","delimiter": "/"}]}}            
           this.stateManager.change('account', Object.assign(this.stateManager.state.account, 
-            { folder: JSON.parse(atob(clickedElement.target.id)) }
+            { folder: JSON.parse(decodeURIComponent(escape(atob(clickedElement.target.id)))) }
           ));
           
           // Change the css for the currently selected / clicked folder.
@@ -336,12 +346,12 @@ MailPage.prototype.linkFolders = function (accountInfo, children) {
           for (let i=0; i<otherFolders.length; i++){
             otherFolders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
           }
-          document.querySelector(`#${clickedElement.target.id.replace(/=/g, '\\=')}`).classList.add('amber','lighten-1','grey-text','text-darken-1');
-          this.getChosenFolderInfo(JSON.parse(atob(clickedElement.target.id)));                  
+          document.querySelector(`#${CSS.escape(clickedElement.target.id)}`).classList.add('amber','lighten-1','grey-text','text-darken-1');
+          this.getChosenFolderInfo(JSON.parse(decodeURIComponent(escape(atob(clickedElement.target.id)))));                  
         });
       }
       // Search for child folders.
-      let firstChildren = document.querySelector(`#${element.id.replace(/=/g, '\\=')}`).children;
+      let firstChildren = document.querySelector(`#${CSS.escape(element.id)}`).children;
       let secondChildren = [];
       for (let i=0; i<firstChildren.length; i++){
         let secondChild = firstChildren[i].children;
@@ -360,7 +370,9 @@ MailPage.prototype.highlightFolder = function () {
   for (let i=0; i< folders.length; i++){
     folders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
   }
-  let currentFolder = document.querySelector(`#${btoa(JSON.stringify(this.stateManager.state.account.folder)).replace(/=/g, '\\=')}`);
+  //CSS.escape(btoa(JSON.stringify(this.stateManager.state.account.folder)))
+  
+  let currentFolder = document.querySelector(`#${CSS.escape(btoa(unescape(encodeURIComponent(JSON.stringify(this.stateManager.state.account.folder)))))}`);
   currentFolder.classList.add('amber','lighten-1','grey-text','text-darken-1');
 }
 
@@ -720,82 +732,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
       let shadowRoot = emailCustomElements[i].shadowRoot;
       
       if (emailCustomElements[i].classList.contains('description') && !page){
-        shadowRoot.innerHTML = `
-          <div class="description-item">
-            <div class="text">
-              <div class="multi mail-checkbox">
-                <input type="checkbox" >
-                <label</label>
-              </div>
-              <div class="sender">
-                <div class="sender-text left-align">From</div>
-              </div>
-              <div class="subject">
-                <div class="subject-text center-align">Subject</div>
-              </div>
-              <div class="date right-align">Date</div>
-            </div>
-          </div>
-          <style>
-          .description-item {
-            display: flex;
-            align-items: center ;
-            padding: 2px 18px 2px 18px;
-            background-color: rgb(97,97,97) ; 
-            color : rgb(224, 224, 224) ;
-            max-width: 100% ;
-            min-width: 100% ;
-            min-height: 35px;
-            width: 100% ;
-            height : 100% ;
-            border-radius : 5px ;
-            border: 0.5px solid rgb(97,97,97) ;
-          }
-          
-          .description-item .multi {
-            width: 5%;
-            display: flex;
-            align-items: center;
-            height: 100%;
-          }
-
-          .description-item .text {
-            display: flex ;
-            align-items: center ;
-            max-width: 100% ;
-            min-width: 100% ;
-            width: 100% ;
-            height: 100% ;
-          }
-          .description-item .text .sender {
-            display: flex ;
-            align-items: center;
-            width: 40% ;
-            height: 100% ;
-          }
-          .description-item .text .sender .sender-text {
-            display: flex ;
-            width: 90% ;
-          }
-          .description-item .text .subject {
-            display: flex ;
-            align-items: center ;
-            width: 45% ;
-            height: 100% ;
-          }
-          .description-item .text .subject .subject-text {
-            display: flex ;
-            width: 90% ;
-            padding-left : 3px ;
-          }
-          .description-item .text .date {
-            width: 10% ;
-            display: flex ;
-            padding-left : 3px ;
-          }
-          
-          </style>
-        `;
+        shadowRoot.innerHTML = this.utils.createDescriptionItem();
       }
       else {
         // Show loading message until mail has loaded.
@@ -816,151 +753,9 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         let email = emailCustomElements[i].getAttribute('data-email') || accountInfo.user;
         let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
         this.mailStore.loadEmail(uid).then((mail) => {
-        // NOTE: All of these *have* to be HTML escaped -> `Clean.escape(string)`.
-        shadowRoot.innerHTML = `
-          <div class="mail-item">
-            <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
-              <div class="multi mail-checkbox">
-                <input type="checkbox" id="${mail.uid}">
-                <label for="${mail.uid}"></label>
-              </div>
-              <div class="sender">
-                <div class="sender-text left-align">${Clean.escape(
-                  (mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : 
-                  `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`)}
-                </div>
-              </div>
-              <div class="subject">
-                <div class="subject-text center-align">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}
-                </div>
-              </div>
-              <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}
-              </div>
-            </div>
-            <div id="message-holder"></div>
-          </div>
-
-          <style>
-            .read {
-              color: rgb(117, 117, 117);
-            }
-
-            .unread {
-              font-weight: bolder;
-            }
-
-            .mail-item {
-              cursor: pointer;
-              padding: 2px 18px 2px 18px;
-              background-color: #FFF;
-              max-width: 100%;
-              min-width: 100%;
-              width: 100%;
-              height: fit-content;
-              border-radius : 3px;
-              border: 0.5px solid rgb(224, 224, 224);
-            }
-    
-
-            .mail-item:hover {
-              filter: brightness(90%);
-            }
-  
-            .mail-item .multi {
-              width: 5%;
-              display: inline-block;
-              align-items: center;
-              height: 100%;
-            }
-
-            .mail-item .star {
-              display: flex;
-              align-items: center;
-              display: inline-block;
-              height: 100%;
-            }
-
-            .mail-item .text {
-              display: flex;
-              align-items: center;
-              max-width: 100%;
-              min-width: 100%;
-              width: 100%;
-              height: 100%;
-              min-height: 35px;
-            }
-
-            .mail-item .text .sender {
-              display: flex;
-              align-items: center;
-              width: 40%;
-              height: 100%;
-            }
-
-            .mail-item .text .sender .sender-text {
-              display: inline-block;
-              width: 90%;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-              overflow: hidden;
-            }
-
-  
-            .mail-item .text .subject {
-              display: flex;
-              align-items: center;
-              width: 45%;
-              height: 100%;
-            }
-            .mail-item .text .subject .subject-text {
-              display: inline-block;
-              width: 90%;
-              text-overflow: ellipsis ;
-              white-space: nowrap;
-              overflow: hidden;
-              padding-left : 3px;
-            }
-
-            .mail-item .text .date {
-              width: 10%;
-              display: inline-block;
-              padding-left : 3px;
-              white-space: nowrap;
-              overflow : hidden;
-              text-overflow: ellipsis;
-            }
-
-            .selected-mail-item {
-              cursor: inherit;
-              filter: brightness(100%) !important;
-              align-items: center;
-              padding: 2px 18px 2px 18px;
-              max-width: 100%;
-              min-width: 100%;
-              width: 100%;
-              border-radius : 3px;
-              border: 1.5px solid rgb(255, 193, 7);
-              background-color: rgb(250, 250, 250)
-            }
-
-
-            .selected-mail-item .text {
-              cursor: default;
-              align-items: center;
-              font-weight: bolder;
-              max-width: 100%;
-              min-width: 100%;
-              width: 100%;
-              border-radius : 3px;
-            }
-
-            .padding {
-        
-              padding: 10px 10px 10px 10px;
-            }
-
-          </style>`;
-        })
+          let newHTML = this.utils.createNewMailElement(mail);
+          shadowRoot.innerHTML = newHTML;
+        });
       }
     }
   }
@@ -1155,169 +950,27 @@ MailPage.prototype.newMailReceived = async function (){
   let shadowRoot = newEmailTag.shadowRoot;
   console.log(uid)
   uid = unescape(newEmailTag.getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
+  
   await this.mailStore.loadEmail(uid).then((mail) => {
-  // NOTE: All of these *have* to be HTML escaped -> `Clean.escape(string)`.
-    shadowRoot.innerHTML = `
-        <div class="mail-item">
-        <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
-          <div class="multi mail-checkbox">
-            <input type="checkbox" id="${mail.uid}">
-            <label for="${mail.uid}"></label>
-          </div>
-          <div class="sender">
-            <div class="sender-text left-align">${Clean.escape(
-              (mail.envelope.from === undefined ||  mail.envelope.from === null)  ? 'Unknown Sender'  : 
-              `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`)}
-            </div>
-          </div>
-          <div class="subject">
-            <div class="subject-text center-align">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}
-            </div>
-          </div>
-          <div class="date teal-text right-align">${this.utils.alterDate(mail.date)}
-          </div>
-        </div>
-        <div id="message-holder"></div>
-      </div>
+    let newHTML = this.utils.createNewMailElement(mail);
+    shadowRoot.innerHTML = newHTML;
+  });
 
-      <style>
-        .read {
-          color: rgb(117, 117, 117);
-        }
-
-        .unread {
-          font-weight: bolder;
-        }
-
-        .mail-item {
-          cursor: pointer;
-          padding: 2px 18px 2px 18px;
-          background-color: #FFF;
-          max-width: 100%;
-          min-width: 100%;
-          width: 100%;
-          height: fit-content;
-          border-radius : 3px;
-          border: 0.5px solid rgb(224, 224, 224);
-        }
-
-
-        .mail-item:hover {
-          filter: brightness(90%);
-        }
-
-        .mail-item .multi {
-          width: 5%;
-          display: inline-block;
-          align-items: center;
-          height: 100%;
-        }
-
-        .mail-item .star {
-          display: flex;
-          align-items: center;
-          display: inline-block;
-          height: 100%;
-        }
-
-        .mail-item .text {
-          display: flex;
-          align-items: center;
-          max-width: 100%;
-          min-width: 100%;
-          width: 100%;
-          height: 100%;
-          min-height: 35px;
-        }
-
-        .mail-item .text .sender {
-          display: flex;
-          align-items: center;
-          width: 40%;
-          height: 100%;
-        }
-
-        .mail-item .text .sender .sender-text {
-          display: inline-block;
-          width: 90%;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-          overflow: hidden;
-        }
-
-
-        .mail-item .text .subject {
-          display: flex;
-          align-items: center;
-          width: 45%;
-          height: 100%;
-        }
-        .mail-item .text .subject .subject-text {
-          display: inline-block;
-          width: 90%;
-          text-overflow: ellipsis ;
-          white-space: nowrap;
-          overflow: hidden;
-          padding-left : 3px;
-        }
-
-        .mail-item .text .date {
-          width: 10%;
-          display: inline-block;
-          padding-left : 3px;
-          white-space: nowrap;
-          overflow : hidden;
-          text-overflow: ellipsis;
-        }
-
-        .selected-mail-item {
-          cursor: inherit;
-          filter: brightness(100%) !important;
-          align-items: center;
-          padding: 2px 18px 2px 18px;
-          max-width: 100%;
-          min-width: 100%;
-          width: 100%;
-          border-radius : 3px;
-          border: 1.5px solid rgb(255, 193, 7);
-          background-color: rgb(250, 250, 250)
-        }
-
-
-        .selected-mail-item .text {
-          cursor: default;
-          align-items: center;
-          font-weight: bolder;
-          max-width: 100%;
-          min-width: 100%;
-          width: 100%;
-          border-radius : 3px;
-        }
-
-        .padding {
-
-          padding: 10px 10px 10px 10px;
-        }
-
-      </style>`;
-    });
-
-
-    // The new mail tag has no event listener. Add one.
-    newEmailTag.addEventListener('click', (e) => {
-      /*
-        Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
-        the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
-        is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
-        then this means that the message is already seen from a previous session and is up to date.
-      */
-      emailItemText = e.target.shadowRoot.querySelector('.text');
-      if (emailItemText.classList.contains('unread')){
-        emailItemText.classList.remove('unread');
-        emailItemText.classList.add('read');
-      } 
-      this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
-    });
+  // The new mail tag has no event listener. Add one.
+  newEmailTag.addEventListener('click', (e) => {
+    /*
+      Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
+      the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
+      is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
+      then this means that the message is already seen from a previous session and is up to date.
+    */
+    emailItemText = e.target.shadowRoot.querySelector('.text');
+    if (emailItemText.classList.contains('unread')){
+      emailItemText.classList.remove('unread');
+      emailItemText.classList.add('read');
+    } 
+    this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+  });
 }
 
 
