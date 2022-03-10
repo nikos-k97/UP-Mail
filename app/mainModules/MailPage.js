@@ -224,7 +224,7 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
 
   /*
     We define the event listeners for the active mailbox here and not inside the 'getChosenFolderInfo'
-    function, otherwise we create another same listener each time we change folder.
+    function, otherwise we create a new listener for the same event each time we change folder.
   */
   if (!reloading){
     // Listen for new mails in the active mailbox.
@@ -615,8 +615,8 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
 
   // Look for threads.
-  document.querySelector('#number').innerText = '';
-  document.querySelector('#doing').innerText = 'Looking for threads ...';
+  // document.querySelector('#number').innerText = '';
+  // document.querySelector('#doing').innerText = 'Looking for threads ...';
   // threads : object containing arrays with parent messages. 
   // These arrays contain all the children that originated for each of the parents
   // let threads;
@@ -834,7 +834,6 @@ MailPage.prototype.newMailReceived = async function (){
   let storedMessageCount = folderInfo.messageCount || 0;
   let storedUIDSequence = folderInfo.UIDSequence || [];
 
-
   this.logger.info(`Highest seqno from the local store : ${highestSeqNo}`);
   this.logger.info(`Message count from the local store : ${storedMessageCount}`);
   this.logger.info(`Highest seqno from the server : ${this.imapClient.mailbox.messages.total}`);
@@ -1009,9 +1008,9 @@ MailPage.prototype.newMailReceived = async function (){
 
 /*
   This function is run when a change in UIDValidity of the current mailbox is observed during the current
-  session. It means that the user has not refreshed the mailbox yet, and has not changed folder. If the user
+  session (the user has not refreshed the mailbox yet, and has not changed folder. If the user
   changes the folder , the function 'MailPage.getChosenFolderInfo()' also detects the change in UIDValidity
-  so this function is not used in this case.
+  so this function is not used in this case). IMAP RFC specifies that UIDValidity MUST never change during a session.
 */
 MailPage.prototype.UIDValidityChanged = async function(){
   this.getChosenFolderInfo(this.stateManager.state.account.folder);
@@ -1043,23 +1042,78 @@ MailPage.prototype.messageWasExpunged = async function(){
   this.logger.info(`Message count from the server : ${this.imapClient.mailbox.messages.total}`);
 
   let checkPassed = false;
-  /*
-    Check if the message count in the server is indeed higher than the locally stored one.
-    If it's not, then a possible case is that an email was expunged externally and it was not
-    observed by 'MailPage.messageWasExpunged()'. Also check that the new messages in the mailbox
-    (in the server side) is indeed > 0. If they are not, then no new mails arrived, we just somehow
-    got the new mail event, and for some reason the locally stored message count < server's message count.
-    Also check the UIDNext (must be higher than the stored value) and the UIDValidity (must be same).
-    In both cases we do nothing. The new mails will arrive when the mailbox is reloaded.
-  */
-
   if (this.imapClient.mailbox.messages.total < storedMessageCount){
-      checkPassed = true;
+    checkPassed = true;
   }
-
   if ( !checkPassed ) return;
 
+  let search = new Promise((resolve,reject) => {
+    this.imapClient.client.search( [[`UID`,`1:*`]] , (error, UIDs) => {
+      if (error) reject(error);
+      resolve(UIDs);
+    });
+  });
 
+  let serverUIDSequence;
+  try {
+    serverUIDSequence = await search;
+  } catch (error) {
+    this.logger.error(error);
+    return;
+  }
+
+  let UIDsToDelete = Utils.findMissing(storedUIDSequence, serverUIDSequence);
+  UIDsToDelete.forEach(element => this.mailStore.deleteEmailByUID(path, element));
+
+  highestSeqNo = serverUIDSequence.length + 1;
+  storedMessageCount = serverUIDSequence.length;
+  storedUIDSequence = serverUIDSequence;
+
+  this.logger.info(`Highest seqno from the local store after finish: ${highestSeqNo}`);
+  this.logger.info(`Message count from the local store after finish: ${storedMessageCount}`);
+  this.logger.info(`Highest seqno from the server after finish: ${this.imapClient.mailbox.messages.total}`);
+  this.logger.info(`Message count from the server after finish : ${this.imapClient.mailbox.messages.total}`);
+  this.logger.info(`Server has : ${this.imapClient.mailbox.messages.new} new messages after finish.`);
+  this.logger.info(`UIDNext from the server after finish: ${this.imapClient.mailbox.uidnext}`);
+  this.logger.info(`UIDNext from the local store after finish : ${folderInfo.uidnext}`);
+
+  _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
+  _.set(personalFolders, objectPath.concat(['UIDSequence']), storedUIDSequence);
+  _.set(personalFolders, objectPath.concat(['messageCount']), storedMessageCount);
+  
+  // Reload box to get the new uidnext
+  // try {
+  //   await this.imapClient.reloadBox(path,false);
+  // } catch (error) {
+  //   this.logger.error(error);
+  //   return;
+  // }
+
+  let boxKeys = Object.keys(this.imapClient.mailbox);
+  for (let j = 0; j < boxKeys.length; j++) {
+    _.set(personalFolders, objectPath.concat([boxKeys[j]]), this.imapClient.mailbox[boxKeys[j]]);
+  }
+  
+  // Save all the folders data in the accounts database.
+  await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
+
+  // Delete the mail bodies of the UIDs we just deleted.
+  let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1 , _id : 0 });
+  await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
+  
+  // Get the new info that we just stored in the accounts database.
+  accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+
+  // Delete the <e-mail> element(s) with the deleted UID(s).
+  let emailCustomElements = document.getElementsByTagName('e-mail');
+  for (let i = 0; i < emailCustomElements.length; i++){
+    let uid = unescape(emailCustomElements[i].getAttribute('data-uid'));
+
+    if (UIDsToDelete.includes(parseInt(this.utils.stripStringOfNonNumericValues(uid)))){
+      emailCustomElements[i].shadowRoot.innerHTML = '';
+      emailCustomElements[i].remove();
+    }
+  }
 }
 
 

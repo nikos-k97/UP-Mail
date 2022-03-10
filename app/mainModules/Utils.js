@@ -283,14 +283,14 @@ Utils.prototype.createNewMailElement = function (mail) {
         }
 
         .mail-item .text .sender {
-          display: flex;
+          display: block;
           align-items: center;
           width: 40%;
           height: 100%;
         }
 
         .mail-item .text .sender .sender-text {
-          display: inline-block;
+          display: block;
           width: 90%;
           text-overflow: ellipsis;
           white-space: nowrap;
@@ -299,13 +299,13 @@ Utils.prototype.createNewMailElement = function (mail) {
 
 
         .mail-item .text .subject {
-          display: flex;
+          display: block;
           align-items: center;
           width: 45%;
           height: 100%;
         }
         .mail-item .text .subject .subject-text {
-          display: inline-block;
+          display: block;
           width: 90%;
           text-overflow: ellipsis ;
           white-space: nowrap;
@@ -315,7 +315,7 @@ Utils.prototype.createNewMailElement = function (mail) {
 
         .mail-item .text .date {
           width: 10%;
-          display: inline-block;
+          display: block;
           padding-left : 3px;
           white-space: nowrap;
           overflow : hidden;

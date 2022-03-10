@@ -170,7 +170,6 @@ MailStore.prototype.loadEmailBody = async function (uid, email) {
 
 // Delete all the email bodies (.json files in mail/emailHash directory) that are not relevant anymore.
 // (the emails we deleted from this.db need to have their bodies deleted too).
-
 MailStore.prototype.deleteEmailBodies = async function (email, uidsNotToDelete, deleteFolder) {
   let usefulUids = [];
   uidsNotToDelete.forEach(uid => {
