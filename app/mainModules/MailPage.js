@@ -1,11 +1,9 @@
-const { timeout, TimeoutError }     = require('promise-timeout');
 const merge                         = require('merge-deep');
 const materialize                   = require("../helperModules/materialize.min.js");
 const Header                        = require('./Header');
 const _                             = require('lodash');
 const Clean                         = require('./Clean');
 const Utils                         = require('./Utils');
-const Threader                      = require('./Threader');
 const IMAPClient                    = require('./IMAPClient');
 
 
@@ -745,6 +743,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         shadowRoot.innerHTML = this.utils.createDescriptionItem();
       }
       else {
+ 
         // Show loading message until mail has loaded.
         shadowRoot.innerHTML = 'Loading...';
 
@@ -760,7 +759,6 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         --------------------------------------------------------------------------------------------
         */
 
-        let email = emailCustomElements[i].getAttribute('data-email') || accountInfo.user;
         let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
         this.mailStore.loadEmail(uid).then((mail) => {
           let newHTML = this.utils.createNewMailElement(mail);
@@ -768,41 +766,41 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         });
       }
     }
-  }
 
-  // Get the email details when a user clicks on the email.
-  if (mail.length > 0){
+    // Get the email details when a user clicks on the email.
     let emailItems = document.querySelectorAll('.email-item');
     for (let i=0; i < emailItems.length; i++){
       if (i !== 0){
         emailItems[i].addEventListener('click', (e) => {
+          // Check if the email item is already selected.
+          let isSelected = e.target.shadowRoot.querySelector('div.mail-item').classList.contains('selected-mail-item');
+          if (! isSelected) {
           /*
-            Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
-            the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
-            is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
-            then this means that the message is already seen from a previous session and is up to date.
+              Since the user clicks on the email, we mark it as seen. Inside the MailPage.renderEmail() function,
+              the flag : '\Seen' is added to both the server and the local email store (and body.json) IF the email
+              is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
+              then this means that the message is already seen from a previous session and is up to date.
           */
-          emailItemText = e.target.shadowRoot.querySelector('.text');
-          if (emailItemText.classList.contains('unread')){
-            emailItemText.classList.remove('unread');
-            emailItemText.classList.add('read');
-          } 
-          this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+            let emailItemText = e.target.shadowRoot.querySelector('.text');
+            if (emailItemText.classList.contains('unread')){
+              emailItemText.classList.remove('unread');
+              emailItemText.classList.add('read');
+            } 
+            this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+          }
         });
       }
-      
     }
-  }
 
-
-  // If the 'load-more button exists (many emails) then add the event listener.
-  let loadMoreButton = document.querySelector('.load-more');
-  if (loadMoreButton) {
-    loadMoreButton.addEventListener('click', (e) => {
-      this.render(accountInfo, page + 1);
-      // Remove it after press. If it's needed again it will be rendered again in the next page's render call.
-      loadMoreButton.remove();
-    });
+    // If the 'load-more button exists (many emails) then add the event listener.
+    let loadMoreButton = document.querySelector('.load-more');
+    if (loadMoreButton) {
+      loadMoreButton.addEventListener('click', (e) => {
+        this.render(accountInfo, page + 1);
+          // Remove it after press. If it's needed again it will be rendered again in the next page's render call.
+        loadMoreButton.remove();
+      });
+    }
   }
 }
 
@@ -996,12 +994,17 @@ MailPage.prototype.newMailReceived = async function (){
       is fetched for the first time (its body doesnt exist in 'mail/hash/hashuid' folder). If it exists,
       then this means that the message is already seen from a previous session and is up to date.
     */
-    emailItemText = e.target.shadowRoot.querySelector('.text');
-    if (emailItemText.classList.contains('unread')){
-      emailItemText.classList.remove('unread');
-      emailItemText.classList.add('read');
-    } 
-    this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+
+    let isSelected = e.target.shadowRoot.querySelector('div.mail-item').classList.contains('selected-mail-item');
+
+    if (!isSelected) {
+      let emailItemText = e.target.shadowRoot.querySelector('.text');
+      if (emailItemText.classList.contains('unread')){
+        emailItemText.classList.remove('unread');
+        emailItemText.classList.add('read');
+      } 
+      this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+    }
   });
 }
 
@@ -1117,75 +1120,47 @@ MailPage.prototype.messageWasExpunged = async function(){
 }
 
 
-MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) {
-  let number = childNumber || 0;
+MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   let metadata = await this.mailStore.loadEmail(uid);
 
   let emailElements = document.querySelectorAll('e-mail');
-  if ( ! number ) {
-    for (i=0 ; i < emailElements.length; i++){
-      let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
-      if (messageHolder) messageHolder.innerHTML = '';
+  /*
+    For each <e-mail> element we clear its HTML content and remove the selected attribute. One of the emails
+    is the currently selected email, so we add the selected attribute only to this specific email and
+    make it's HTML content (message-holder) equal to the contents of the email body.
+  */
+  let selectedItemWrapper = undefined;
+  for (i = 0; i < emailElements.length; i++){
+    // Reset each message holder.
+    let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
+    if (messageHolder) messageHolder.innerHTML = '';
+    // Remove selected tag for each email (clear the previously selected email).
+    let notSelectedMailItem = emailElements[i].shadowRoot.querySelector('div.mail-item');
+    if (notSelectedMailItem) notSelectedMailItem.classList.remove('selected-mail-item');
+    // Get the UID of each <e-mail>.
+    let dataUidAttribute = emailElements[i].getAttribute('data-uid');
+
+    // If the UID of the email is equal to this function's 'UID' parameter, it means that this is the email
+    // that we need to render, so we need to add the 'selected' attribute.
+    if (dataUidAttribute === `${escape(uid)}`) {
+      let selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
+      selectedMailItem.classList.add('selected-mail-item');
       
-      let unselectedMailItem = emailElements[i].shadowRoot.querySelector('div.mail-item');
-      if (unselectedMailItem) unselectedMailItem.classList.remove('selected-mail-item');
-
-      let dataUidAttributes = emailElements[i].getAttribute('data-uid');
-    
-      if (dataUidAttributes===`${escape(uid)}`) {
-        let selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
-        // If user clicks an already selected mail -> deselect it
-        if (selectedMailItem.classList.contains('selected-mail-item')){
-          selectedMailItem.querySelector('div#message-holder').innerHTML = '';
-          return;
-        }
-        else{
-          selectedMailItem.classList.add('selected-mail-item');
-        }
-        
-
-        let selectedItemWrapper = emailElements[i].shadowRoot.querySelector(`div.mail-item div#message-holder`);
-        selectedItemWrapper.innerHTML = '<div class="message-wrapper" id="message-0"></div>';
-        if (metadata.threadMsg) {
-          for (let i = 1; i < metadata.threadMsg.length + 1; i++) {
-            selectedItemWrapper.appendChild(document.createElement('hr'));
-            selectedItemWrapper.appendChild(document.createElement('hr'));
-            let appendedDiv = document.createElement('div');
-            appendedDiv.setAttribute('id',`message-${i}`);
-            appendedDiv.classList.add('message-wrapper');
-            selectedItemWrapper.appendChild(appendedDiv);
-            this.renderEmail(accountInfo, metadata.threadMsg[i - 1], i);
-          }
-        }
-      }
+      // Add the <div> wrapper, inside which the message body will be rendered.
+      let selectedItemHolder = selectedMailItem.querySelector(`div#message-holder`);
+      selectedItemHolder.innerHTML = '<div class="message-wrapper" id="message-0"></div>';
+      selectedItemWrapper = selectedItemHolder.querySelector(`div.message-wrapper#message-0`);
     }
   }
-  let selectedItemMessage;
-  if (!number){
-    for (let i=0; i<emailElements.length; i++){
-      let messageWrapper = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder div.message-wrapper#message-0');
-      if (messageWrapper) {
-        selectedItemMessage = messageWrapper;
-        break;
-      }
-    }
-  }
-  else{
-    for (let i=0; i<emailElements.length; i++){
-      let messageWrapper = emailElements[i].shadowRoot.querySelector(`div.mail-item div#message-holder div.message-wrapper#message-${number}`);
-      if (messageWrapper) {
-        selectedItemMessage = messageWrapper;
-        break;
-      }
-    }
-  }
-
+ 
+  // Load the email body either from the DB if this message's body has been retrieved again, or fetch it.
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
   // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
-    selectedItemMessage.innerHTML = 'Loading email content ...';
+    selectedItemWrapper.innerHTML = 'Loading email body ...';
     statusOK = await this.checkIMAPStatus(accountInfo);
     if ( !statusOK ) return;
+
     let message = await this.mailStore.loadEmail(uid, accountInfo.user);
     try {
       await this.fetchEmailBody(accountInfo, message);
@@ -1197,7 +1172,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) 
   }
   
   // The user clicked on the email, so we can safely mark it as 'Seen' both to the server and to the local storage.
-  // uid and metadata.uid are in the format 'folderUID'
+  // 'uid' and 'metadata.uid' are in the format 'folderUID'
     /*
       If the message on the server is not flagged as 'Seen' then we flag it and update the local store
       via 'updateMailByUid' (the mail body is not updated - it contains the flags too).
@@ -1209,6 +1184,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) 
   let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
   this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
   
+
   const app = this.app;
   let dirtyContent;
   if (emailContent.html){
@@ -1240,9 +1216,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, childNumber) 
   else{
     dirtyContent = emailContent.textAsHtml || emailContent.text;
   } 
+
   //let cleanContent = Clean.cleanHTML(dirtyContent);
   let cleanContent = dirtyContent; //allow images etc...
-  selectedItemMessage.innerHTML = cleanContent;
+
+  // Append the 
+  selectedItemWrapper.innerHTML = cleanContent;
 }
 
 
@@ -1272,58 +1251,5 @@ MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
   return fetchedPromise;
 }
 
-
-// Retrieve some bodies in the background (store them in mail/hash.json) so that they are marked as 
-// 'retrieved' -> we dont fetch the body when user clicks on the email since the body is stored in the
-// .json file (see Mailstore.prototype.loadMailWithoutBody').
-
-// Since this method is not called via an event (email click) we can use the same IMAPclient (this.client).
-// However only works for the first grab of emails (in the default folder saved in state.json)
-// After the user clicks on another folder to read the messages there, we are inside an event
-// handler and the client.state = disconnected, so this.client doesnt work.
-// MailPage.prototype.retrieveEmailBodies = async function() {
-//   let email =  this.stateManager.state.account.emailAddress;
-//   let toGrab = await this.mailStore.loadEmailsWithoutBody();
-//   let total = toGrab.length;
- 
-//   if (total) {
-//     let limit = 10;
-//     if (total < limit) limit = total; //So that don't open useless connections that give timeout errors.
-//     let currentIter = 0;
-//     let currentCount = 0;
-
-//     let promises = [];
-//     for (let j = 0; j < limit; j++) {
-//       promises.push(this.accountManager.getIMAP(email));
-//     }
-//     let clientsFree = await Promise.all(promises);
-  
-//     let interval = setInterval(async function retrieveEmail() {
-//       if (currentIter === total - 1) {
-//         clearInterval(interval);
-//         setTimeout (function () {
-//           for (let i = 0; i < clientsFree.length; i++) {
-//             clientsFree[i].client.end();
-//           }
-//         }, 20000);
-//       }
-//       else if (currentCount < limit) {
-//         this.logger.log(`Grabbing email body ${currentIter + 1} / ${total - 1}`);
-//         currentCount++;
-//         currentIter++;
-//         let client = clientsFree.pop();
-//         try { 
-//           await timeout(client.getEmailBody(toGrab[currentIter].uid), 2000) 
-//         }
-//         catch(e) {
-//           if (e instanceof TimeoutError) this.logger.error('Timeout reached on one of the emails grabs...');
-//           else throw e;
-//         }
-//         clientsFree.push(client);
-//         currentCount--;
-//       }
-//     }.bind(this), 50);
-//   }
-// }
 
 module.exports = MailPage;

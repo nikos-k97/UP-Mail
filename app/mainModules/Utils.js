@@ -233,6 +233,8 @@ Utils.prototype.createNewMailElement = function (mail) {
       </div>
 
       <style>
+
+  
         .read {
           color: rgb(117, 117, 117);
         }
@@ -273,6 +275,7 @@ Utils.prototype.createNewMailElement = function (mail) {
         }
 
         .mail-item .text {
+          cursor: pointer;
           display: flex;
           align-items: center;
           max-width: 100%;
@@ -337,7 +340,7 @@ Utils.prototype.createNewMailElement = function (mail) {
 
 
         .selected-mail-item .text {
-          cursor: default;
+          cursor: pointer;
           align-items: center;
           font-weight: bolder;
           max-width: 100%;
@@ -350,7 +353,7 @@ Utils.prototype.createNewMailElement = function (mail) {
 
           padding: 10px 10px 10px 10px;
         }
-
+        
       </style>
   `;
   return html;
@@ -358,7 +361,9 @@ Utils.prototype.createNewMailElement = function (mail) {
 
 Utils.prototype.createDescriptionItem = function () {
   let html = `
+
     <div class="description-item">
+
       <div class="text">
         <div class="multi mail-checkbox">
           <input type="checkbox" >
@@ -431,7 +436,8 @@ Utils.prototype.createDescriptionItem = function () {
             display: flex ;
             padding-left : 3px ;
           }
-          
+
+         
     </style>
   `;
   return html;

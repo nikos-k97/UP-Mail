@@ -9,9 +9,13 @@ window.api.navigate('/initialize');
 customElements.define('e-mail', class extends HTMLElement {
   constructor () {
     super();
+
     const shadowRoot = this.attachShadow({ mode: 'open' });
     // <e-mail> element's content is updated dynamically via 'MailPage.js' render() method.
+
   }
+
+
 });
   
 
