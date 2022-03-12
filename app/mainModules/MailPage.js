@@ -223,6 +223,19 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   await this.getChosenFolderInfo(this.stateManager.state.account.folder);
 
   
+  document.querySelector('.navlink-delete').addEventListener('click', async (e) => {
+    let newFlag = '\\Deleted';
+    let path = this.imapClient.compilePath(this.stateManager.state.account.folder);  
+    for (let i = 0; i < this.checkedUIDs.length; i++){
+      let metadata = await this.mailStore.loadEmail(this.checkedUIDs[i]);
+      let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
+      await this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
+    }
+    let uids = [];
+    this.checkedUIDs.forEach(uid => uids.push(this.utils.stripStringOfNonNumericValues(uid)));
+    //await this.imapClient.expungeEmails(path, false, uids);
+  });
+
 
   /*
     We define the event listeners for the active mailbox here and not inside the 'getChosenFolderInfo'
@@ -248,9 +261,6 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
       await this.UIDValidityChanged();
     });
 
-    document.querySelector('.navlink-delete').addEventListener('click', (e) => {
-      
-    })
 
   }
 }
@@ -903,10 +913,10 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         loadMoreButton.remove();
       });
     }
-
-
   }
 }
+
+
 
 /*
   For this function to run, it means the folder that the new Mail just arrived, has been opened
@@ -1312,6 +1322,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     make it's HTML content (message-holder) equal to the contents of the email body.
   */
   let selectedItemWrapper = undefined;
+  let selectedMailItem = undefined;
+  let selectedEmailElement = undefined;
   for (i = 0; i < emailElements.length; i++){
     // Reset each message holder.
     let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
@@ -1325,7 +1337,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     // If the UID of the email is equal to this function's 'UID' parameter, it means that this is the email
     // that we need to render, so we need to add the 'selected' attribute.
     if (dataUidAttribute === `${escape(uid)}`) {
-      let selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
+      selectedEmailElement = emailElements[i];
+      selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
       selectedMailItem.classList.add('selected-mail-item');
       
       // Add the <div> wrapper, inside which the message body will be rendered.
@@ -1334,6 +1347,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
       selectedItemWrapper = selectedItemHolder.querySelector(`div.message-wrapper#message-0`);
     }
   }
+
+
  
   // Load the email body either from the DB if this message's body has been retrieved again, or fetch it.
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
@@ -1402,8 +1417,10 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   //let cleanContent = Clean.cleanHTML(dirtyContent);
   let cleanContent = dirtyContent; //allow images etc...
 
-  // Append the 
+  let preContent ;
+
   selectedItemWrapper.innerHTML = cleanContent;
+
 }
 
 

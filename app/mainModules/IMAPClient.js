@@ -228,7 +228,7 @@ IMAPClient.prototype.fetchNamespaces = async function() {
 IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, oldUidNext, highestlocalSeqNo, localMessageCount, localUIDsequence) {
  // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
  if (this.currentPath !== path) {  
-  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
     try {
       this.mailbox = await this.openBox(path, readOnly);
     } catch (error) {
@@ -392,7 +392,7 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
  IMAPClient.prototype.getEmails = async function (path, readOnly, grabNewer, seqno, options, onLoad) {
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
   if (this.currentPath !== path) {  
-    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
     try {
       this.mailbox = await this.openBox(path, readOnly);
     } catch (error) {
@@ -703,7 +703,7 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
 IMAPClient.prototype.checkFlags = async function (path, readOnly){
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
  if (this.currentPath !== path) {  
-  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
     try {
       this.mailbox = await this.openBox(path, readOnly);
     } catch (error) {
@@ -755,25 +755,11 @@ IMAPClient.prototype.checkFlags = async function (path, readOnly){
   }
 }
 
-
-IMAPClient.prototype.reloadBox = async function(path,readOnly){
-  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
-    try {
-      this.mailbox = await this.openBox(path, readOnly);
-    } catch (error) {
-      this.logger.error(error);
-      return new Promise((resolve,reject) => {
-        reject(error);
-    });
-  }
-}
-
-
 IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags, newFlag){
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
   // Also ensure that the box is not opened in 'readOnly' mode since we are attempting to change flags.
   if (this.currentPath !== path || (this.currentPath === path && this.mailbox.readOnly === true)) {  
-    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = true);
+    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
       try {
         this.mailbox = await this.openBox(path, readOnly);
       } catch (error) {
@@ -793,6 +779,98 @@ IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags,
     }
   }
   return oldFlags;
+}
+
+IMAPClient.prototype.reloadBox = async function(path,readOnly){
+  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
+    try {
+      this.mailbox = await this.openBox(path, readOnly);
+    } catch (error) {
+      this.logger.error(error);
+      return new Promise((resolve,reject) => {
+        reject(error);
+    });
+  }
+}
+
+
+/*
+  STORE : This command alters data associated with a message in the mailbox.  Normally, STORE will return the 
+          updated value of the data with an untagged FETCH response. Used to change flags to the mailbox messages.
+          ---------------------------------------------------------------
+          Example:    C: A003 STORE 2:4 +FLAGS (\Deleted)
+                      S: * 2 FETCH (FLAGS (\Deleted \Seen))
+                      S: * 3 FETCH (FLAGS (\Deleted))
+                      S: * 4 FETCH (FLAGS (\Deleted \Flagged \Seen))
+                      S: A003 OK STORE completed
+          ---------------------------------------------------------------
+  EXPUNGE : This command instructs the server to permanently delete messages that have the \Deleted flag set 
+            on them from the currently selected folder. Note: This does not mean “move to trash”. 
+            It means to really, properly, and finally delete.
+          ---------------------------------------------------------------
+            Example:    C: A202 EXPUNGE
+                        S: * 3 EXPUNGE
+                        S: * 3 EXPUNGE
+                        S: * 5 EXPUNGE
+                        S: * 8 EXPUNGE
+                        S: A202 OK EXPUNGE completed
+          -------------------------------------------------------------
+  (*************** UID PLUS EXTENSION - RFC 4315 - NEEDS SUPPORT FROM SERVER *************************)
+  UID EXPUNGE : This command permanently removes all messages that both have the \Deleted flag set and have a UID 
+                that is included in the specified sequence set from the currently selected mailbox.  If a
+                message either does not have the \Deleted flag set or has a UID that is not included in the 
+                specified sequence set, it is not affected. 
+                
+                This command is particularly useful for disconnected clients. By using UID EXPUNGE instead
+                of EXPUNGE when resynchronizing with the server, the client can ensure that it does not 
+                inadvertantly remove any messages that have been marked as \Deleted by other clients between 
+                the time that the client was last connected anD the time the client resynchronizes.
+
+                If the server does not support the UIDPLUS capability, the clienT should fall back to using 
+                the STORE command to temporarily remove the \Deleted flag from messages it does not want to
+                remove, then issuing the EXPUNGE command.  Finally, the client should use thE STORE command to 
+                restore the \Deleted flag on the messages in which it was temporarily removed.
+                Alternatively, the client may fall back to using just the EXPUNGE command, risking the 
+                unintended removal of some messages.
+                ------------------------------------------------
+                Example:    C: A003 UID EXPUNGE 3000:3002
+                            S: * 3 EXPUNGE
+                            S: * 3 EXPUNGE
+                            S: * 3 EXPUNGE
+                            S: A003 OK UID EXPUNGE completed
+                ------------------------------------------------
+*/
+IMAPClient.prototype.expungeEmails = async function (path,readOnly,uids){
+  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
+    try {
+      this.mailbox = await this.openBox(path, readOnly);
+    } catch (error) {
+      this.logger.error(error);
+      return new Promise((resolve,reject) => {
+        reject(error);
+    });
+  }
+  if (this.client.serverSupports('UIDPLUS')){
+    // Permanently removes all messages flagged as 'Deleted' in the currently open mailbox. 
+    // If the server supports the 'UIDPLUS' capability, uids can be supplied to only remove messages that both 
+    // have their uid in uids and have the \Deleted flag set.
+    this.logger.debug('Server supports "UIDPLUS" extension.');
+    console.log(uids)
+    this.client.expunge(uids, (error) => {
+      this.logger.error(error);
+    });
+  }
+  else {
+    this.logger.debug('Server does not support "UIDPLUS" extension.');
+    // Permanently removes all messages flagged as 'Deleted' in the currently open mailbox since UIDPLUS is not supported.. 
+    this.client.expunge((error) => {
+      this.logger.error(error);
+    });
+  }
+
+  this.client.expunge(uids, (error) => {
+    this.logger.error(error);
+  });
 }
 
 
