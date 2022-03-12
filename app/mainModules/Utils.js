@@ -9,8 +9,29 @@ function Utils(app, logger) {
   this.logger = logger;
 }
 
-
-
+/* @arr array you want to listen to
+   @callback function that will be called on any change inside array
+ */
+Utils.listenPushinArray = function(arr,callback){
+  //splice
+  ['push'].forEach((m)=>{
+    arr[m] = function(){
+      let res = Array.prototype[m].apply(arr, arguments);  // call normal behaviour
+      callback.apply(arr, arguments);  // finally call the callback supplied
+      return res;
+    }
+  });
+}
+Utils.listenSpliceinArray = function(arr,callback){
+  //splice
+  ['splice'].forEach((m)=>{
+    arr[m] = function(){
+      let res = Array.prototype[m].apply(arr, arguments);  // call normal behaviour
+      callback.apply(arr, arguments);  // finally call the callback supplied
+      return res;
+    }
+  });
+}
 
 /**
  * Convert a template string into HTML DOM nodes
