@@ -16,6 +16,7 @@ function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager
   this.accountManager = accountManager;
   this.mailStore = mailStore;
   //this.imapClient -> defined in 'initializeIMAP()'
+  this.checkedUIDs = [];
 }
 
 
@@ -702,6 +703,8 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
 
 // Render the currently selected folder (in state.json). Render is also called each time we click a folder.
 MailPage.prototype.render = async function(accountInfo, folderPage) {
+  // Reset checkboxes since we changed folder.
+  this.checkedUIDs = [];
   let page = folderPage || 0;
 
   // Get the UID and the 'isThreadChild' fields of all the emails inside the current folder (folder stored in state.json).
@@ -814,6 +817,52 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
           else {
             e.target.shadowRoot.querySelector('.mail-item #message-holder').innerHTML = '';
             e.target.shadowRoot.querySelector('div.mail-item').classList.remove('selected-mail-item');
+          }
+        });
+      }
+    }
+
+    // Checkbox functionality
+    let emailCheckboxes = document.querySelectorAll('.mail-checkbox');
+    for (let j=0; j < emailCheckboxes.length; j++){
+      if (emailCheckboxes[j].classList.contains('checkbox-description')){
+        emailCheckboxes[j].addEventListener('change', (e) => {
+          let input = e.currentTarget.querySelector('label input');
+          if (input.checked) {
+            emailCheckboxes.forEach(el => {
+              let id = el.querySelector('label input').getAttribute('id');
+              // If the UID is not 'all' and doesnt already exist in the array, push it.
+              const index = this.checkedUIDs.indexOf(id);
+              if (index < 0) {
+                el.querySelector('label input').checked = true;
+                if (id !== 'all') return this.checkedUIDs.push(id);
+              }
+            });
+          }
+          else {
+            emailCheckboxes.forEach(el => {
+              el.querySelector('label input').checked = false;
+            });
+            this.checkedUIDs = [];
+          }
+        });
+      }
+      else {
+        emailCheckboxes[j].addEventListener('change', (e) => {
+          let input = e.currentTarget.querySelector('label input');
+          let uid = input.getAttribute('id');
+          if (input.checked) {
+            const index = this.checkedUIDs.indexOf(uid);
+            if (index < 0) {
+              this.checkedUIDs.push(uid);
+            }
+          }
+          else {
+            const index = this.checkedUIDs.indexOf(uid);
+            if (index > -1) {
+              this.checkedUIDs.splice(index, 1); // 2nd parameter means remove one item only
+              document.querySelector('.checkbox-description label input').checked = false;
+            }
           }
         });
       }

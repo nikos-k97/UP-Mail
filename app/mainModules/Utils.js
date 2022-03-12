@@ -9,6 +9,9 @@ function Utils(app, logger) {
   this.logger = logger;
 }
 
+
+
+
 /**
  * Convert a template string into HTML DOM nodes
  * @param  {String} str The template string
@@ -206,7 +209,6 @@ Utils.prototype.alterDate = function (date) {
   if (isWithinAYear(messageTime)) return messageTime.toFormat('dd/LL/yy');
   return messageTime.toFormat('dd/LL/yy');
 }
-
 
 Utils.prototype.createNewMailElement = function (mail) {
   let html = `
