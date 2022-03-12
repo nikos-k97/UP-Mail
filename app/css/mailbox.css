@@ -17,6 +17,121 @@ body {
   scrollbar-track-color: #ededed;
 }
 
+.nav {
+ 
+  list-style:none !important;
+  max-width: 200px !important;
+  background-color: #F5F5F5 !important;
+
+}
+
+.action-bar{
+  display: flex;
+  justify-content: center;
+}
+
+nav {
+  height: 40px;
+  line-height: 40px;
+  width: fit-content;
+  box-shadow: none !important;
+  background-color: rgb(255,202,40)  !important;
+  border-radius: 10px;
+}
+
+nav div ul li {
+  list-style: none !important;
+}
+
+nav div ul li a{
+  list-style: none !important;
+  color : rgb(97,97,97) !important;
+  border-radius: 10px;
+
+}
+
+nav i, nav [class^="mdi-"], nav [class*="mdi-"], nav i.material-icons {
+  height: 40px;
+  line-height: 40px;
+}
+
+nav .button-collapse i {
+  height: 40px;
+  line-height: 40px;
+}
+
+
+@media only screen and (min-width: 601px){
+  nav, nav .nav-wrapper i, nav a.button-collapse, nav a.button-collapse i {
+      height: 40px;
+      line-height: 40px;
+  }
+}
+
+.email-wrapper {
+  cursor:default;
+  display: flex;
+  justify-content: center !important;
+  align-content: center !important;
+  justify-items: center !important;
+  align-items: center !important;
+}
+
+e-mail{
+  display: flex;
+  flex : 1 1 0px;
+  min-width: 0
+}
+
+.mail-checkbox{
+  display: flex;
+}
+
+
+.checkbox-description{
+  display: flex;
+}
+
+
+[type="checkbox"].filled-in:checked+span:not(.lever):before{
+  display: flex;
+  border-right:2px solid rgb(97,97,97);
+  border-bottom:2px solid rgb(97,97,97);
+}
+
+[type="checkbox"].filled-in:checked+span:not(.lever):after{
+  display: flex;
+  border:2px solid rgb(255,202,40);
+  background-color:rgb(255,202,40);
+}
+
+[type="checkbox"].filled-in.tabbed:checked:focus+span:not(.lever):after{
+  display: flex;
+  background-color:rgb(255,202,40);
+  border-color:rgb(255,202,40);
+} 
+
+
+.checkbox-description  [type="checkbox"].filled-in:checked+span:not(.lever):before{
+  display: flex;
+  border-right:3px solid rgb(255,202,40);
+  border-bottom:3px solid rgb(255,202,40);
+}
+
+.checkbox-description label [type="checkbox"].filled-in:checked+span:not(.lever):after{
+  display: flex;
+  border:2px solid rgb(97,97,97);
+  background-color:rgb(97,97,97);
+}
+
+.checkbox-description label [type="checkbox"].filled-in.tabbed:checked:focus+span:not(.lever):after{
+  display: flex;
+  background-color:rgb(97,97,97);
+  border-color:rgb(97,97,97);
+}
+
+
+
 .wrapper {
   padding: 0px;
   min-height: 100%;

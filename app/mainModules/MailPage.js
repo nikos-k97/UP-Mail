@@ -220,6 +220,8 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   // that 'state.json' dictates.
   await this.getChosenFolderInfo(this.stateManager.state.account.folder);
 
+  
+
   /*
     We define the event listeners for the active mailbox here and not inside the 'getChosenFolderInfo'
     function, otherwise we create a new listener for the same event each time we change folder.
@@ -721,10 +723,31 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
   }
   else {
     // Create <e-mail> tags equal to mailbox length.
-    if (!page) html += `<e-mail class="email-item description"></e-mail>`; // For the menu - desciption
+ 
+    if (!page) html += `
+      <div class='email-wrapper wrapper-description'>
+      <div class="multi mail-checkbox checkbox-description">
+      <label>
+        <input type="checkbox" class="filled-in" id="all" />
+        <span></span>
+      </label>
+      </div>
+        <e-mail class="email-item description"></e-mail>
+      </div>
+    `; // For the menu - desciption
     for (let i = 0; i < mail.length; i++) {
       if (! mail[i].isThreadChild) {
-        html += `<e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>`; // data-uid 
+        html += `
+          <div class='email-wrapper'>
+            <div class="multi mail-checkbox">
+              <label>
+                <input type="checkbox" class="filled-in" id="${mail[i].uid}" />
+                <span></span>
+              </label>
+            </div>
+            <e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>
+          </div>
+        `; // data-uid 
       }
     }
 
@@ -787,6 +810,10 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
               emailItemText.classList.add('read');
             } 
             this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+          }
+          else {
+            e.target.shadowRoot.querySelector('.mail-item #message-holder').innerHTML = '';
+            e.target.shadowRoot.querySelector('div.mail-item').classList.remove('selected-mail-item');
           }
         });
       }
@@ -961,17 +988,38 @@ MailPage.prototype.newMailReceived = async function (){
   // }
 
   // Insert new mail node just beneath the description node. (The new mail must appear first in the mailbox).
+  
   let html = '';
-  html += `<e-mail class="email-item new" data-uid="${escape(uid)}"></e-mail>`; // data-uid 
-  let description = document.querySelector('.description');
+  html += `
+    <div class='email-wrapper'>
+      <div class="multi mail-checkbox">
+      <label>
+        <input type="checkbox" class="filled-in" id="${escape(uid)}" />
+        <span></span>
+      </label>
+      </div>
+      <e-mail class="email-item new" data-uid="${escape(uid)}"></e-mail>
+    </div>
+  `; // data-uid 
+  let description = document.querySelector('.wrapper-description');
 
   if (description) {
     description.insertAdjacentHTML("afterend", html);
   }
   // This means that the folder was empty and this is the first email to come so the description item is not there yet.
   else {
-    document.querySelector('#mail').innerHTML = `<e-mail class="email-item description"></e-mail>`;
-    description = document.querySelector('.description');
+    document.querySelector('#mail').innerHTML = `
+      <div class='email-wrapper wrapper-description'>
+        <div class="multi mail-checkbox checkbox-description">
+          <label>
+            <input type="checkbox" class="filled-in" id="all" />
+            <span></span>
+          </label>
+        </div>
+        <e-mail class="email-item description"></e-mail>
+      </div>
+    `;
+    description = document.querySelector('.wrapper-description');
     let shadow = description.shadowRoot;
     shadow.innerHTML = this.utils.createDescriptionItem();
     description.insertAdjacentHTML("afterend", html);
@@ -1004,6 +1052,10 @@ MailPage.prototype.newMailReceived = async function (){
         emailItemText.classList.add('read');
       } 
       this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
+    }
+    else {
+      e.target.shadowRoot.querySelector('.mail-item #message-holder').innerHTML = '';
+      e.target.shadowRoot.querySelector('div.mail-item').classList.remove('selected-mail-item');
     }
   });
 }
@@ -1108,13 +1160,16 @@ MailPage.prototype.messageWasExpunged = async function(){
   accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
   // Delete the <e-mail> element(s) with the deleted UID(s).
-  let emailCustomElements = document.getElementsByTagName('e-mail');
-  for (let i = 0; i < emailCustomElements.length; i++){
-    let uid = unescape(emailCustomElements[i].getAttribute('data-uid'));
-
+  let emailWrappers = document.querySelectorAll('.email-wrapper');
+  console.log(emailWrappers)
+  for (let i = 0; i < emailWrappers.length; i++){
+    let emailCustomElement = emailWrappers[i].querySelector('.email-item');
+    let uid = unescape(emailCustomElement.getAttribute('data-uid'));
+    console.log(uid)
     if (UIDsToDelete.includes(parseInt(this.utils.stripStringOfNonNumericValues(uid)))){
-      emailCustomElements[i].shadowRoot.innerHTML = '';
-      emailCustomElements[i].remove();
+      console.log('includes')
+      emailCustomElement.shadowRoot.innerHTML = '';
+      emailWrappers[i].remove();
     }
   }
 }

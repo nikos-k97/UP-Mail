@@ -212,10 +212,6 @@ Utils.prototype.createNewMailElement = function (mail) {
   let html = `
         <div class="mail-item">
         <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
-          <div class="multi mail-checkbox">
-            <input type="checkbox" id="${mail.uid}">
-            <label for="${mail.uid}"></label>
-          </div>
           <div class="sender">
             <div class="sender-text left-align">${Clean.escape(
     (mail.envelope.from === undefined || mail.envelope.from === null) ? 'Unknown Sender' :
@@ -231,6 +227,7 @@ Utils.prototype.createNewMailElement = function (mail) {
         </div>
         <div id="message-holder"></div>
       </div>
+  
 
       <style>
 
@@ -258,20 +255,6 @@ Utils.prototype.createNewMailElement = function (mail) {
 
         .mail-item:hover {
           filter: brightness(90%);
-        }
-
-        .mail-item .multi {
-          width: 5%;
-          display: inline-block;
-          align-items: center;
-          height: 100%;
-        }
-
-        .mail-item .star {
-          display: flex;
-          align-items: center;
-          display: inline-block;
-          height: 100%;
         }
 
         .mail-item .text {
@@ -304,7 +287,7 @@ Utils.prototype.createNewMailElement = function (mail) {
         .mail-item .text .subject {
           display: block;
           align-items: center;
-          width: 45%;
+          width: 50%;
           height: 100%;
         }
         .mail-item .text .subject .subject-text {
@@ -365,10 +348,6 @@ Utils.prototype.createDescriptionItem = function () {
     <div class="description-item">
 
       <div class="text">
-        <div class="multi mail-checkbox">
-          <input type="checkbox" >
-          <label</label>
-        </div>
         <div class="sender">
           <div class="sender-text left-align">From</div>
         </div>
@@ -395,12 +374,7 @@ Utils.prototype.createDescriptionItem = function () {
             border: 0.5px solid rgb(97,97,97) ;
           }
           
-          .description-item .multi {
-            width: 5%;
-            display: flex;
-            align-items: center;
-            height: 100%;
-          }
+    
 
           .description-item .text {
             display: flex ;
@@ -423,7 +397,7 @@ Utils.prototype.createDescriptionItem = function () {
           .description-item .text .subject {
             display: flex ;
             align-items: center ;
-            width: 45% ;
+            width: 50% ;
             height: 100% ;
           }
           .description-item .text .subject .subject-text {
