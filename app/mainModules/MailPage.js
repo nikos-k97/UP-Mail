@@ -651,7 +651,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
 
 
   // Render email subject, sender and date for each email in the selected folder.
-  this.render(accountInfo);
+  await this.render(accountInfo);
 }
 
 
@@ -841,10 +841,6 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
               emailItemText.classList.add('read');
             } 
             this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
-          }
-          else {
-            e.target.shadowRoot.querySelector('.mail-item #message-holder').innerHTML = '';
-            e.target.shadowRoot.querySelector('div.mail-item').classList.remove('selected-mail-item');
           }
         });
       }
@@ -1073,7 +1069,7 @@ MailPage.prototype.newMailReceived = async function (){
   let html = '';
   html += `
     <div class='email-wrapper'>
-      <div class="multi mail-checkbox-new">
+      <div class="multi mail-checkbox">
       <label>
         <input type="checkbox" class="filled-in" id="${escape(uid)}" />
         <span></span>
@@ -1134,21 +1130,16 @@ MailPage.prototype.newMailReceived = async function (){
       } 
       this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
     }
-    else {
-      e.target.shadowRoot.querySelector('.mail-item #message-holder').innerHTML = '';
-      e.target.shadowRoot.querySelector('div.mail-item').classList.remove('selected-mail-item');
-    }
   });
 
   // Checkbox functionality - Add uids to 'this.checkedUIDs' array. When unchecked the UID is removed from the array.
-  let emailCheckboxes = document.querySelectorAll('.mail-checkbox-new');
+  let emailCheckboxes = document.querySelectorAll('.mail-checkbox');
   for (let j=0; j < emailCheckboxes.length; j++){
     if (emailCheckboxes[j].classList.contains('checkbox-description')){
       emailCheckboxes[j].addEventListener('change', (e) => {
         let input = e.currentTarget.querySelector('label input');
         if (input.checked) {
-          let allemailcheckboxes = document.querySelectorAll('.mail-checkbox');
-          allemailcheckboxes.forEach(el => {
+          emailCheckboxes.forEach(el => {
             let id = el.querySelector('label input').getAttribute('id');
             // If the UID is not 'all' and doesnt already exist in the array, push it.
             const index = this.checkedUIDs.indexOf(id);
@@ -1307,7 +1298,10 @@ MailPage.prototype.messageWasExpunged = async function(){
   }
 }
 
-
+/*
+  Since this function is run inside an event listener (when a user clicks an email), the Shadow DOM has been
+  loaded, so we can use 'shadowRoot.querySelector' sucessfully.
+*/
 MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   let metadata = await this.mailStore.loadEmail(uid);
 
