@@ -1,10 +1,9 @@
 const merge                         = require('merge-deep');
-const materialize                   = require("../helperModules/materialize.min.js");
-const Header                        = require('./Header');
 const _                             = require('lodash');
-const Clean                         = require('./Clean');
 const Utils                         = require('./Utils');
 const IMAPClient                    = require('./IMAPClient');
+const Header                        = require('./Header');
+const materialize                   = require("../helperModules/materialize.min.js");
 
 
 function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager, mailStore) {
@@ -17,7 +16,6 @@ function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager
   this.mailStore = mailStore;
   //this.imapClient -> defined in 'initializeIMAP()'
   this.checkedUIDs = [];
-
 }
 
 
@@ -260,8 +258,6 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
       this.logger.info(`Reloading all the folder data...`);
       await this.UIDValidityChanged();
     });
-
-
   }
 }
 
@@ -635,31 +631,6 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1 , _id : 0 });
   await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
 
-  // Look for threads.
-  // document.querySelector('#number').innerText = '';
-  // document.querySelector('#doing').innerText = 'Looking for threads ...';
-  // threads : object containing arrays with parent messages. 
-  // These arrays contain all the children that originated for each of the parents
-  // let threads;
-  // try {
-  //   threads = Threader.applyThreads(await this.mailStore.findEmails());
-  // } catch (error) {
-  //   this.logger.error(error);
-  //   return;
-  // }
-
-  // for (let parentUid in threads) {
-  //   // Add a field 'threadMsg' to every email in the database that is a parent email.
-  //   // The 'threadMsg' field contains an array with the children of the email.
-  //   await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
-  //   // Add a 'isThreadChild' field to each children email.
-  //   // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
-  //   for (let i = 0; i < threads[parentUid].length; i++) {
-  //     await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
-  //   }
-  // }
-
-
   // Render email subject, sender and date for each email in the selected folder.
   await this.render(accountInfo);
 }
@@ -726,8 +697,8 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
 MailPage.prototype.render = async function(accountInfo, folderPage) {
   let page = folderPage || 0;
 
-  // Get the UID and the 'isThreadChild' fields of all the emails inside the current folder (folder stored in state.json).
-  let mail = await this.mailStore.findEmails(this.imapClient.compilePath(this.stateManager.state.account.folder), { uid: 1, isThreadChild: 1 }, page * 100, 100);
+  // Get the UID field of all the emails inside the current folder (folder stored in state.json).
+  let mail = await this.mailStore.findEmails(this.imapClient.compilePath(this.stateManager.state.account.folder), {uid: 1}, page * 100, 100);
   // Show in header the emailAddress followed by the folder currently selected.
   Header.setLoc([accountInfo.user].concat(this.stateManager.state.account.folder.map((val) => { return val.name })));
 
@@ -740,13 +711,13 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
   Utils.listenPushinArray(this.checkedUIDs, (uid) => {
     console.log(this.checkedUIDs)
     if (this.checkedUIDs.length) {
-      setTimeout(() => {document.querySelector('.nav-wrapper').classList.remove('hide');}, 100);
+      setTimeout(() => {document.querySelector('.nav-wrapper').classList.remove('hide');}, 25);
     }
   });
   Utils.listenSpliceinArray(this.checkedUIDs, () => {
     console.log(this.checkedUIDs)
     if (!this.checkedUIDs.length) {
-      setTimeout(() => {document.querySelector('.nav-wrapper').classList.add('hide');}, 100);
+      setTimeout(() => {document.querySelector('.nav-wrapper').classList.add('hide');}, 25);
     }
   });
 
@@ -763,37 +734,42 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     document.querySelector('#mail').innerHTML = html;
   }
   else {
-    // Create <e-mail> tags equal to mailbox length.
- 
+    // For the menu - desciption
     if (!page) html += `
       <div class='email-wrapper wrapper-description'>
-      <div class="multi mail-checkbox checkbox-description">
-      <label>
-        <input type="checkbox" class="filled-in" id="all" />
-        <span></span>
-      </label>
-      </div>
+        <div class="multi mail-checkbox checkbox-description">
+          <label>
+            <input type="checkbox" class="filled-in" id="all" />
+            <span></span>
+          </label>
+        </div>
         <e-mail class="email-item description"></e-mail>
       </div>
-    `; // For the menu - desciption
+    `; 
+
+    // Create <e-mail> tags equal to mailbox length.
     for (let i = 0; i < mail.length; i++) {
-      if (! mail[i].isThreadChild) {
-        html += `
-          <div class='email-wrapper'>
-            <div class="multi mail-checkbox">
-              <label>
-                <input type="checkbox" class="filled-in" id="${mail[i].uid}" />
-                <span></span>
-              </label>
-            </div>
-            <e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>
+      html += `
+        <div class='email-wrapper'>
+          <div class="multi mail-checkbox">
+            <label>
+              <input type="checkbox" class="filled-in" id="${mail[i].uid}" />
+              <span></span>
+            </label>
           </div>
-        `; // data-uid 
-      }
+          <e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>
+        </div>
+      `; 
     }
 
     if (await this.mailStore.countEmails(this.imapClient.compilePath(this.stateManager.state.account.folder)) > 100 * (page + 1)) {
-      html += `<button class='load-more'>Load more...</button>`;
+      html += `
+        <div class="load-more-container">
+          <button class="btn waves-effect waves-light load-more">
+            <i class="material-icons iloadmore">expand_more</i>
+          </button>
+        </div>
+      `;
     }
     document.querySelector('#mail').innerHTML = document.querySelector('#mail').innerHTML + html;
 
@@ -803,8 +779,8 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     for (let i=0; i < emailCustomElements.length; i++){
       let shadowRoot = emailCustomElements[i].shadowRoot;
       
-      if (emailCustomElements[i].classList.contains('description') && !page){
-        shadowRoot.innerHTML = this.utils.createDescriptionItem();
+      if (emailCustomElements[i].classList.contains('description')){
+        shadowRoot.innerHTML = this.utils.createDescriptionItem(this.imapClient.compilePath(this.stateManager.state.account.folder));
       }
       else {
  
@@ -825,7 +801,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
 
         let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
         this.mailStore.loadEmail(uid).then((mail) => {
-          let newHTML = this.utils.createNewMailElement(mail);
+          let newHTML = this.utils.createNewMailElement(mail, this.imapClient.compilePath(this.stateManager.state.account.folder), this.stateManager.state.account.user);
           shadowRoot.innerHTML = newHTML;
         });
       }
@@ -909,7 +885,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     if (loadMoreButton) {
       loadMoreButton.addEventListener('click', (e) => {
         this.render(accountInfo, page + 1);
-          // Remove it after press. If it's needed again it will be rendered again in the next page's render call.
+        // Remove it after press. If it's needed again it will be rendered again in the next page's render call.
         loadMoreButton.remove();
       });
     }
@@ -1052,30 +1028,7 @@ MailPage.prototype.newMailReceived = async function (){
   // Get the new info that we just stored in the accounts database.
   accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
   
-  // Look for threads.
-  // threads : object containing arrays with parent messages. 
-  // These arrays contain all the children that originated for each of the parents
-  // let threads;
-  // try {
-  //   threads = Threader.applyThreads(await this.mailStore.findEmails());
-  // } catch (error) {
-  //   this.logger.error(error);
-  //   return;
-  // }
-  
-  // for (let parentUid in threads) {
-  //   // Add a field 'threadMsg' to every email in the database that is a parent email.
-  //   // The 'threadMsg' field contains an array with the children of the email.
-  //   await this.mailStore.updateEmailByUid(parentUid, { threadMsg: threads[parentUid] });
-  //   // Add a 'isThreadChild' field to each children email.
-  //   // The 'isThreadChild' field contains the UID of the parent email (the first parent - root).
-  //   for (let i = 0; i < threads[parentUid].length; i++) {
-  //     await this.mailStore.updateEmailByUid(threads[parentUid][i], { isThreadChild: parentUid });
-  //   }
-  // }
-
   // Insert new mail node just beneath the description node. (The new mail must appear first in the mailbox).
-  
   let html = '';
   html += `
     <div class='email-wrapper'>
@@ -1108,7 +1061,7 @@ MailPage.prototype.newMailReceived = async function (){
     `;
     description = document.querySelector('.wrapper-description');
     let shadow = description.shadowRoot;
-    shadow.innerHTML = this.utils.createDescriptionItem();
+    shadow.innerHTML = this.utils.createDescriptionItem(this.imapClient.compilePath(this.stateManager.state.account.folder));
     description.insertAdjacentHTML("afterend", html);
   }
 
@@ -1117,7 +1070,7 @@ MailPage.prototype.newMailReceived = async function (){
   uid = unescape(newEmailTag.getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
   
   await this.mailStore.loadEmail(uid).then((mail) => {
-    let newHTML = this.utils.createNewMailElement(mail);
+    let newHTML = this.utils.createNewMailElement(mail, this.imapClient.compilePath(this.stateManager.state.account.folder), this.stateManager.state.account.user);
     shadowRoot.innerHTML = newHTML;
   });
 

@@ -25,7 +25,7 @@ if (process.env.NODE_ENV === 'development') {
     //require('dotenv').config();
     //const { port } = require('./app/config');
     //console.log(port);
-    require('electron-debug')({ showDevTools: true }); //not necessery since we display the menu in development mode
+   require('electron-debug')({ showDevTools: true }); //not necessery since we display the menu in development mode
 };
 
 // Keep a global reference of the window object, otherwise the window will
@@ -90,13 +90,17 @@ function openWindow (file) {
     else if (file === 'composeWindow'){
         //Use window.js helper script to create and open the electron.js BrowserWindow
         appWindows[index] = createWindow(file, {
-            width,
-            height,
+            width: 950,
+            height: 900,
             icon: './icons/email-icon.png',
             title:'Compose', //overriden by the loaded html's <title/> tag (!!)
-            minWidth: 320,
-            minHeight: 480,
+            minWidth: 500,
+            minHeight: 450,
             maximized: false,
+            maximizable : false,
+            fullscreenable : false,
+            maxWidth: 950,
+            maxHeight: 900,
             frame: false,
             show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
             webPreferences: {

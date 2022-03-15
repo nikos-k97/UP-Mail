@@ -13,7 +13,6 @@ function Utils(app, logger) {
    @callback function that will be called on any change inside array
  */
 Utils.listenPushinArray = function(arr,callback){
-  //splice
   ['push'].forEach((m)=>{
     arr[m] = function(){
       let res = Array.prototype[m].apply(arr, arguments);  // call normal behaviour
@@ -23,7 +22,6 @@ Utils.listenPushinArray = function(arr,callback){
   });
 }
 Utils.listenSpliceinArray = function(arr,callback){
-  //splice
   ['splice'].forEach((m)=>{
     arr[m] = function(){
       let res = Array.prototype[m].apply(arr, arguments);  // call normal behaviour
@@ -231,18 +229,38 @@ Utils.prototype.alterDate = function (date) {
   return messageTime.toFormat('dd/LL/yy');
 }
 
-Utils.prototype.createNewMailElement = function (mail) {
+Utils.prototype.createNewMailElement = function (mail, folder, user) {
+
+  let folderName = `${folder}`.toLowerCase();
+  let fromTo;
+  if (folderName === 'sent' || folderName === 'outbox' || folderName === 'outgoing' || folderName === 'απεσταλμένα' ||folderName === 'εξερχόμενα') {
+    if (mail.envelope.to && mail.envelope.to[0].name && (`${mail.envelope.to[0].name}` !== `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}`)){
+      fromTo = `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host} (${mail.envelope.to[0].name})`;
+    }
+    else {
+      fromTo = (mail.envelope.to === undefined || mail.envelope.to === null) ? 'Unknown Sender' :
+      `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}`;
+    }
+  }
+  else {
+    if (mail.envelope.from && mail.envelope.from[0].name && (`${mail.envelope.from[0].name}` !== `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}`)){
+      fromTo = `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`;
+    }
+    else {
+      fromTo = (mail.envelope.from === undefined || mail.envelope.from === null) ? 'Unknown Sender' :
+      `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}`;
+    }
+  }
+
   let html = `
         <div class="mail-item">
         <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
           <div class="sender">
-            <div class="sender-text left-align">${Clean.escape(
-    (mail.envelope.from === undefined || mail.envelope.from === null) ? 'Unknown Sender' :
-      `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})`)}
+            <div class="sender-text left-align">${Clean.escape(fromTo)}
             </div>
           </div>
           <div class="subject">
-            <div class="subject-text center-align">${mail.threadMsg && mail.threadMsg.length ? `(${mail.threadMsg.length + 1})` : ``} ${Clean.escape(mail.envelope.subject)}
+            <div class="subject-text center-align">${mail.envelope.subject ? Clean.escape(mail.envelope.subject) : '(No Subject)'}
             </div>
           </div>
           <div class="date teal-text right-align">${this.alterDate(mail.date)}
@@ -365,19 +383,30 @@ Utils.prototype.createNewMailElement = function (mail) {
   return html;
 }
 
-Utils.prototype.createDescriptionItem = function () {
+Utils.prototype.createDescriptionItem = function (folder) {
+  console.log(folder)
+  let folderName = `${folder}`.toLowerCase();
+  let fromTo;
+  if (folderName.includes('sent') || folderName.includes('Sent') ||  folderName.includes('Outbox') || folderName.includes('outbox') || folderName.includes('Outgoing') || folderName.includes('outgoing') || folderName.includes('απεσταλμένα') || folderName.includes('Aπεσταλμένα') || folderName.includes('εξερχόμενα') || folderName.includes('Eξερχόμενα')) {
+    fromTo = 'To';
+  }
+  else if (folderName.includes('deleted') || folderName.includes('Deleted') ||  folderName.includes('Trash') || folderName.includes('trash') || folderName.includes('Garbage') || folderName.includes('garbage') || folderName.includes('διεγραμμένα') || folderName.includes('Διεγραμμένα') || folderName.includes('κάδος') || folderName.includes('Κάδος')) {
+    fromTo = 'From / To';
+  }
+  else {
+    fromTo = 'From';
+  }
+
   let html = `
-
     <div class="description-item">
-
       <div class="text">
         <div class="sender">
-          <div class="sender-text left-align">From</div>
+          <div class="sender-text left-align">${fromTo}:</div>
         </div>
         <div class="subject">
-          <div class="subject-text center-align">Subject</div>
+          <div class="subject-text center-align">Subject:</div>
         </div>
-        <div class="date right-align">Date</div>
+        <div class="date right-align">Date:</div>
       </div>
     </div>
 

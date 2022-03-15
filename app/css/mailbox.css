@@ -243,3 +243,33 @@ e-mail{
 #iactions-nested {
   color : rgb(97,97,97) !important;
 }
+
+/* Load More button */
+
+.load-more-container{
+  display: flex;
+  height: fit-content;
+  justify-content: center;
+}
+
+.load-more {
+  background-color: rgb(97,97,97) !important; 
+  color : rgb(255,202,40) !important;
+  border-radius: 10em !important;
+  height: 3em !important;
+  width : 6em !important;
+  display: flex !important;
+  justify-self: center;
+  justify-content: center !important;
+  align-items: center !important;
+  margin-bottom: 5px;
+}
+
+/* Login button */
+.load-more:hover {
+  background-color: rgb(128, 128, 128) !important; 
+}
+
+.iloadmore {
+  font-size: 2rem !important;
+}

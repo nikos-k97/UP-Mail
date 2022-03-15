@@ -13,7 +13,7 @@ module.exports = function (name, options) {
   let defaultSize = {
     width: options.width,
     height: options.height,
-    maximized: true
+    maximized: options.maximized
   };
   let state = {};
   let win;
@@ -86,6 +86,7 @@ module.exports = function (name, options) {
   //Retrieve previous saved configurations. If with these configurations the window is not visible,
   //fallback to default
   let previous = restore();
+  console.log(previous)
   if (!previous.maximized) {
     state = ensureVisibleOnSomeDisplay(previous);
   };
