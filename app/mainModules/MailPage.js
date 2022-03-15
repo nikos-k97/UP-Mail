@@ -1276,7 +1276,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   */
   let selectedItemWrapper = undefined;
   let selectedMailItem = undefined;
-  let selectedEmailElement = undefined;
   for (i = 0; i < emailElements.length; i++){
     // Reset each message holder.
     let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
@@ -1305,6 +1304,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
  
   // Load the email body either from the DB if this message's body has been retrieved again, or fetch it.
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
+  let emailHeaders = await this.mailStore.loadEmail(uid, accountInfo.user);
+  console.log(emailHeaders)
   // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
     selectedItemWrapper.innerHTML = 'Loading email body ...';
@@ -1370,10 +1371,105 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   //let cleanContent = Clean.cleanHTML(dirtyContent);
   let cleanContent = dirtyContent; //allow images etc...
 
-  let preContent ;
+  selectedItemWrapper.innerHTML = '';
 
-  selectedItemWrapper.innerHTML = cleanContent;
+  let headerContentNode = document.createElement('div');
+  headerContentNode.classList.add('header-content');
+  let envelope = emailHeaders.envelope;
+  let headerContent = `
+    <br>
+    <table class='header-table'>
+      <thead>
+        <tr>
+          <th>From: &nbsp; &nbsp; &nbsp;</th>
+          <td><a href="javascript:void(0)">${envelope.from[0].mailbox}@${envelope.from[0].host}</a>  ${envelope.from[0].name ? ' &nbsp; ('+envelope.from[0].name+')' : ''}</td>
+        </tr>
+        <tr>
+          <th>To: &nbsp; &nbsp; &nbsp;</th>
+          <td><a href="javascript:void(0)">${envelope.to[0].mailbox}@${envelope.to[0].host}</a>  ${envelope.to[0].name ? ' &nbsp; ('+envelope.to[0].name+')' : ''}</td>
+        </tr>
+        <tr>
+          <th>Cc: &nbsp; &nbsp; &nbsp;</th>
+          <td>${envelope.cc ? '<a href="javascript:void(0)">'+ envelope.cc +'</a>' : '-'}</td>
+        </tr>
+        <tr>
+          <th>Bcc: &nbsp; &nbsp; &nbsp;</th>
+          <td>${envelope.bcc ? '<a href="javascript:void(0)">'+ envelope.bcc +'</a>' : '-'}</td>
+        </tr>
+        <tr>
+          <th>Date: &nbsp; &nbsp; &nbsp;</th>
+          <td>${envelope.date}</td>
+        </tr>
+        <tr>
+        <th>Subject: &nbsp; &nbsp; &nbsp;</th>
+        <th>${envelope.subject}</td>
+      </tr>
+      </thead>
+      <table>
+    </table>
 
+    <button class = 'show-headers'>Show All Headers</button>
+    <hr> <br>
+   
+    <style>
+      .header-table {
+        text-align: left; 
+        vertical-align: middle;
+        border-spacing:0;
+        margin-bottom : 8px;
+      }
+
+      .header-table thead tr {
+        overflow: hidden;
+        height: 16px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        line-height: 16px;
+      }
+
+      .header-table thead tr td a {
+        text-decoration: none;
+      }
+
+      .header-table thead tr td {
+        max-width: 100px;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .show-headers{
+        cursor: pointer; 
+        border: 0px;
+        border-radius: 6px;
+        color: rgb(97,97,97);
+        background-color : rgb(255,202,40);
+        height: fit-content;
+        width : fit-content;
+        padding: 7px;
+      }
+
+      .show-headers:hover{
+        background-color : rgb(255, 179, 0) ;
+      }
+
+      hr {
+        color: silver;
+        opacity: 0.5;
+      }
+    </style>
+  `;
+  headerContentNode.innerHTML = headerContent;
+  selectedItemWrapper.appendChild(headerContentNode);
+
+  let allHeadersContentNode = document.createElement('div');
+  allHeadersContentNode.classList.add('all-headers-content');
+  selectedItemWrapper.appendChild(allHeadersContentNode);
+
+  let bodyContentNode = document.createElement('div');
+  bodyContentNode.classList.add('body-content');
+  bodyContentNode.innerHTML = cleanContent;
+  selectedItemWrapper.appendChild(bodyContentNode);
 }
 
 

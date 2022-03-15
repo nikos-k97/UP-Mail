@@ -200,6 +200,7 @@ Utils.prototype.getItemsFromForm = function (form) {
   return loginInfo;
 }
 
+
 function isToday(date) {
   let now = DateTime.now();
   return date.hasSame(now, 'day');
@@ -230,15 +231,45 @@ Utils.prototype.alterDate = function (date) {
 }
 
 Utils.prototype.createNewMailElement = function (mail, folder, user) {
-
   let folderName = `${folder}`.toLowerCase();
   let fromTo;
-  if (folderName === 'sent' || folderName === 'outbox' || folderName === 'outgoing' || folderName === 'απεσταλμένα' ||folderName === 'εξερχόμενα') {
+
+  // if (mail.envelope.to && mail.envelope.to[0].name && `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}` !== user){
+  //   // The message was deleted from the 'Sent' folder.
+  //   fromTo = `${mail.envelope.to[0].name}` !== `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}` ? 
+  //   `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host} (${mail.envelope.to[0].name})` : 
+  //   `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}`; 
+  // }
+  // else if (mail.envelope.from && mail.envelope.from[0].name && `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}` !== user){
+  //   // The message was deleted from 'Inbox' folders (or similar folders eg. Junk)
+  //   fromTo = `${mail.envelope.from[0].name}` !== `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}` ? 
+  //   `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host} (${mail.envelope.from[0].name})` : 
+  //   `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}`; 
+  // }
+  // else if (mail.envelope.to && !mail.envelope.to[0].name && `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}` !== user){
+  //   // The message was deleted from the 'Sent' folder.
+  //   fromTo = `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}`; 
+  // }
+  // else if (mail.envelope.from && !mail.envelope.from[0].name && `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}` !== user){
+  //   // The message was deleted from 'Inbox' folders (or similar folders eg. Junk)
+  //   fromTo = `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}`; 
+  // }
+  // else if (!mail.envelope.to && mail.envelope.from){
+  //   fromTo = `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}`; 
+  // }
+  // else if (mail.envelope.to && !mail.envelope.from){
+  //   fromTo = `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}`; 
+  // }
+  // else {
+  //   fromTo = `${mail.envelope.from[0].mailbox}@${mail.envelope.from[0].host}`; 
+  // }
+
+  if (folderName.includes('sent') || folderName.includes('Sent') ||  folderName.includes('Outbox') || folderName.includes('outbox') || folderName.includes('Outgoing') || folderName.includes('outgoing') || folderName.includes('απεσταλμένα') || folderName.includes('Aπεσταλμένα') || folderName.includes('εξερχόμενα') || folderName.includes('Eξερχόμενα')) {
     if (mail.envelope.to && mail.envelope.to[0].name && (`${mail.envelope.to[0].name}` !== `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}`)){
       fromTo = `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host} (${mail.envelope.to[0].name})`;
     }
     else {
-      fromTo = (mail.envelope.to === undefined || mail.envelope.to === null) ? 'Unknown Sender' :
+      fromTo = (mail.envelope.to === undefined || mail.envelope.to === null) ? 'Unknown Receiver' :
       `${mail.envelope.to[0].mailbox}@${mail.envelope.to[0].host}`;
     }
   }
@@ -389,9 +420,6 @@ Utils.prototype.createDescriptionItem = function (folder) {
   let fromTo;
   if (folderName.includes('sent') || folderName.includes('Sent') ||  folderName.includes('Outbox') || folderName.includes('outbox') || folderName.includes('Outgoing') || folderName.includes('outgoing') || folderName.includes('απεσταλμένα') || folderName.includes('Aπεσταλμένα') || folderName.includes('εξερχόμενα') || folderName.includes('Eξερχόμενα')) {
     fromTo = 'To';
-  }
-  else if (folderName.includes('deleted') || folderName.includes('Deleted') ||  folderName.includes('Trash') || folderName.includes('trash') || folderName.includes('Garbage') || folderName.includes('garbage') || folderName.includes('διεγραμμένα') || folderName.includes('Διεγραμμένα') || folderName.includes('κάδος') || folderName.includes('Κάδος')) {
-    fromTo = 'From / To';
   }
   else {
     fromTo = 'From';

@@ -68,6 +68,7 @@ MailStore.prototype.loadEmail = async function (uid, email) {
   return this.db.findOneAsync({ uid: uid });
 }
 
+
 MailStore.prototype.loadEmailsWithoutBody = async function () {
   return await new Promise((resolve, reject) => {
     this.db.find({
