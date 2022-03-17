@@ -1305,7 +1305,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   // Load the email body either from the DB if this message's body has been retrieved again, or fetch it.
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
   let emailHeaders = await this.mailStore.loadEmail(uid, accountInfo.user);
-  console.log(emailHeaders)
+
   // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
     selectedItemWrapper.innerHTML = 'Loading email body ...';
@@ -1381,29 +1381,32 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     <table class='header-table'>
       <thead>
         <tr>
-          <th>From: &nbsp; &nbsp; &nbsp;</th>
+          <th>From: &nbsp;</th>
           <td><a href="javascript:void(0)">${envelope.from[0].mailbox}@${envelope.from[0].host}</a>  ${envelope.from[0].name ? ' &nbsp; ('+envelope.from[0].name+')' : ''}</td>
         </tr>
         <tr>
-          <th>To: &nbsp; &nbsp; &nbsp;</th>
+          <th>To: &nbsp;</th>
           <td><a href="javascript:void(0)">${envelope.to[0].mailbox}@${envelope.to[0].host}</a>  ${envelope.to[0].name ? ' &nbsp; ('+envelope.to[0].name+')' : ''}</td>
         </tr>
         <tr>
-          <th>Cc: &nbsp; &nbsp; &nbsp;</th>
+          <th>Cc: &nbsp;</th>
           <td>${envelope.cc ? '<a href="javascript:void(0)">'+ envelope.cc +'</a>' : '-'}</td>
         </tr>
         <tr>
-          <th>Bcc: &nbsp; &nbsp; &nbsp;</th>
+          <th>Bcc: &nbsp;</th>
           <td>${envelope.bcc ? '<a href="javascript:void(0)">'+ envelope.bcc +'</a>' : '-'}</td>
         </tr>
         <tr>
-          <th>Date: &nbsp; &nbsp; &nbsp;</th>
+          <th>Date: &nbsp;</th>
           <td>${envelope.date}</td>
         </tr>
         <tr>
-        <th>Subject: &nbsp; &nbsp; &nbsp;</th>
-        <th>${envelope.subject}</td>
-      </tr>
+          <th>Subject: &nbsp;</th>
+          <td>${envelope.subject}</td>
+        </tr>
+        <tr>
+          <hr>
+        </tr>
       </thead>
       <table>
     </table>
@@ -1432,7 +1435,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
       }
 
       .header-table thead tr td {
-        max-width: 100px;
         overflow: hidden;
         white-space: nowrap;
         text-overflow: ellipsis;
@@ -1470,6 +1472,104 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   bodyContentNode.classList.add('body-content');
   bodyContentNode.innerHTML = cleanContent;
   selectedItemWrapper.appendChild(bodyContentNode);
+
+  selectedItemWrapper.querySelector('.show-headers').addEventListener('click', (e) => {
+    console.log(emailContent.headers)
+    for (let i=0; i < emailContent.headers.length; i++){
+      this.createTableRow(selectedItemWrapper, emailContent.headers[i], false)
+    }
+  });
+}
+
+MailPage.prototype.createTableRow = function(wrapper, header, recursion){
+  let headerName = header.name;
+  let headerValue = header.value;
+
+  if (typeof headerValue === 'object'){
+    let tableRow = document.createElement('tr');
+    let tableRowHTML;
+    if (recursion){
+      tableRowHTML = `
+      <td>&nbsp;&nbsp;&nbsp; => ${headerName}: &nbsp;</td>
+      <td></td>
+    `;
+    }
+    else {
+      tableRowHTML = `
+      <th>${headerName}: &nbsp;</th>
+      <td></td>
+    `;
+    }
+   
+    tableRow.innerHTML = tableRowHTML;
+    wrapper.querySelector('.header-table thead').appendChild(tableRow);
+    if (headerValue.length){
+      for (let j = 0 ; j < headerValue.length; j++){
+        if ( typeof headerValue.value === 'object'){
+          let tableRow = document.createElement('tr');
+          let tableRowHTML = `
+            <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+            <td>${ headerValue.text || headerValue.value || headerValue[j]}</td>
+          `;
+          tableRow.innerHTML = tableRowHTML;
+          wrapper.querySelector('.header-table thead').appendChild(tableRow);
+        }
+        else {
+          let tableRow = document.createElement('tr');
+          let tableRowHTML = `
+            <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+            <td>${ headerValue.text || headerValue.value || headerValue[j]}</td>
+          `;
+          tableRow.innerHTML = tableRowHTML;
+          wrapper.querySelector('.header-table thead').appendChild(tableRow);
+        }
+      }
+    }
+    else {
+      if (headerValue.params){
+        let tableRow = document.createElement('tr');
+        let tableRowHTML = `
+          <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+          <td>${headerValue.text || headerValue.value || headerValue[j]}</td>
+        `;
+        tableRow.innerHTML = tableRowHTML;
+        wrapper.querySelector('.header-table thead').appendChild(tableRow);
+        for (let i in headerValue.params){
+          let key = i;
+          let val = headerValue.params[i];
+          this.createTableRow(wrapper, {'name':key, 'value':val}, true);
+        }
+      }
+      else {
+        let tableRow = document.createElement('tr');
+        let tableRowHTML = `
+          <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+          <td>${headerValue.text || headerValue.value || headerValue[j]}</td>
+        `;
+        tableRow.innerHTML = tableRowHTML;
+        wrapper.querySelector('.header-table thead').appendChild(tableRow);
+      }
+    }
+  }
+  else {
+    let tableRow = document.createElement('tr');
+    let tableRowHTML;
+    if (recursion){
+      tableRowHTML = `
+        <td>&nbsp;&nbsp;&nbsp; => ${headerName }: &nbsp;</td>
+        <td title=${headerValue.replace(/[ ]/g,"\u00a0")}>${headerValue}</td>
+      `;
+    }
+    else {
+      tableRowHTML = `
+      <th>${headerName }: &nbsp;</th>
+      <td title=${headerValue.replace(/[ ]/g,"\u00a0")}>${headerValue}</td>
+    `;
+    }
+  
+    tableRow.innerHTML = tableRowHTML;
+    wrapper.querySelector('.header-table thead').appendChild(tableRow);
+  }
 }
 
 
@@ -1479,10 +1579,18 @@ MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
       emailContent = await this.imapClient.getEmails(message.folder, false, false, message.seqno, 
         {bodies: '', struct: true, envelope: true}, 
         async function (seqno, content, attributes) {
+          // Convert 'Map' of headers into 'Array' of headers for storage.
+          let headers= [];
+          for (const [name, value] of content.headers) {
+            headers.push({ name, value });
+          }
+          content.headers = headers;
+    
           // The attributes.uid here is from the server so its not in the format 'folderUID'.
           // The message.uid is in the format 'folderUID' since we got it from our local DB.
           let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
           await this.mailStore.saveMailBody(message.uid, compiledContent, accountInfo.user);
+
           // Mark the mail body as retrived so that we dont fetch its body again with 
           // 'MailPage.prototype.retrieveEmailBodies'.
           this.mailStore.updateEmailByUid(message.uid, {'retrieved': true }, {flags : attributes.flags});

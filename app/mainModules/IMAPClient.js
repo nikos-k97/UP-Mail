@@ -672,15 +672,18 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
             // Run the callback function 'onLoad' for each parsedMessage.
             if (typeof onLoad === 'function') onLoad(seqno, parsedContent, attributes);
           }
-        );
 
+        );
+      
         parsePromise.catch( 
           (error) => {
             this.logger.error('Mail parsing encountered a problem.');
             reject(error);
           }
-        )
+        );
       });
+ 
+      
     });
 
     fetchObject.once('error', (err) => {
