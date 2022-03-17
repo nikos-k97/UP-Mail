@@ -1377,7 +1377,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   headerContentNode.classList.add('header-content');
   let envelope = emailHeaders.envelope;
   let headerContent = `
-    <br>
     <table class='header-table'>
       <thead>
         <tr>
@@ -1482,8 +1481,11 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
 }
 
 MailPage.prototype.createTableRow = function(wrapper, header, recursion){
+  let entities;
+  if (!recursion) entities = {'<': '&lt;', '>': '&gt;'};
   let headerName = header.name;
   let headerValue = header.value;
+
 
   if (typeof headerValue === 'object'){
     let tableRow = document.createElement('tr');
@@ -1509,7 +1511,7 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
           let tableRow = document.createElement('tr');
           let tableRowHTML = `
             <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-            <td>${ headerValue.text || headerValue.value || headerValue[j]}</td>
+            <td title=${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
           `;
           tableRow.innerHTML = tableRowHTML;
           wrapper.querySelector('.header-table thead').appendChild(tableRow);
@@ -1518,7 +1520,7 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
           let tableRow = document.createElement('tr');
           let tableRowHTML = `
             <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-            <td>${ headerValue.text || headerValue.value || headerValue[j]}</td>
+            <td title=${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
           `;
           tableRow.innerHTML = tableRowHTML;
           wrapper.querySelector('.header-table thead').appendChild(tableRow);
@@ -1530,13 +1532,14 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
         let tableRow = document.createElement('tr');
         let tableRowHTML = `
           <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-          <td>${headerValue.text || headerValue.value || headerValue[j]}</td>
+          <td title=${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
         `;
         tableRow.innerHTML = tableRowHTML;
         wrapper.querySelector('.header-table thead').appendChild(tableRow);
         for (let i in headerValue.params){
           let key = i;
           let val = headerValue.params[i];
+          if (key && key !== ' ' && val && val !== ' ')
           this.createTableRow(wrapper, {'name':key, 'value':val}, true);
         }
       }
@@ -1544,7 +1547,7 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
         let tableRow = document.createElement('tr');
         let tableRowHTML = `
           <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-          <td>${headerValue.text || headerValue.value || headerValue[j]}</td>
+          <td title=${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
         `;
         tableRow.innerHTML = tableRowHTML;
         wrapper.querySelector('.header-table thead').appendChild(tableRow);
@@ -1556,14 +1559,14 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
     let tableRowHTML;
     if (recursion){
       tableRowHTML = `
-        <td>&nbsp;&nbsp;&nbsp; => ${headerName }: &nbsp;</td>
-        <td title=${headerValue.replace(/[ ]/g,"\u00a0")}>${headerValue}</td>
+        <td>&nbsp;&nbsp;&nbsp; => ${headerName}: &nbsp;</td>
+        <td title=${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
       `;
     }
     else {
       tableRowHTML = `
       <th>${headerName }: &nbsp;</th>
-      <td title=${headerValue.replace(/[ ]/g,"\u00a0")}>${headerValue}</td>
+      <td title=${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
     `;
     }
   

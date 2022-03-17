@@ -415,7 +415,6 @@ Utils.prototype.createNewMailElement = function (mail, folder, user) {
 }
 
 Utils.prototype.createDescriptionItem = function (folder) {
-  console.log(folder)
   let folderName = `${folder}`.toLowerCase();
   let fromTo;
   if (folderName.includes('sent') || folderName.includes('Sent') ||  folderName.includes('Outbox') || folderName.includes('outbox') || folderName.includes('Outgoing') || folderName.includes('outgoing') || folderName.includes('απεσταλμένα') || folderName.includes('Aπεσταλμένα') || folderName.includes('εξερχόμενα') || folderName.includes('Eξερχόμενα')) {
