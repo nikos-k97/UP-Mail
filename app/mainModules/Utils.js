@@ -1,8 +1,8 @@
-const { DateTime } = require("luxon"); //Wrapper for JavaScript dates and times - Replacement of 'moment.js'
-const crypto = require('crypto');
-const util = require('util');
-const Clean = require("./Clean");
-const _ = require('lodash');
+const { DateTime }  = require("luxon"); //Wrapper for JavaScript dates and times - Replacement of 'moment.js'
+const crypto        = require('crypto');
+const util          = require('util');
+const Clean         = require("./Clean");
+const _             = require('lodash');
 
 function Utils(app, logger) {
   this.app = app;
@@ -21,6 +21,7 @@ Utils.listenPushinArray = function(arr,callback){
     }
   });
 }
+
 Utils.listenSpliceinArray = function(arr,callback){
   ['splice'].forEach((m)=>{
     arr[m] = function(){
@@ -284,7 +285,7 @@ Utils.prototype.createNewMailElement = function (mail, folder, user) {
   }
 
   let html = `
-        <div class="mail-item">
+      <div class="mail-item">
         <div class="text ${mail.flags.includes('\\Seen') ? `read` : `unread`}">
           <div class="sender">
             <div class="sender-text left-align">${Clean.escape(fromTo)}
@@ -299,11 +300,8 @@ Utils.prototype.createNewMailElement = function (mail, folder, user) {
         </div>
         <div id="message-holder"></div>
       </div>
-  
 
       <style>
-
-  
         .read {
           color: rgb(117, 117, 117);
         }
@@ -323,7 +321,6 @@ Utils.prototype.createNewMailElement = function (mail, folder, user) {
           border-radius : 3px;
           border: 0.5px solid rgb(224, 224, 224);
         }
-
 
         .mail-item:hover {
           filter: brightness(90%);
@@ -355,13 +352,13 @@ Utils.prototype.createNewMailElement = function (mail, folder, user) {
           overflow: hidden;
         }
 
-
         .mail-item .text .subject {
           display: block;
           align-items: center;
           width: 50%;
           height: 100%;
         }
+
         .mail-item .text .subject .subject-text {
           display: block;
           width: 90%;
@@ -393,7 +390,6 @@ Utils.prototype.createNewMailElement = function (mail, folder, user) {
           background-color: rgb(250, 250, 250)
         }
 
-
         .selected-mail-item .text {
           cursor: pointer;
           align-items: center;
@@ -405,10 +401,8 @@ Utils.prototype.createNewMailElement = function (mail, folder, user) {
         }
 
         .padding {
-
           padding: 10px 10px 10px 10px;
         }
-        
       </style>
   `;
   return html;
@@ -438,61 +432,63 @@ Utils.prototype.createDescriptionItem = function (folder) {
     </div>
 
     <style>
-          .description-item {
-            display: flex;
-            align-items: center ;
-            padding: 2px 18px 2px 18px;
-            background-color: rgb(97,97,97) ; 
-            color : rgb(224, 224, 224) ;
-            max-width: 100% ;
-            min-width: 100% ;
-            min-height: 35px;
-            width: 100% ;
-            height : 100% ;
-            border-radius : 5px ;
-            border: 0.5px solid rgb(97,97,97) ;
-          }
+      .description-item {
+        display: flex;
+        align-items: center ;
+        padding: 2px 18px 2px 18px;
+        background-color: rgb(97,97,97) ; 
+        color : rgb(224, 224, 224) ;
+        max-width: 100% ;
+        min-width: 100% ;
+        min-height: 35px;
+        width: 100% ;
+        height : 100% ;
+        border-radius : 5px ;
+        border: 0.5px solid rgb(97,97,97) ;
+      }
           
-    
+      .description-item .text {
+        display: flex ;
+        align-items: center ;
+        max-width: 100% ;
+        min-width: 100% ;
+        width: 100% ;
+        height: 100% ;
+      }
 
-          .description-item .text {
-            display: flex ;
-            align-items: center ;
-            max-width: 100% ;
-            min-width: 100% ;
-            width: 100% ;
-            height: 100% ;
-          }
-          .description-item .text .sender {
-            display: flex ;
-            align-items: center;
-            width: 40% ;
-            height: 100% ;
-          }
-          .description-item .text .sender .sender-text {
-            display: flex ;
-            width: 90% ;
-          }
-          .description-item .text .subject {
-            display: flex ;
-            align-items: center ;
-            width: 50% ;
-            height: 100% ;
-          }
-          .description-item .text .subject .subject-text {
-            display: flex ;
-            width: 90% ;
-            padding-left : 3px ;
-          }
-          .description-item .text .date {
-            width: 10% ;
-            display: flex ;
-            padding-left : 3px ;
-          }
+      .description-item .text .sender {
+        display: flex ;
+        align-items: center;
+        width: 40% ;
+        height: 100% ;
+      }
 
-         
+      .description-item .text .sender .sender-text {
+        display: flex ;
+        width: 90% ;
+      }
+
+      .description-item .text .subject {
+        display: flex ;
+        align-items: center ;
+        width: 50% ;
+        height: 100% ;
+      }
+
+      .description-item .text .subject .subject-text {
+        display: flex ;
+        width: 90% ;
+        padding-left : 3px ;
+      }
+
+      .description-item .text .date {
+        width: 10% ;
+        display: flex ;
+        padding-left : 3px ;
+      }   
     </style>
   `;
+
   return html;
 }
 

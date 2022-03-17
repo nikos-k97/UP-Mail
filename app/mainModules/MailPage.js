@@ -3,6 +3,7 @@ const _                             = require('lodash');
 const Utils                         = require('./Utils');
 const IMAPClient                    = require('./IMAPClient');
 const Header                        = require('./Header');
+const Clean                         = require('./Clean');
 const materialize                   = require("../helperModules/materialize.min.js");
 
 
@@ -220,7 +221,6 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   // that 'state.json' dictates.
   await this.getChosenFolderInfo(this.stateManager.state.account.folder);
 
-  
   document.querySelector('.navlink-delete').addEventListener('click', async (e) => {
     let newFlag = '\\Deleted';
     let path = this.imapClient.compilePath(this.stateManager.state.account.folder);  
@@ -233,7 +233,6 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
     this.checkedUIDs.forEach(uid => uids.push(this.utils.stripStringOfNonNumericValues(uid)));
     //await this.imapClient.expungeEmails(path, false, uids);
   });
-
 
   /*
     We define the event listeners for the active mailbox here and not inside the 'getChosenFolderInfo'
@@ -306,7 +305,6 @@ MailPage.prototype.renderFolderStructure = async function(accountInfo){
 
 
 MailPage.prototype.generateFolderList = async function (email, folders, journey) {
-
   let html = '';
   if (email){
     html += `
@@ -563,7 +561,6 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   this.logger.info(`Highest Local SeqNo after switch: ${highestSeqNo}`);
   this.logger.info(`Highest Server SeqNo after switch: ${this.imapClient.mailbox.messages.total}`);
   
-
   // Check for flag changes since last login.
   statusOK = await this.checkIMAPStatus(accountInfo);
   if ( !statusOK ) return;
@@ -634,7 +631,6 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   // Render email subject, sender and date for each email in the selected folder.
   await this.render(accountInfo);
 }
-
 
 
 MailPage.prototype.reload = async function (accountInfo){
@@ -727,7 +723,6 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     mailDiv.innerHTML = '';
   }
 
-
   let html = "";
   if (mail.length === 0) {
     html = 'This folder is empty.';
@@ -773,7 +768,6 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     }
     document.querySelector('#mail').innerHTML = document.querySelector('#mail').innerHTML + html;
 
-
     // Populate the <e-mail> tags with the mail content (header and title).
     let emailCustomElements = document.getElementsByTagName('e-mail');
     for (let i=0; i < emailCustomElements.length; i++){
@@ -783,10 +777,8 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         shadowRoot.innerHTML = this.utils.createDescriptionItem(this.imapClient.compilePath(this.stateManager.state.account.folder));
       }
       else {
- 
         // Show loading message until mail has loaded.
         shadowRoot.innerHTML = 'Loading...';
-
         /*
         ------------------------------ DATA ATTRIBUTES --------------------------------------------
         Any attribute on any element whose attribute name starts with data- is a data attribute. 
@@ -798,7 +790,6 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         - using getAttribute() with their full HTML name to read them.
         --------------------------------------------------------------------------------------------
         */
-
         let uid = unescape(emailCustomElements[i].getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
         this.mailStore.loadEmail(uid).then((mail) => {
           let newHTML = this.utils.createNewMailElement(mail, this.imapClient.compilePath(this.stateManager.state.account.folder), this.stateManager.state.account.user);
@@ -1093,6 +1084,7 @@ MailPage.prototype.newMailReceived = async function (){
       } 
       this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
     }
+
   });
 
   // Checkbox functionality - Add uids to 'this.checkedUIDs' array. When unchecked the UID is removed from the array.
@@ -1276,6 +1268,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   */
   let selectedItemWrapper = undefined;
   let selectedMailItem = undefined;
+  let selectedEmailElement = undefined;
   for (i = 0; i < emailElements.length; i++){
     // Reset each message holder.
     let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
@@ -1368,8 +1361,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     dirtyContent = emailContent.textAsHtml || emailContent.text;
   } 
 
-  //let cleanContent = Clean.cleanHTML(dirtyContent);
-  let cleanContent = dirtyContent; //allow images etc...
+  let cleanContent = Clean.cleanHTML(dirtyContent);
+  //let cleanContent = dirtyContent; //allow images etc...
 
   selectedItemWrapper.innerHTML = '';
 
@@ -1377,6 +1370,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   headerContentNode.classList.add('header-content');
   let envelope = emailHeaders.envelope;
   let headerContent = `
+    <br>
     <table class='header-table'>
       <thead>
         <tr>
@@ -1403,18 +1397,16 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
           <th>Subject: &nbsp;</th>
           <td>${envelope.subject}</td>
         </tr>
-        <tr>
-          <hr>
-        </tr>
       </thead>
-      <table>
     </table>
 
     <button class = 'show-headers'>Show All Headers</button>
-    <hr> <br>
+    <br><br><br><br>
    
     <style>
       .header-table {
+        table-layout: fixed;
+        width: 100%;
         text-align: left; 
         vertical-align: middle;
         border-spacing:0;
@@ -1422,10 +1414,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
       }
 
       .header-table thead tr {
-        overflow: hidden;
         height: 16px;
-        white-space: nowrap;
-        text-overflow: ellipsis;
         line-height: 16px;
       }
 
@@ -1434,9 +1423,16 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
       }
 
       .header-table thead tr td {
+        max-width: 0;
         overflow: hidden;
-        white-space: nowrap;
         text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .header-table thead tr th {
+        width: 40%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       .show-headers{
@@ -1454,29 +1450,134 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
         background-color : rgb(255, 179, 0) ;
       }
 
-      hr {
-        color: silver;
-        opacity: 0.5;
-      }
     </style>
   `;
   headerContentNode.innerHTML = headerContent;
   selectedItemWrapper.appendChild(headerContentNode);
 
-  let allHeadersContentNode = document.createElement('div');
-  allHeadersContentNode.classList.add('all-headers-content');
-  selectedItemWrapper.appendChild(allHeadersContentNode);
-
   let bodyContentNode = document.createElement('div');
   bodyContentNode.classList.add('body-content');
-  bodyContentNode.innerHTML = cleanContent;
+  bodyContentNode.innerHTML = cleanContent + ' <br><br><br><br>';
   selectedItemWrapper.appendChild(bodyContentNode);
 
   selectedItemWrapper.querySelector('.show-headers').addEventListener('click', (e) => {
-    console.log(emailContent.headers)
-    for (let i=0; i < emailContent.headers.length; i++){
-      this.createTableRow(selectedItemWrapper, emailContent.headers[i], false)
+    e.target.textContent = 'Hide All Headers';
+    if (e.target.classList.contains('active')){
+      e.target.classList.remove('active');
+      e.target.textContent = 'Show All Headers';
+    } 
+    else e.target.classList.add('active');
+    
+    if (e.target.classList.contains('active')){
+      for (let i=0; i < emailContent.headers.length; i++){
+        this.createTableRow(selectedItemWrapper, emailContent.headers[i], false)
+      }
     }
+    else{
+      selectedItemWrapper.querySelector('.header-table thead').innerHTML = `
+      <table class='header-table'>
+        <thead>
+          <tr>
+            <th>From: &nbsp;</th>
+            <td><a href="javascript:void(0)">${envelope.from[0].mailbox}@${envelope.from[0].host}</a>  ${envelope.from[0].name ? ' &nbsp; ('+envelope.from[0].name+')' : ''}</td>
+          </tr>
+          <tr>
+            <th>To: &nbsp;</th>
+            <td><a href="javascript:void(0)">${envelope.to[0].mailbox}@${envelope.to[0].host}</a>  ${envelope.to[0].name ? ' &nbsp; ('+envelope.to[0].name+')' : ''}</td>
+          </tr>
+          <tr>
+            <th>Cc: &nbsp;</th>
+            <td>${envelope.cc ? '<a href="javascript:void(0)">'+ envelope.cc +'</a>' : '-'}</td>
+          </tr>
+          <tr>
+            <th>Bcc: &nbsp;</th>
+            <td>${envelope.bcc ? '<a href="javascript:void(0)">'+ envelope.bcc +'</a>' : '-'}</td>
+          </tr>
+          <tr>
+            <th>Date: &nbsp;</th>
+            <td>${envelope.date}</td>
+          </tr>
+          <tr>
+            <th>Subject: &nbsp;</th>
+            <td>${envelope.subject}</td>
+          </tr>
+        </thead>
+      </table>
+      <style>
+        .header-table {
+          table-layout: fixed;
+          width: 100%;
+          text-align: left; 
+          vertical-align: middle;
+          border-spacing:0;
+          margin-bottom : 8px;
+        }
+  
+        .header-table thead tr {
+          height: 16px;
+          line-height: 16px;
+        }
+  
+        .header-table thead tr td a {
+          text-decoration: none;
+        }
+  
+        .header-table thead tr td {
+          max-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .header-table thead tr th {
+          width: 40%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+  
+        .show-headers{
+          cursor: pointer; 
+          border: 0px;
+          border-radius: 6px;
+          color: rgb(97,97,97);
+          background-color : rgb(255,202,40);
+          height: fit-content;
+          width : fit-content;
+          padding: 7px;
+        }
+  
+        .show-headers:hover{
+          background-color : rgb(255, 179, 0) ;
+        }
+      </style>
+    `;
+    }
+  });
+
+  // Add 'back' button which closes the currently open email, without removing the selected-mail-item class.
+  selectedMailItem.querySelector('#message-holder .message-wrapper').insertAdjacentHTML("beforebegin", 
+    `
+      <button class='back'><strong>Back<strong></button>
+      <style>
+        .back{
+          cursor: pointer; 
+          border: 0px;
+          border-radius: 6px;
+          color: whitesmoke;
+          background-color : rgb(97,97,97);
+          height: fit-content;
+          width : fit-content;
+          padding: 10px;
+        }
+
+        .back:hover{
+          background-color : rgb(60, 60, 60) ;
+        };
+      </style>
+    `
+  );
+  selectedMailItem.querySelector('#message-holder').querySelector('.back').addEventListener('click',(e) => {
+    e.currentTarget.parentNode.innerHTML = '';
   });
 }
 
@@ -1486,19 +1587,18 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
   let headerName = header.name;
   let headerValue = header.value;
 
-
   if (typeof headerValue === 'object'){
     let tableRow = document.createElement('tr');
     let tableRowHTML;
     if (recursion){
       tableRowHTML = `
-      <td>&nbsp;&nbsp;&nbsp; => ${headerName}: &nbsp;</td>
+      <td title=${headerName}>&nbsp;&nbsp;&nbsp; => ${headerName}: &nbsp;</td>
       <td></td>
     `;
     }
     else {
       tableRowHTML = `
-      <th>${headerName}: &nbsp;</th>
+      <th title=${headerName}>${headerName}: &nbsp;</th>
       <td></td>
     `;
     }
@@ -1559,13 +1659,13 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
     let tableRowHTML;
     if (recursion){
       tableRowHTML = `
-        <td>&nbsp;&nbsp;&nbsp; => ${headerName}: &nbsp;</td>
+        <td title=${headerName}>&nbsp;&nbsp;&nbsp; => ${headerName}: &nbsp;</td>
         <td title=${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
       `;
     }
     else {
       tableRowHTML = `
-      <th>${headerName }: &nbsp;</th>
+      <th title=${headerName}>${headerName }: &nbsp;</th>
       <td title=${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
     `;
     }
@@ -1601,7 +1701,6 @@ MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
           resolve(); 
         }.bind(this)
       );
-  
     } catch (error) {
       this.logger.error(error);
       reject(error);
