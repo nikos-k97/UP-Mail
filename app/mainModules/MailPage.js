@@ -1298,7 +1298,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   // Load the email body either from the DB if this message's body has been retrieved again, or fetch it.
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
   let emailHeaders = await this.mailStore.loadEmail(uid, accountInfo.user);
-
+ 
   // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
     selectedItemWrapper.innerHTML = 'Loading email body ...';
@@ -1365,20 +1365,26 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
       browser. However without 'target=_blank' links in a normal browser environment would have opened in the same
       tab - in main.js we prohibited redirection inside the electron app.)
     */
+    // Also add a 'title' attribute to the <a> tag -> user can see the tooltip for the link that will be clicked
     let htmlDirtyContent = this.utils.stringToHTML(dirtyContent);
     let aArray = htmlDirtyContent.querySelectorAll('a');
     for (let i=0; i<aArray.length; i++){
-      if (aArray[i].target === '') aArray[i].target = '_blank';
+      let title = aArray[i].getAttribute('title');
+      if (!title) aArray[i].setAttribute('title', aArray[i].getAttribute('href'));
+
+      if (aArray[i].target === '') {
+        aArray[i].target = '_blank';
+      } 
     }
     // back to string
-    dirtyContent = htmlDirtyContent.outerHTML;
+    dirtyContent = htmlDirtyContent.outerHTML ;
   }
   else{
     dirtyContent = emailContent.textAsHtml || emailContent.text;
   } 
 
-  let cleanContent = Clean.cleanHTML(dirtyContent);
-  //let cleanContent = dirtyContent; //allow images etc...
+  //let cleanContent = Clean.cleanHTML(dirtyContent);
+  let cleanContent = dirtyContent; //allow images etc...
 
   selectedItemWrapper.innerHTML = '';
 
@@ -1416,8 +1422,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
       </thead>
     </table>
 
-    <button class = 'show-headers'>Show All Headers</button>
-    <br><br><br><br>
+    <div class='button-wrapper'>
+      <button class = 'show-headers'>Show All Headers</button>
+      <button class = 'fetch-inline'>Enable inline data</button>
+    </div>
+
+    <br><br>
    
     <style>
       .header-table {
@@ -1444,6 +1454,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+
       .header-table thead tr th {
         width: 40%;
         overflow: hidden;
@@ -1451,7 +1462,27 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
         white-space: nowrap;
       }
 
+      .button-wrapper{
+        display: flex;
+        align-items: center;
+      }
+
       .show-headers{
+        cursor: pointer; 
+        border: 1px solid rgb(255,202,40);
+        border-radius: 6px;
+        color: rgb(97,97,97);
+        height: fit-content;
+        width : fit-content;
+        padding: 7px;
+        margin-right: 4px;
+      }
+
+      .show-headers:hover{
+        background-color : whitesmoke ;
+      }
+
+      .fetch-inline{
         cursor: pointer; 
         border: 0px;
         border-radius: 6px;
@@ -1460,9 +1491,10 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
         height: fit-content;
         width : fit-content;
         padding: 7px;
+        margin-right: 4px;
       }
 
-      .show-headers:hover{
+      .fetch-inline:hover{
         background-color : rgb(255, 179, 0) ;
       }
 
@@ -1473,8 +1505,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
 
   let bodyContentNode = document.createElement('div');
   bodyContentNode.classList.add('body-content');
-  bodyContentNode.innerHTML = cleanContent + ' <br><br><br><br>';
+  bodyContentNode.innerHTML = cleanContent + ' <br><br>';
   selectedItemWrapper.appendChild(bodyContentNode);
+
+  selectedItemWrapper.querySelector('.fetch-inline').addEventListener('click', (e) => {
+
+  });
 
   selectedItemWrapper.querySelector('.show-headers').addEventListener('click', (e) => {
     e.target.textContent = 'Hide All Headers';
@@ -1549,21 +1585,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
-        }
-  
-        .show-headers{
-          cursor: pointer; 
-          border: 0px;
-          border-radius: 6px;
-          color: rgb(97,97,97);
-          background-color : rgb(255,202,40);
-          height: fit-content;
-          width : fit-content;
-          padding: 7px;
-        }
-  
-        .show-headers:hover{
-          background-color : rgb(255, 179, 0) ;
         }
       </style>
     `;

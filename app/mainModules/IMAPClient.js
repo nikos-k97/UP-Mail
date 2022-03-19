@@ -609,62 +609,10 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
             if (parsedAttachments.length) { 
               parsedContent.attachments = parsedAttachments;
               // Fetch attachments via fetch().
-              for (let i = 0; i < parsedAttachments.length; i++) {
-                let attachment = parsedAttachments[i];
-                // We fetch only the attachments that are supposed to be inline (inside the HTML body).
-                if (attachment['contentDisposition'] !== 'inline'){
-                  continue;
-                }
-                this.logger.log(`Fetching attachment: ${attachment.filename}`);
-                let fetchAttachmentObject = this.client.fetch(`${attributes.uid}`, { //do not use imap.seq.fetch here
-                  bodies: [attachment.partId]
-                }); 
-                let fetchPromise = new Promise((resolve,reject) => {
-                  // The buildAttMessageFunction returns a function.
-                  fetchAttachmentObject.on('message', async (msg) => {
-                  
-                    let filename = attachment.filename;
-                    let encoding = attachment.headers.get('content-transfer-encoding');
-              
-                    msg.on('body', function(stream, info) {
-                      //Create a write stream so that we can stream the attachment to file;
-                      console.log('Streaming this attachment to file', filename, info);
-                          
-                      //let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
-                   
-                      // The uid used here is the uid from the server, so since we locally use a combination
-                      // of folder and uid, we need to store it with the folderUid format.
-                      let hashuid = md5(`${path}${attributes.uid}`);
-                      const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
-                      fs.dir(`${hashuid}`);
-                      let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
-
-                      writeStream.once('finish', function() {
-                        console.log('Done writing to file %s', filename);
-                        writeStream.destroy();
-                      });
-                      
-                      //stream.pipe(writeStream); this would write base64 data to the file.
-                      //so we decode during streaming using 
-                      if (encoding === 'base64') {
-                        //the stream is base64 encoded, so here the stream is decode on the fly and piped to the write stream (file)
-                        stream.pipe(new base64.Base64Decode()).pipe(writeStream);
-                      } else  {
-                        //here we have none or some other decoding streamed directly to the file which renders it useless probably
-                        stream.pipe(writeStream);
-                      }
-                    });
-    
-                    msg.once('end', function() {
-                      console.log('Finished receiving attachment :', filename);
-                      resolve();
-                    });
-                  });
-                });
-                await fetchPromise;
-              }
+              await this.fetchInlineAttachments(parsedAttachments, attributes, path, appPath, hash, md5);
             }
             Object.assign(parsedContent, parsedData);
+   
             // Run the callback function 'onLoad' for each parsedMessage.
             if (typeof onLoad === 'function') onLoad(seqno, parsedContent, attributes);
           }
@@ -698,6 +646,63 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
   }.bind(this)) // Bind 'this' to point to the function not the promise.
 }
 
+
+IMAPClient.prototype.fetchInlineAttachments = async function (parsedAttachments, attributes, path, appPath, hash, md5){
+  for (let i = 0; i < parsedAttachments.length; i++) {
+    let attachment = parsedAttachments[i];
+    // We fetch only the attachments that are supposed to be inline (inside the HTML body).
+    if (attachment['contentDisposition'] !== 'inline'){
+      continue;
+    }
+    this.logger.log(`Fetching attachment: ${attachment.filename}`);
+    let fetchAttachmentObject = this.client.fetch(`${attributes.uid}`, { //do not use imap.seq.fetch here
+      bodies: [attachment.partId]
+    }); 
+    let fetchPromise = new Promise((resolve,reject) => {
+      // The buildAttMessageFunction returns a function.
+      fetchAttachmentObject.on('message', async (msg) => {
+      
+        let filename = attachment.filename;
+        let encoding = attachment.headers.get('content-transfer-encoding');
+  
+        msg.on('body', function(stream, info) {
+          //Create a write stream so that we can stream the attachment to file;
+          console.log('Streaming this attachment to file', filename, info);
+              
+          //let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
+       
+          // The uid used here is the uid from the server, so since we locally use a combination
+          // of folder and uid, we need to store it with the folderUid format.
+          let hashuid = md5(`${path}${attributes.uid}`);
+          const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
+          fs.dir(`${hashuid}`);
+          let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+
+          writeStream.once('finish', function() {
+            console.log('Done writing to file %s', filename);
+            writeStream.destroy();
+          });
+          
+          //stream.pipe(writeStream); this would write base64 data to the file.
+          //so we decode during streaming using 
+          if (encoding === 'base64') {
+            //the stream is base64 encoded, so here the stream is decode on the fly and piped to the write stream (file)
+            stream.pipe(new base64.Base64Decode()).pipe(writeStream);
+          } else  {
+            //here we have none or some other decoding streamed directly to the file which renders it useless probably
+            stream.pipe(writeStream);
+          }
+        });
+
+        msg.once('end', function() {
+          console.log('Finished receiving attachment :', filename);
+          resolve();
+        });
+      });
+    });
+    await fetchPromise;
+  }
+}
 
 IMAPClient.prototype.checkFlags = async function (path, readOnly){
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
