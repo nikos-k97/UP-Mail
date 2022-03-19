@@ -1356,6 +1356,22 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     else{
       dirtyContent = emailContent.html;
     }
+    
+    /*
+      Inject 'target=_blank' to all <a> elements inside the HTML. If the links are not pointing to '_target=blank'
+      then due to the electron security policies defined in 'main.js', the link won't open at all. (If the links
+      are pointing to 'target=_blank' then in a normal browser environment the link would have opened in a new tab
+      - in main.js we configured all the links that are designed to open in new tabs to be opened in the OS default
+      browser. However without 'target=_blank' links in a normal browser environment would have opened in the same
+      tab - in main.js we prohibited redirection inside the electron app.)
+    */
+    let htmlDirtyContent = this.utils.stringToHTML(dirtyContent);
+    let aArray = htmlDirtyContent.querySelectorAll('a');
+    for (let i=0; i<aArray.length; i++){
+      if (aArray[i].target === '') aArray[i].target = '_blank';
+    }
+    // back to string
+    dirtyContent = htmlDirtyContent.outerHTML;
   }
   else{
     dirtyContent = emailContent.textAsHtml || emailContent.text;

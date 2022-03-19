@@ -85,18 +85,26 @@ app.on('web-contents-created', (event, contents) => {
 app.on('web-contents-created', (event, contents) => {
     contents.setWindowOpenHandler(({ url }) => {
         // Ask the operating system to open this event's url in the default browser.
-        // 'isSafeForExternalOpen' is a function that we can create ourselves if we want.
-        // It will evaluate if a URL is trusted to be opened in the default browswe.
-        
-        //if (isSafeForExternalOpen(url)) {
+        // 'isSafeForExternalOpen' is a custom function that simply checks if the url contains 'https://'.
+        // A trusted URL will be opened in the default browser. Since emails usually have links inside,
+        // we assign the user with the risk of opening the links. From our part, we only allow HTTPS protocol,
+        // and we redirect to the browser, since Javascript inside browsers doesnt have access to OS.
+    
+        if (isSafeForExternalOpen(url)) {
             setImmediate(() => {
                 shell.openExternal(url);
             })
-        //}
+        }
         
         return { action: 'deny' };
     })
 })
+
+
+function isSafeForExternalOpen(url){
+    if (url.includes('https://')) return true;
+    else return false;
+}
 
 
 function openWindow (file) {
