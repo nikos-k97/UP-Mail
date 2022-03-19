@@ -23,6 +23,7 @@
     "navigo": "^8.11.1",
     "node-imap": "^0.9.6",
     "nodemailer": "^6.7.2",
+    "openpgp": "^5.2.1",
     "sanitize-html": "^2.6.1",
     "stack-trace": "0.0.10"
   },

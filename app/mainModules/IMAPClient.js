@@ -524,14 +524,6 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
                 if (data.content.byteCount) data.byteCount = data.content.byteCount;
                 delete data.content; 
 
-                // let storeDir = this.app.getPath('userData');
-                // console.log(storeDir+`\\${data.filename}`)
-                // fs.writeFile(storeDir+`\\${data.filename}`, Buffer.from(data.filename,'base64'), err => {
-                //   if (err) {
-                //     console.error(err)
-                //   }
-                //   //file written successfully
-                // })
                 parsedAttachments[attachmentNo] = data;
                 data.release();
                 attachmentNo++;
@@ -619,6 +611,10 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
               // Fetch attachments via fetch().
               for (let i = 0; i < parsedAttachments.length; i++) {
                 let attachment = parsedAttachments[i];
+                // We fetch only the attachments that are supposed to be inline (inside the HTML body).
+                if (attachment['contentDisposition'] !== 'inline'){
+                  continue;
+                }
                 this.logger.log(`Fetching attachment: ${attachment.filename}`);
                 let fetchAttachmentObject = this.client.fetch(`${attributes.uid}`, { //do not use imap.seq.fetch here
                   bodies: [attachment.partId]

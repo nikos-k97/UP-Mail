@@ -33,6 +33,9 @@ router.on(
     }
 ).resolve();
 
+router.notFound(() => {
+    logger.error('Route not found!');
+});
 
 // Add an 'already' hook to the each route. When the router is already at the given path, it is redirected again.
 router.addAlreadyHook('/initialize', () => {

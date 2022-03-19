@@ -5,14 +5,15 @@
 // Main Process can interact with each Renderer Processes web page via the BrowserWindows's 'webContents' object.
 
 'use strict'
-const path = require("path");
-const electron = require('electron');
+const path                                       = require("path");
+const electron                                   = require('electron');
 const {app, BrowserWindow, Menu, ipcMain, shell} = electron;
-const remoteMain = require("@electron/remote/main");
+const createWindow                               = require('./app/helperModules/window');
+const Logger                                     = require('./app/helperModules/logger'); 
+const logger                                     = new Logger({}, app);
+const URL                                        = require('url').URL;
+const remoteMain                                 = require("@electron/remote/main");
 remoteMain.initialize();
-const createWindow = require('./app/helperModules/window');
-const Logger = require('./app/helperModules/logger'); 
-const logger = new Logger({}, app);
 
 //Global object in Node.js is the 'module.exports' object
 global.logger = logger; //logger is now visible into all modules that main.js uses (not in renderer processes/ preload)
@@ -57,6 +58,46 @@ app.on('activate', () => {
         openWindow('appWindow'); 
     }
 });
+
+
+/*
+    -> Disable or limit navigation (in the current window)
+    Navigation is a common attack vector. If an attacker can convince your app to navigate away from its 
+    current page, they can possibly force your app to open web sites on the Internet. Even if your webContents 
+    are configured to be more secure (like having nodeIntegration disabled or contextIsolation enabled), getting
+    your app to open a random web site will make the work of exploiting your app a lot easier.
+*/
+app.on('web-contents-created', (event, contents) => {
+    contents.on('will-navigate', (event, navigationUrl) => {
+        const parsedUrl = new URL(navigationUrl);
+        //if (parsedUrl.origin !== 'https://my-own-server.com') {
+        event.preventDefault()
+    })
+})
+      
+
+/*
+    -> Disable or limit creation of new windows (instead open these links on the browser)
+    Much like navigation, the creation of new webContents is a common attack vector. 
+    Attackers attempt to convince your app to create new windows, frames, or other renderer processes 
+    with more privileges than they had before; or with pages opened that they couldn't open before.
+*/ 
+app.on('web-contents-created', (event, contents) => {
+    contents.setWindowOpenHandler(({ url }) => {
+        // Ask the operating system to open this event's url in the default browser.
+        // 'isSafeForExternalOpen' is a function that we can create ourselves if we want.
+        // It will evaluate if a URL is trusted to be opened in the default browswe.
+        
+        //if (isSafeForExternalOpen(url)) {
+            setImmediate(() => {
+                shell.openExternal(url);
+            })
+        //}
+        
+        return { action: 'deny' };
+    })
+})
+
 
 function openWindow (file) {
     let index = file === 'appWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
@@ -121,15 +162,10 @@ function openWindow (file) {
         appWindows[index].show(); //all content is loaded -> window can be shown
     });
 
+    // For @electron.remote.
     remoteMain.enable(appWindows[index].webContents);
 
-    //  Force external links (URLs) to be opened in the OS default browser insted of beeing opened inside electon.
-    // 'new-window' is fired when external links are clicked. 
-    appWindows[index].webContents.setWindowOpenHandler(({ url }) => {
-        shell.openExternal(url);
-        return { action: 'deny' };
-      });
-      
+    
     //Load .html content from html folder.
     //The file:// protocol is used to load a file from the local filesystem.
     //loadURL method can also use 'http' protocol to load a webpage etc.
