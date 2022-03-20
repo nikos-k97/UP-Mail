@@ -10,21 +10,75 @@ function Clean () {}
     ref, rel, rev, rows, rowspan, scrolling, shape, span, summary, tabindex, title, usemap, valign, value, vlink, 
     vspace, width
 */
-const htmlAllowed = {
-  allowedTags: [ 'html', 'meta', 'body', 'h3', 'h4', 'h5', 'h6', 'blockquote', 'p',
-    'nl', 'li', 'b', 'i', 'strong', 'em', 'strike', 'hr', 'br', 'div',
-    'table', 'thead', 'caption', 'tbody', 'tr', 'th', 'td', 'pre', 'style',
-    'a', 'ul', 'ol', 'span', 'center'],
+const nonStrictHTMLAllowed = {
+  /*Allowing either script or style leaves us open to XSS attacks. */
+  allowedTags: ["address", "article", "aside", "footer", "header", "h1", "h2", "h3", "h4",
+    "h5", "h6", "hgroup", "main", "nav", "section", "blockquote", "dd", "div",
+    "dl", "dt", "figcaption", "figure", "hr", "li", "main", "ol", "p", "pre",
+    "ul", "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "dfn",
+    "em", "i", "kbd", "mark", "q", "rb", "rp", "rt", "rtc", "s", "samp",
+    "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr", "caption",
+    "col", "colgroup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "center",
+    "img", "style"],
   allowedAttributes: {
-    // We're tentatively allowing inline-css for now.
-    '*': [ 'data-*', 'style', 'align', 'bgcolor', 'class', 'height', 'width', 'alt' ],
+    /*
+      According to OWASP (https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html#rule-4-css-encode-and-strictly-validate-before-inserting-untrusted-data-into-html-style-property-values)
+      the safe HTML attributes are : 
+    */
+    '*': [ 'data-*', 'align', 'alink', 'alt', 'bgcolor', 'border', 'cellpadding', 'cellspacing', 'class', 'color',
+    'cols', 'colspan', 'coords', 'dir', 'face', 'height', 'hspace', 'ismap', 'lang', 'marginheight', 'marginwidth', 
+    'multiple', 'nohref', 'noresize', 'noshade', 'nowrap', 'ref', 'rel', 'rev', 'rows', 'rowspan', 'scrolling', 
+    'shape', 'span', 'summary', 'tabindex', 'title', 'usemap', 'valign', 'value', 'vlink', 'vspace', 'width',
+    'style','src'],
     a: [ 'href', 'name', 'target', 'title'],
-    img: [ 'src' ]
+    img: ['src', 'srcset', 'alt', 'title', 'width', 'height']
   },
-  selfClosing: [ 'img', 'br', 'hr', 'area', 'base', 'basefont', 'input', 'link', 'meta' ],
-  allowedSchemes: [ 'http', 'https', 'ftp', 'mailto' ],
+  selfClosing: ['br', 'hr', 'area', 'base', 'basefont', 'input', 'link'],
+  // data is for inline images
+  allowedSchemes: ['https', 'file'],
+  allowedSchemesByTag: {
+    // The file: URL scheme refers to a file on the client machine
+    img: [ 'file']
+  },
+  allowProtocolRelative: true,
+  // Discard all characters outside of html tag boundaries -- before <html> and after </html> tags.
+  enforceHtmlBoundary: true,
+  // If a tag that belong to the following list is not allowed, all of the text within it is not preserved, neither do any allowed tags within it.
+  nonTextTags: ['script', 'textarea', 'option'],
+  disallowedTagsMode: 'discard'
+}
+
+
+
+const strictHTMLAllowed = {
+  /*Allowing either script or style leaves us open to XSS attacks. */
+  allowedTags: ["address", "article", "aside", "footer", "header", "h1", "h2", "h3", "h4",
+    "h5", "h6", "hgroup", "main", "nav", "section", "blockquote", "dd", "div",
+    "dl", "dt", "figcaption", "figure", "hr", "li", "main", "ol", "p", "pre",
+    "ul", "a", "abbr", "b", "bdi", "bdo", "br", "cite", "code", "data", "dfn",
+    "em", "i", "kbd", "mark", "q", "rb", "rp", "rt", "rtc", "s", "samp",
+    "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr", "caption",
+    "col", "colgroup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "center"],
+  allowedAttributes: {
+    /*
+      According to OWASP (https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html#rule-4-css-encode-and-strictly-validate-before-inserting-untrusted-data-into-html-style-property-values)
+      the safe HTML attributes are : 
+    */
+    '*': [ 'data-*', 'align', 'alink', 'alt', 'bgcolor', 'border', 'cellpadding', 'cellspacing', 'class', 'color',
+    'cols', 'colspan', 'coords', 'dir', 'face', 'height', 'hspace', 'ismap', 'lang', 'marginheight', 'marginwidth', 
+    'multiple', 'nohref', 'noresize', 'noshade', 'nowrap', 'ref', 'rel', 'rev', 'rows', 'rowspan', 'scrolling', 
+    'shape', 'span', 'summary', 'tabindex', 'title', 'usemap', 'valign', 'value', 'vlink', 'vspace', 'width'],
+    a: [ 'href', 'name', 'target', 'title'],
+  },
+  selfClosing: ['br', 'hr', 'area', 'base', 'basefont', 'input', 'link', 'meta' ],
+  allowedSchemes: ['https'],
   allowedSchemesByTag: {},
-  allowProtocolRelative: true
+  allowProtocolRelative: true,
+  // Discard all characters outside of html tag boundaries -- before <html> and after </html> tags.
+  enforceHtmlBoundary: true,
+  // If a tag that belong to the following list is not allowed, all of the text within it is not preserved, neither do any allowed tags within it.
+  nonTextTags: [ 'style', 'script', 'textarea', 'option', 'noscript' ],
+  disallowedTagsMode: 'discard'
 };
 
 Clean.escape = function (string) {
@@ -44,8 +98,12 @@ Clean.escape = function (string) {
   }
 }
 
-Clean.cleanHTML = (dirty) => {
-  return sanitizeHTML(dirty, htmlAllowed);
+Clean.cleanHTMLStrict = (dirty) => {
+  return sanitizeHTML(dirty, strictHTMLAllowed);
+}
+
+Clean.cleanHTMLNonStrict = (dirty) => {
+  return sanitizeHTML(dirty, nonStrictHTMLAllowed);
 }
 
 Clean.cleanForm = (dirty) => {

@@ -1,3 +1,4 @@
+const URL                           = require('url')
 const merge                         = require('merge-deep');
 const _                             = require('lodash');
 const Utils                         = require('./Utils');
@@ -1257,7 +1258,7 @@ MailPage.prototype.messageWasExpunged = async function(){
   Since this function is run inside an event listener (when a user clicks an email), the Shadow DOM has been
   loaded, so we can use 'shadowRoot.querySelector' sucessfully.
 */
-MailPage.prototype.renderEmail = async function (accountInfo, uid) {
+MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromAttachmentButton) {
   let metadata = await this.mailStore.loadEmail(uid);
 
   let emailElements = document.querySelectorAll('e-mail');
@@ -1298,6 +1299,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   // Load the email body either from the DB if this message's body has been retrieved again, or fetch it.
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
   let emailHeaders = await this.mailStore.loadEmail(uid, accountInfo.user);
+  let path = emailHeaders.folder;
  
   // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
@@ -1305,7 +1307,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     statusOK = await this.checkIMAPStatus(accountInfo);
     if ( !statusOK ) return;
 
-    let message = await this.mailStore.loadEmail(uid, accountInfo.user);
+    let message = emailHeaders;
+
     try {
       await this.fetchEmailBody(accountInfo, message);
       emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
@@ -1328,7 +1331,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
   this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
   
-
+  /*
+    DirtyContent (message that will be rendered before escape from 'Clean.js') can be rendered with these formats:
+    - text : includes the plaintext version of the message. Is set if the message has at least one ‘text/plain’ node
+    - html : includes the HTML version of the message. Is set if the message has at least one ‘text/html’ node
+    - textAsHtml : includes the plaintext version of the message in HTML format. Is set if the message has at least one ‘text/plain’ node.
+  */
   const app = this.app;
   let dirtyContent;
   if (emailContent.html){
@@ -1348,7 +1356,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
             break;
           }
         }
-        images[i].setAttribute('src', src);
+        images[i].setAttribute('src', URL.pathToFileURL(src));
       }
       // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
       dirtyContent = dirtyHTML.outerHTML;
@@ -1383,8 +1391,14 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     dirtyContent = emailContent.textAsHtml || emailContent.text;
   } 
 
-  //let cleanContent = Clean.cleanHTML(dirtyContent);
-  let cleanContent = dirtyContent; //allow images etc...
+  let cleanContent;
+  if (reloadedFromAttachmentButton){
+    cleanContent = Clean.cleanHTMLNonStrict(dirtyContent);
+  }
+  else {
+    cleanContent = Clean.cleanHTMLStrict(dirtyContent);
+  }
+
 
   selectedItemWrapper.innerHTML = '';
 
@@ -1424,7 +1438,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
 
     <div class='button-wrapper'>
       <button class = 'show-headers'>Show All Headers</button>
-      <button class = 'fetch-inline'>Enable inline data</button>
     </div>
 
     <br><br>
@@ -1508,9 +1521,53 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
   bodyContentNode.innerHTML = cleanContent + ' <br><br>';
   selectedItemWrapper.appendChild(bodyContentNode);
 
-  selectedItemWrapper.querySelector('.fetch-inline').addEventListener('click', (e) => {
+  // Show 'Enable inline attachments button' if the email has attachments.
 
-  });
+  if (reloadedFromAttachmentButton){
+    selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
+    `<button class = 'fetch-inline'>Disable <strong>inline</strong> style (and attachments)</button>`);
+    selectedItemWrapper.querySelector('.fetch-inline').classList.add('enabled');
+  } 
+  else {
+    selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
+    `<button class = 'fetch-inline'>Enable <strong>inline</strong> style (and attachments)</button>`);
+  }
+  
+  // Enable style and inline data (eg. images with content-disposition = inline)
+  // Only inline images will be fetched.
+    selectedItemWrapper.querySelector('.fetch-inline').addEventListener('click', async (e) => {
+      if (e.target.classList.contains('enabled')){
+        e.target.classList.remove('enabled');
+      } 
+      else e.target.classList.add('enabled');
+
+      if (e.target.classList.contains('enabled')){
+        let noFetch = await this.mailStore.findIfAttachmentsExist(emailContent.attachments, uid, accountInfo.user);
+  
+        if (noFetch === false) {
+          e.currentTarget.disabled = true;
+          selectedItemWrapper.querySelector('.show-headers').disabled = true;
+          selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
+      
+          // Fetch attachments via fetch().
+          materialize.toast({html: 'Fetching...', displayLength : 3000 ,classes: 'rounded'});
+          await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+          // The third arguement 'true' is for the parameter : 'reloadedFromAttachmentButton' -> it will reload
+          // the message with the inline attachments, but the 'Enable inline attachments button' will now say
+          // 'Hide inline attachments'
+          this.renderEmail(accountInfo, uid, true);
+          return;
+        }
+        else {
+          this.renderEmail(accountInfo, uid, true);
+        }
+      }
+      else {
+        this.renderEmail(accountInfo, uid, false);
+      }
+    });
+  
+
 
   selectedItemWrapper.querySelector('.show-headers').addEventListener('click', (e) => {
     e.target.textContent = 'Hide All Headers';
@@ -1522,7 +1579,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
     
     if (e.target.classList.contains('active')){
       for (let i=0; i < emailContent.headers.length; i++){
-        this.createTableRow(selectedItemWrapper, emailContent.headers[i], false)
+        this.createTableRow(selectedItemWrapper, emailContent.headers[i], false);
       }
     }
     else{
@@ -1613,8 +1670,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid) {
       </style>
     `
   );
-  selectedMailItem.querySelector('#message-holder').querySelector('.back').addEventListener('click',(e) => {
-    e.currentTarget.parentNode.innerHTML = '';
+  selectedMailItem.querySelector('#message-holder').querySelector('.back').addEventListener('click', (e) => {
+    e.currentTarget.parentNode.innerHTML = ``;
   });
 }
 
@@ -1725,7 +1782,21 @@ MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
             headers.push({ name, value });
           }
           content.headers = headers;
-    
+
+          if (content.attachments && content.attachments.length){
+            // Convert 'Map' of possible attachment headers into 'Array' of headers for storage.
+            let attachmentHeaders = [];
+            for (let j = 0; j < content.attachments.length; j++){
+              attachmentHeaders.push([]);
+            }
+            for (let j = 0; j < content.attachments.length; j++){
+              for (const [name, value] of content.attachments[j].headers) {
+                attachmentHeaders[j].push({ name, value });
+              }
+            }
+            content.attachmentHeaders = attachmentHeaders;
+          }
+     
           // The attributes.uid here is from the server so its not in the format 'folderUID'.
           // The message.uid is in the format 'folderUID' since we got it from our local DB.
           let compiledContent = Object.assign({ seqno: seqno }, content, attributes);

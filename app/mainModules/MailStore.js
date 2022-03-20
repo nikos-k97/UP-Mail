@@ -201,4 +201,28 @@ MailStore.prototype.deleteEmailBodies = async function (email, uidsNotToDelete, 
 }
 
 
+MailStore.prototype.findIfAttachmentsExist = async function(attachments, uid, email){
+  if (!attachments || attachments.length === 0) return true;
+  // The uid is in the format 'folderUID'.
+  const hash = String(email).includes('@') ? this.utils.md5(email) : email;
+  const hashuid = this.utils.md5(uid);
+  let fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`, `${hashuid}`);
+  let allContent = fs.find(`.`, {files : true, directories : false});
+  if (! allContent || allContent === []) return true;
+  allContent.filter(element => {
+    if (element !== `${hashuid}.json` ) return element;
+  });
+  let noIncluded = 0;
+  for (let i = 0; i < attachments.length; i++){
+    if (allContent.includes(attachments[i].filename)) {
+      console.log('included')
+      noIncluded++;
+    }
+  }
+
+  if (noIncluded === attachments.length) return true;
+  else return false;
+}
+
+
 module.exports = MailStore;

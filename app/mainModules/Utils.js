@@ -48,6 +48,7 @@ Utils.prototype.stripStringOfNonNumericValues = function (str) {
   return str.replace(/\D/g, '');
 }
 
+
 /**
  * Tests whether the setup has been completed.
  *
@@ -230,6 +231,7 @@ Utils.prototype.alterDate = function (date) {
   if (isWithinAYear(messageTime)) return messageTime.toFormat('dd/LL/yy');
   return messageTime.toFormat('dd/LL/yy');
 }
+
 
 Utils.prototype.createNewMailElement = function (mail, folder, user) {
   let folderName = `${folder}`.toLowerCase();

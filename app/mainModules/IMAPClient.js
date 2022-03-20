@@ -428,11 +428,6 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
   -----------------------------------------------------------------------------------------------------------------
   */
   return new Promise(function (resolve, reject) {
-    let user = this.client._config.user;
-    let hash = user.includes('@') ? this.utils.md5(user) : user;
-    let appPath = this.app.getPath('userData');
-    const md5 = this.utils.md5;
-
     this.logger.log("Seqno: " + seqno);
     this.logger.log("grabNewer: " + grabNewer);
     this.logger.log("Grabbing: " + `${seqno}${grabNewer ? `:*` : ``}`);
@@ -599,26 +594,20 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
           type        : text, application etc...     
           ------------------------------------------------------------------------------------------------------
         */
-
         parsePromise.then(
           async () => {
             const parsedContent = {};
             parsedContent.headers = parsedHeaders;
-
-            // Handle possible attachments.
+            // Include possible attachments.
             if (parsedAttachments.length) { 
               parsedContent.attachments = parsedAttachments;
-              // Fetch attachments via fetch().
-              await this.fetchInlineAttachments(parsedAttachments, attributes, path, appPath, hash, md5);
+              // Attachments will be fetched on demand.
             }
             Object.assign(parsedContent, parsedData);
-   
             // Run the callback function 'onLoad' for each parsedMessage.
             if (typeof onLoad === 'function') onLoad(seqno, parsedContent, attributes);
           }
-
         );
-      
         parsePromise.catch( 
           (error) => {
             this.logger.error('Mail parsing encountered a problem.');
@@ -626,8 +615,6 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
           }
         );
       });
- 
-      
     });
 
     fetchObject.once('error', (err) => {
@@ -647,33 +634,56 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
 }
 
 
-IMAPClient.prototype.fetchInlineAttachments = async function (parsedAttachments, attributes, path, appPath, hash, md5){
+IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path){
+  let parsedAttachments = content.attachments;
+  let attachmentHeaders = content.attachmentHeaders;
+  let user = this.client._config.user;
+  let hash = user.includes('@') ? this.utils.md5(user) : user;
+  let appPath = this.app.getPath('userData');
+  let md5 = this.utils.md5;
+
   for (let i = 0; i < parsedAttachments.length; i++) {
     let attachment = parsedAttachments[i];
     // We fetch only the attachments that are supposed to be inline (inside the HTML body).
     if (attachment['contentDisposition'] !== 'inline'){
       continue;
     }
+
+    /*
+      Fetch only inline attachments with types:
+      image/png, image/jpeg, image/gif, image/bmp, image/avif
+    */
+    if ( (attachment['contentType'] !== 'image/png' ) && (attachment['contentType'] !== 'image/jpeg' ) &&
+         (attachment['contentType'] !== 'image/gif' ) && (attachment['contentType'] !== 'image/bmp' ) &&
+         (attachment['contentType'] !== 'image/avif' ) )
+    {
+      continue;
+    }
     this.logger.log(`Fetching attachment: ${attachment.filename}`);
-    let fetchAttachmentObject = this.client.fetch(`${attributes.uid}`, { //do not use imap.seq.fetch here
+    let fetchAttachmentObject = this.client.fetch(`${uid}`, { // We do not use imap.seq.fetch here.
       bodies: [attachment.partId]
     }); 
     let fetchPromise = new Promise((resolve,reject) => {
       // The buildAttMessageFunction returns a function.
       fetchAttachmentObject.on('message', async (msg) => {
-      
+    
+        let encoding;
         let filename = attachment.filename;
-        let encoding = attachment.headers.get('content-transfer-encoding');
-  
+        let attachmentNoI = attachmentHeaders[i];
+        for (let j=0 ; j < attachmentNoI.length; j++){
+          if (attachmentNoI[j].name === 'content-transfer-encoding' ){
+            encoding = attachmentNoI[j].value;
+          }
+        }
+        
         msg.on('body', function(stream, info) {
           //Create a write stream so that we can stream the attachment to file;
           console.log('Streaming this attachment to file', filename, info);
               
-          //let writeStream = fs.createWriteStream(`MailAttachments\\${filename}`);
-       
           // The uid used here is the uid from the server, so since we locally use a combination
           // of folder and uid, we need to store it with the folderUid format.
-          let hashuid = md5(`${path}${attributes.uid}`);
+          let hashuid = md5(`${path}${uid}`);
+
           const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
           fs.dir(`${hashuid}`);
           let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
