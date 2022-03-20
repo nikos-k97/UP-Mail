@@ -19,7 +19,7 @@ const nonStrictHTMLAllowed = {
     "em", "i", "kbd", "mark", "q", "rb", "rp", "rt", "rtc", "s", "samp",
     "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr", "caption",
     "col", "colgroup", "table", "tbody", "td", "tfoot", "th", "thead", "tr", "center",
-    "img", "style"],
+    "img"],
   allowedAttributes: {
     /*
       According to OWASP (https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html#rule-4-css-encode-and-strictly-validate-before-inserting-untrusted-data-into-html-style-property-values)

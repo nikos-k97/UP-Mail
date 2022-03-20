@@ -1525,12 +1525,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
   if (reloadedFromAttachmentButton){
     selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
-    `<button class = 'fetch-inline'>Disable <strong>inline</strong> style (and attachments)</button>`);
+    `<button class = 'fetch-inline'>Disable <strong>inline</strong> style (and images)</button>`);
     selectedItemWrapper.querySelector('.fetch-inline').classList.add('enabled');
   } 
   else {
     selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
-    `<button class = 'fetch-inline'>Enable <strong>inline</strong> style (and attachments)</button>`);
+    `<button class = 'fetch-inline'>Enable <strong>inline</strong> style (and images)</button>`);
   }
   
   // Enable style and inline data (eg. images with content-disposition = inline)

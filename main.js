@@ -5,14 +5,13 @@
 // Main Process can interact with each Renderer Processes web page via the BrowserWindows's 'webContents' object.
 
 'use strict'
-const path                                       = require("path");
-const electron                                   = require('electron');
-const {app, BrowserWindow, Menu, ipcMain, shell} = electron;
-const createWindow                               = require('./app/helperModules/window');
-const Logger                                     = require('./app/helperModules/logger'); 
-const logger                                     = new Logger({}, app);
-const URL                                        = require('url').URL;
-const remoteMain                                 = require("@electron/remote/main");
+const {app, BrowserWindow, Menu, ipcMain, shell, dialog} = require('electron');
+const path                                               = require("path");
+const createWindow                                       = require('./app/helperModules/window');
+const Logger                                             = require('./app/helperModules/logger'); 
+const logger                                             = new Logger({}, app);
+const URL                                                = require('url').URL;
+const remoteMain                                         = require("@electron/remote/main");
 remoteMain.initialize();
 
 //Global object in Node.js is the 'module.exports' object
@@ -89,13 +88,11 @@ app.on('web-contents-created', (event, contents) => {
         // A trusted URL will be opened in the default browser. Since emails usually have links inside,
         // we assign the user with the risk of opening the links. From our part, we only allow HTTPS protocol,
         // and we redirect to the browser, since Javascript inside browsers doesnt have access to OS.
-    
         if (isSafeForExternalOpen(url)) {
             setImmediate(() => {
                 shell.openExternal(url);
             })
         }
-        
         return { action: 'deny' };
     })
 })
@@ -110,7 +107,8 @@ function isSafeForExternalOpen(url){
 function openWindow (file) {
     let index = file === 'appWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
     const {width, height} = electron.screen.getPrimaryDisplay().workAreaSize;
-    
+
+
     if (file === 'appWindow'){
         //Use window.js helper script to create and open the electron.js BrowserWindow
         appWindows[index] = createWindow(file, {
@@ -118,8 +116,8 @@ function openWindow (file) {
             height,
             icon: './icons/email-icon.png',
             title:'Mail Client', //overriden by the loaded html's <title/> tag (!!)
-            minWidth: 320,
-            minHeight: 480,
+            minWidth: 1050,
+            minHeight: 600,
             maximized: true,
             frame: false,
             show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
