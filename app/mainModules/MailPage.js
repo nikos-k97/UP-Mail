@@ -1356,7 +1356,13 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
             break;
           }
         }
-        images[i].setAttribute('src', URL.pathToFileURL(src));
+        if (src.includes('C:')){
+          images[i].setAttribute('src', URL.pathToFileURL(src));
+        }
+        else {
+          images[i].setAttribute('src',src);
+        }
+   
       }
       // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
       dirtyContent = dirtyHTML.outerHTML;
@@ -1439,9 +1445,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     <div class='button-wrapper'>
       <button class = 'show-headers'>Show All Headers</button>
     </div>
+    <br>
 
-    <br><br>
-   
     <style>
       .header-table {
         table-layout: fixed;
@@ -1475,12 +1480,24 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         white-space: nowrap;
       }
 
+      .attachment-content-wrapper {
+        display:flex;
+      }
+
+      ul.attachments {
+        color : rgb(97,97,97)
+      }
+
+      ul li small {
+        color : rgb(255, 120, 0) ;
+      }
+
       .button-wrapper{
         display: flex;
-        align-items: center;
       }
 
       .show-headers{
+        display: flex;
         cursor: pointer; 
         border: 1px solid rgb(255,202,40);
         border-radius: 6px;
@@ -1496,6 +1513,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       }
 
       .fetch-inline{
+        display: flex;
         cursor: pointer; 
         border: 0px;
         border-radius: 6px;
@@ -1511,10 +1529,72 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         background-color : rgb(255, 179, 0) ;
       }
 
+      .fetch-attachments{
+        display: flex;
+        cursor: pointer; 
+        border: 0px;
+        border-radius: 6px;
+        color: whitesmoke;
+        background-color : rgb(97,97,97);
+        height: fit-content;
+        width : fit-content;
+        padding: 7px;
+        margin-right: 4px;
+      }
+
+      .fetch-attachments:hover{
+        background-color : rgb(60, 60, 60) ;
+      }
+
     </style>
   `;
   headerContentNode.innerHTML = headerContent;
   selectedItemWrapper.appendChild(headerContentNode);
+
+  // Create attachment div in the headers, if there are attachments.
+  let attachmentsToShow = [];
+  if (emailContent.attachments && emailContent.attachments.length){
+    for (let k=0; k<emailContent.attachments.length; k++){
+      if (emailContent.attachments[k]['contentDisposition'] === 'attachment'){
+        attachmentsToShow.push(emailContent.attachments[k]);
+      }
+    }
+  }
+  if (attachmentsToShow.length) {
+    let attachmentContentWrapperNode = document.createElement('div');
+    attachmentContentWrapperNode.classList.add('attachment-content');
+    let attachmentContentNode = document.createElement('div');
+    attachmentContentNode.classList.add('attachment-content');
+    let attachmentContent = `<strong>Attachments:</strong><ul class='attachments'>`;
+    for (let j =0 ; j < attachmentsToShow.length; j++){
+      console.log(attachmentsToShow[j])
+      attachmentContent = attachmentContent + `<li class='attachment'>${attachmentsToShow[j]['filename']} <small>&nbsp;(content-type: "${attachmentsToShow[j]['contentType']}")</small></li>`
+    }
+    attachmentContent  = attachmentContent + `</ul>`
+    attachmentContentNode.innerHTML = attachmentContent;
+    attachmentContentWrapperNode.appendChild(attachmentContentNode);
+    selectedItemWrapper.appendChild(attachmentContentWrapperNode);
+    // Attachment button
+    selectedItemWrapper.querySelector('.attachment-content').insertAdjacentHTML('afterend', 
+    `<button class = 'fetch-attachments'>Download attachments</button><br><br><br>`);
+
+    selectedItemWrapper.querySelector('.fetch-attachments').addEventListener('click', async (e) => {
+      let element = e.currentTarget;
+      element.disabled = true;
+      selectedItemWrapper.querySelector('.show-headers').disabled = true;
+      selectedItemWrapper.querySelector('.fetch-inline').disabled = true;
+      selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
+      // Fetch attachments via fetch().
+      materialize.toast({html: 'Fetching...', displayLength : 3000 ,classes: 'rounded'});
+      await this.imapClient.fetchAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+      materialize.toast({html: 'Attachments fetched.', displayLength : 3000 ,classes: 'rounded'});
+      element.disabled = false;
+      selectedItemWrapper.querySelector('.show-headers').disabled = false;
+      selectedItemWrapper.querySelector('.fetch-inline').disabled = false;
+      selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = false;
+    });
+  }
+
 
   let bodyContentNode = document.createElement('div');
   bodyContentNode.classList.add('body-content');
@@ -1522,15 +1602,14 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   selectedItemWrapper.appendChild(bodyContentNode);
 
   // Show 'Enable inline attachments button' if the email has attachments.
-
   if (reloadedFromAttachmentButton){
     selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
-    `<button class = 'fetch-inline'>Disable <strong>inline</strong> style (and images)</button>`);
+    `<button class = 'fetch-inline'>Disable inline style (and images)</button>`);
     selectedItemWrapper.querySelector('.fetch-inline').classList.add('enabled');
   } 
   else {
     selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
-    `<button class = 'fetch-inline'>Enable <strong>inline</strong> style (and images)</button>`);
+    `<button class = 'fetch-inline'>Enable inline style (and images)</button>`);
   }
   
   // Enable style and inline data (eg. images with content-disposition = inline)
@@ -1563,11 +1642,11 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         }
       }
       else {
+        
         this.renderEmail(accountInfo, uid, false);
       }
     });
   
-
 
   selectedItemWrapper.querySelector('.show-headers').addEventListener('click', (e) => {
     e.target.textContent = 'Hide All Headers';
@@ -1655,17 +1734,16 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       <style>
         .back{
           cursor: pointer; 
-          border: 0px;
+          border: 1px solid rgb(97,97,97);
           border-radius: 6px;
-          color: whitesmoke;
-          background-color : rgb(97,97,97);
+          color: rgb(97,97,97);
           height: fit-content;
           width : fit-content;
           padding: 10px;
         }
 
         .back:hover{
-          background-color : rgb(60, 60, 60) ;
+          background-color : whitesmoke ;
         };
       </style>
     `

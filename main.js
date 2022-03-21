@@ -5,8 +5,11 @@
 // Main Process can interact with each Renderer Processes web page via the BrowserWindows's 'webContents' object.
 
 'use strict'
-const {app, BrowserWindow, Menu, ipcMain, shell, dialog} = require('electron');
+
+'use strict'
 const path                                               = require("path");
+const electron                                           = require('electron');
+const {app, BrowserWindow, Menu, ipcMain, shell, dialog} = electron;
 const createWindow                                       = require('./app/helperModules/window');
 const Logger                                             = require('./app/helperModules/logger'); 
 const logger                                             = new Logger({}, app);
@@ -37,6 +40,8 @@ let appWindows = [];
 //Wait for the event and then call openWindow() when app's whenReady() method resolves its promise
 app.whenReady().then(() => {
     openWindow('appWindow');
+}).catch((error) => {
+    logger.error(error);
 })
 
 
