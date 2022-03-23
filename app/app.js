@@ -12,10 +12,7 @@ customElements.define('e-mail', class extends HTMLElement {
 
     const shadowRoot = this.attachShadow({ mode: 'open' });
     // <e-mail> element's content is updated dynamically via 'MailPage.js' render() method.
-
   }
-
-
 });
   
 

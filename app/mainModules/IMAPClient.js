@@ -732,11 +732,12 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcR
 
     // Choose folder to save.
     let saveFolder;
-    let dialogPromise = new Promise ((resolve) => {
+    let dialogPromise = new Promise ((resolve,reject) => {
       ipcRenderer.send('saveAttachment', `${attachment.filename}`);
       ipcRenderer.on('saveFolder', (event, data) => { 
         saveFolder = data;
-        resolve(data);
+        if (!saveFolder) reject(new Error('Cancelled'));
+        else resolve(data);
       })
     })
    
@@ -745,8 +746,10 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcR
       saveFolder = String(saveFolder).toString()+'/';
     } catch (error) {
       this.logger.error(error);
+      if (i === parsedAttachments.length - 1) return false;
+      else continue;
     }
-    console.log(saveFolder)
+
     this.logger.log(`Fetching attachment: ${attachment.filename}`);
     let fetchAttachmentObject = this.client.fetch(`${uid}`, { // We do not use imap.seq.fetch here.
       bodies: [attachment.partId]
@@ -801,6 +804,7 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcR
     });
     await fetchPromise;
   }
+  return true;
 }
 
 

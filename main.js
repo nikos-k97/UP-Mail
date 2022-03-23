@@ -154,8 +154,9 @@ function openWindow (file) {
             frame: false,
             show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
             webPreferences: {
-                preload: path.join(__dirname, "/app/preload_compose.js"), // use a preload script - safely get and set file system and 
-                                                                // operating system values on behalf of the browser window.
+                preload: path.join(__dirname, "/app/preload_compose.js"), // Preload is a mechanism to execute code before renderer scripts are loaded.
+                                                                          // safely get and set file system and 
+                                                                          // operating system values on behalf of the browser window.
                 sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
                                 // (only in conjunction with preload script - otherwise only IPC messages are permitted)
                 contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
@@ -234,17 +235,17 @@ ipcMain.on('open', (event, arg) => {
     openWindow(arg.file);
 })
 
-
-ipcMain.on('saveAttachment', (event) => {
+// Choose folder to save attachment.
+ipcMain.on('saveAttachment', (event, file) => {
     let options = {
-        title: 'Choose directory to save ...',
+        title: `Choose directory to save file : ${file} `,
         buttonLabel: 'Choose',
-        defaultPath : app.getPath('userData'),
+        defaultPath : app.getPath('downloads'),
         properties: ['openDirectory']
     }
-    let filepath = dialog.showOpenDialogSync(options);
-    logger.debug("Folder chosen: " + filepath);
-    event.sender.send('saveFolder', filepath) 
+    // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
+    let filepath = dialog.showOpenDialogSync(appWindows[0], options);
+    event.sender.send('saveFolder', filepath);
 })
 
 

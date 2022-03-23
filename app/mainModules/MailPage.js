@@ -1567,7 +1567,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     attachmentContentNode.classList.add('attachment-content');
     let attachmentContent = `<strong>Attachments:</strong><ul class='attachments'>`;
     for (let j =0 ; j < attachmentsToShow.length; j++){
-      console.log(attachmentsToShow[j])
       attachmentContent = attachmentContent + `<li class='attachment'>${attachmentsToShow[j]['filename']} <small>&nbsp;(content-type: "${attachmentsToShow[j]['contentType']}")</small></li>`
     }
     attachmentContent  = attachmentContent + `</ul>`
@@ -1585,10 +1584,15 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       selectedItemWrapper.querySelector('.fetch-inline').disabled = true;
       selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
       
-      // Fetch attachments via fetch().
-      materialize.toast({html: 'Fetching...', displayLength : 3000 ,classes: 'rounded'});
-      await this.imapClient.fetchAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path, this.ipcRenderer);
-      materialize.toast({html: 'Attachments fetched.', displayLength : 3000 ,classes: 'rounded'});
+      // Choose folder via dialog box and fetch chosen attachment(s) via fetch().
+      materialize.toast({html: 'Choose folder where the attachments will be fetched', displayLength : 3000 ,classes: 'rounded'});
+      let fetched = await this.imapClient.fetchAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path, this.ipcRenderer);
+      if (fetched){
+        materialize.toast({html: 'Attachments fetched.', displayLength : 3000 ,classes: 'rounded'});
+      }
+      else {
+        materialize.toast({html: 'Cancelled.', displayLength : 3000 ,classes: 'rounded'});
+      }
       element.disabled = false;
       selectedItemWrapper.querySelector('.show-headers').disabled = false;
       selectedItemWrapper.querySelector('.fetch-inline').disabled = false;
