@@ -715,7 +715,7 @@ IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path
 }
 
 
-IMAPClient.prototype.fetchAttachments = async function (content, uid, path){
+IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcRenderer){
   let parsedAttachments = content.attachments;
   let attachmentHeaders = content.attachmentHeaders;
   let user = this.client._config.user;
@@ -730,6 +730,23 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path){
       continue;
     }
 
+    // Choose folder to save.
+    let saveFolder;
+    let dialogPromise = new Promise ((resolve) => {
+      ipcRenderer.send('saveAttachment', `${attachment.filename}`);
+      ipcRenderer.on('saveFolder', (event, data) => { 
+        saveFolder = data;
+        resolve(data);
+      })
+    })
+   
+    try {
+      saveFolder = await dialogPromise;
+      saveFolder = String(saveFolder).toString()+'/';
+    } catch (error) {
+      this.logger.error(error);
+    }
+    console.log(saveFolder)
     this.logger.log(`Fetching attachment: ${attachment.filename}`);
     let fetchAttachmentObject = this.client.fetch(`${uid}`, { // We do not use imap.seq.fetch here.
       bodies: [attachment.partId]
@@ -757,7 +774,8 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path){
 
           const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
           fs.dir(`${hashuid}`);
-          let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+          //let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+          let writeStream = fs.createWriteStream(`${saveFolder}\\${filename}`);
 
           writeStream.once('finish', function() {
             console.log('Done writing to file %s', filename);

@@ -6,7 +6,6 @@
 
 'use strict'
 
-'use strict'
 const path                                               = require("path");
 const electron                                           = require('electron');
 const {app, BrowserWindow, Menu, ipcMain, shell, dialog} = electron;
@@ -107,7 +106,6 @@ function isSafeForExternalOpen(url){
     if (url.includes('https://')) return true;
     else return false;
 }
-
 
 function openWindow (file) {
     let index = file === 'appWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
@@ -235,6 +233,21 @@ function openWindow (file) {
 ipcMain.on('open', (event, arg) => {
     openWindow(arg.file);
 })
+
+
+ipcMain.on('saveAttachment', (event) => {
+    let options = {
+        title: 'Choose directory to save ...',
+        buttonLabel: 'Choose',
+        defaultPath : app.getPath('userData'),
+        properties: ['openDirectory']
+    }
+    let filepath = dialog.showOpenDialogSync(options);
+    logger.debug("Folder chosen: " + filepath);
+    event.sender.send('saveFolder', filepath) 
+})
+
+
 
 function onQuit (index) { //index = windowNumber
     //If not on MacOS then when the last window closes the app terminates and all the windows are garbage collected.

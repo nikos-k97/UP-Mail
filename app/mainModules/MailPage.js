@@ -1584,9 +1584,10 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       selectedItemWrapper.querySelector('.show-headers').disabled = true;
       selectedItemWrapper.querySelector('.fetch-inline').disabled = true;
       selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
+      
       // Fetch attachments via fetch().
       materialize.toast({html: 'Fetching...', displayLength : 3000 ,classes: 'rounded'});
-      await this.imapClient.fetchAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+      await this.imapClient.fetchAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path, this.ipcRenderer);
       materialize.toast({html: 'Attachments fetched.', displayLength : 3000 ,classes: 'rounded'});
       element.disabled = false;
       selectedItemWrapper.querySelector('.show-headers').disabled = false;
