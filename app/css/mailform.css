@@ -1,120 +1,159 @@
 ::-webkit-scrollbar {
-    width: 0.5em;
-    height: 0.5em;
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    background: #DBDBDB;
-    border-radius: 10px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    background: #ededed;
-  }
-  
-  body {
-    scrollbar-face-color: #DBDBDB;
-    scrollbar-track-color: #ededed;
-  }
-  
-  .wrapper {
-    padding: 0px;
-    min-height: 100%;
-    max-height: 100%;
-  }
-  .wrapper .wide {
-    width: 100%;
-  }
-  .wrapper .overflow {
-    height: calc(100vh - 30px - 2em);
-    overflow-y: auto;
-  }
-  
-  #content {
-    overflow: hidden;
-    height: calc(100vh - 30px);
-    background-color: #F5F5F5;
-  }
-  
-  
-  /* Setting height of the .sidebar's parent element to 100% */
-  .wrapper {
-    height: 100% !important;
-    width: 100% !important;
-  }
-  .row {
-    height:100% !important;
-  }
-  
-  #mail {
-    margin-left: 40px;
-    margin-right: 75px;
-  }
-  
-  
-  
-  
-  .padding {
-    padding: 10px 10px 10px 10px;
-  }
-  
-  
-  .sidebar {
-    overflow-y: auto;
-    font-size: medium !important;
-    background-color: rgb(97,97,97) !important;
-    height: 100% !important;
-    box-sizing: border-box !important;
-  }
-  
-  .mainarea{
-    overflow-y: auto;
-    font-size: medium !important;
-    box-sizing: border-box !important;
-    padding-top: 40px !important;
-  }
-  
-  .folder-button {
-    background-color: rgb(97,97,97) !important; 
-    color : rgb(224, 224, 224) !important;
-    border-radius: 7em !important;
-  }
-  
-  .folder-button:hover {
-    color: rgb(224, 224, 224) !important; 
-    background-color : rgb(146, 145, 145) !important;
-  }
-  
-  
-  .user-button {
-    background-color: rgb(189,189,189) !important; 
-    color : rgb(97,97,97) !important;
-    border-radius: 7em !important;
-    margin-top : 4em;
-    margin-bottom: 5px;
-    text-transform: unset !important;
-  }
-  
-  #compose-button {
-    margin-top : 10px;
-    margin-bottom: 25px;
-  }
-  
-  #compose-button:hover {
-    margin-top : 10px;
-    margin-bottom: 25px;
-    background-color : rgb(199, 152, 10) !important
-  }
-  
-  
-  #icompose {
-    color : rgb(97,97,97) !important;
-  }
-  
-  #iactions {
-    color : rgb(199, 152, 10) !important;
-  }
-  
-  #iactions-nested {
-    color : rgb(97,97,97) !important;
-  }
+  width: 0.5em;
+  height: 0.5em;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #DBDBDB;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #ededed;
+}
+
+body {
+  scrollbar-face-color: #DBDBDB;
+  scrollbar-track-color: #ededed;
+}
+
+.wrapper {
+  padding: 0px;
+  min-height: 100%;
+  max-height: 100%;
+}
+
+.wrapper .wide {
+  width: 100%;
+}
+
+.wrapper .overflow {
+  height: calc(100vh - 30px - 2em);
+  overflow-y: auto;
+}
+
+#content {
+  overflow: hidden;
+  height: calc(100vh - 30px);
+  background-color: #F5F5F5;
+}
+
+.mainarea{
+  overflow-y: auto;
+  font-size: medium;
+  box-sizing: border-box;
+  padding-top: 80px;
+}
+
+.padding {
+  padding: 10px 10px 10px 10px;
+}
+
+ul.tabs {
+  display: flex;
+  background-color: #F5F5F5;
+  max-width: 250px;
+  max-height: 40px;
+  height: fit-content;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.tabs .tab {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-height: 40px;
+  height: fit-content;
+  border-radius: 6px;
+  border : 0px solid gray;
+  padding: 0;
+  margin: 0;
+} 
+
+.tabs .tab a{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  max-height: 40px;
+  line-height: 28px;
+  height: fit-content;
+  display: flex;
+  color: rgb(97,97,97);
+  background-color: #F5F5F5;
+  text-transform: none;
+  border: 0.5px solid rgb(97,97,97);
+  border-radius: 8px;
+  padding: 0;
+  margin: 0;
+} 
+
+.tabs .tab a:hover {
+  background-color: rgb(128, 128, 128);
+  color: whitesmoke;
+  text-transform: none;
+} /*Text color on hover*/
+
+.tabs .tab a.active {
+  background-color: rgb(97,97,97) !important;
+  color: whitesmoke !important;
+  text-transform: none !important;
+} /*Background and text color when a tab is active*/
+
+
+.tabs .indicator {
+  background-color: rgb(255,202,40);
+} /*Color of underline*/
+
+#message-text {
+  background-color: white;
+}
+
+
+/* Send button */
+#send {
+  background-color: rgb(97,97,97); 
+  color : rgb(255,202,40) ;
+  border-radius: 10em ;
+  height: 3em ;
+  width : 8em ;
+  display: inline-flex ;
+  justify-content: center;
+  align-items: center ;
+}
+
+/* Login button */
+#send:hover {
+  background-color: rgb(128, 128, 128);
+}
+
+.isend {
+  font-size: 2rem ;
+}
+
+/* label focus color */
+.input-field input:focus + label {
+  color: rgb(97,97,97) !important;
+}
+
+/* label underline focus color */
+.row .input-field input:focus {
+  border-bottom: 1px solid rgb(97,97,97) !important;
+  box-shadow: 0 1px 0 0 rgb(97,97,97) !important;
+}
+
+
+/* select element */
+.dropdown-content li > a, .dropdown-content li > span {
+  color: rgb(97,97,97) !important}
+
+.dropdown-content li > a:hover, .dropdown-content li > span:hover {
+  color: whitesmoke !important;
+  background-color : rgb(97,97,97) !important;
+}
+
+.dropdown-content li > a:enabled, .dropdown-content li > span:enabled {
+  color: whitesmoke !important;
+  background-color : rgb(97,97,97) !important;
+}

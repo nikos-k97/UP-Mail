@@ -718,10 +718,6 @@ IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path
 IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcRenderer){
   let parsedAttachments = content.attachments;
   let attachmentHeaders = content.attachmentHeaders;
-  let user = this.client._config.user;
-  let hash = user.includes('@') ? this.utils.md5(user) : user;
-  let appPath = this.app.getPath('userData');
-  let md5 = this.utils.md5;
 
   for (let i = 0; i < parsedAttachments.length; i++) {
     let attachment = parsedAttachments[i];
@@ -771,13 +767,7 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcR
           //Create a write stream so that we can stream the attachment to file;
           console.log('Streaming this attachment to file', filename, info);
               
-          // The uid used here is the uid from the server, so since we locally use a combination
-          // of folder and uid, we need to store it with the folderUid format.
-          let hashuid = md5(`${path}${uid}`);
-
-          const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
-          fs.dir(`${hashuid}`);
-          //let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+          const fs = jetpack.cwd(`${saveFolder}`);
           let writeStream = fs.createWriteStream(`${saveFolder}\\${filename}`);
 
           writeStream.once('finish', function() {

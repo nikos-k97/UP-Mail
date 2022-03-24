@@ -231,8 +231,11 @@ function openWindow (file) {
 }
 
 
+// Open compose window, but limit the capability of the user to create new Windows indefinetely.
 ipcMain.on('open', (event, arg) => {
-    openWindow(arg.file);
+    if (appWindows.length < 3){
+        openWindow(arg.file);
+    }
 })
 
 // Choose folder to save attachment.

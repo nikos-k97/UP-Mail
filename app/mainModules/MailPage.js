@@ -1626,7 +1626,17 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       else e.target.classList.add('enabled');
 
       if (e.target.classList.contains('enabled')){
-        let noFetch = await this.mailStore.findIfAttachmentsExist(emailContent.attachments, uid, accountInfo.user);
+        let attachmentsToCheck = [];
+        if (emailContent.attachments && emailContent.attachments.length){
+          for (let k=0; k < emailContent.attachments.length; k++){
+            if (emailContent.attachments[k]['contentDisposition'] === 'inline'){
+              attachmentsToCheck.push(emailContent.attachments[k]);
+            }
+          }
+        }
+        console.log(attachmentsToCheck)
+        // Determine if inline attachments were already fetched before.
+        let noFetch = await this.mailStore.findIfAttachmentsExist(attachmentsToCheck, uid, accountInfo.user);
   
         if (noFetch === false) {
           e.currentTarget.disabled = true;
@@ -1647,7 +1657,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         }
       }
       else {
-        
         this.renderEmail(accountInfo, uid, false);
       }
     });

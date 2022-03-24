@@ -200,7 +200,7 @@ MailStore.prototype.deleteEmailBodies = async function (email, uidsNotToDelete, 
   }
 }
 
-
+// If the function returns true, no attachments will be 'fetched'.
 MailStore.prototype.findIfAttachmentsExist = async function(attachments, uid, email){
   if (!attachments || attachments.length === 0) return true;
   // The uid is in the format 'folderUID'.
@@ -215,7 +215,6 @@ MailStore.prototype.findIfAttachmentsExist = async function(attachments, uid, em
   let noIncluded = 0;
   for (let i = 0; i < attachments.length; i++){
     if (allContent.includes(attachments[i].filename)) {
-      console.log('included')
       noIncluded++;
     }
   }
