@@ -5,37 +5,54 @@
     <div class="col offset-s1 s10 mainarea overflow">
       <div>
         <div id="mail">
-          <form id='send-mail-form' >
-            <div class="form-field input-field">
-              <label for="from">From: </label>
-              <select id="from" name='from'> 
-              </select>
+          <form id='send-mail-form'>
+            <div class="row">
+              <div class="form-field input-field col s6">
+                <label for="from">From: </label>
+                <select id="from" name='from'>
+                </select>
+              </div>
+              <div class="form-field input-field col s6">
+                <label for='from-name'>Outgoing Name: </label>
+                <input type="text" name="from-name" id="from-name">
+                <small></small>
+              </div>
             </div>
-            <div class="form-field input-field ">
+
+            <div class="form-field input-field">
               <label for='to'>To: </label>
               <input type="email" name="to" id="to" autocomplete="off">
               <small></small>
             </div>
+            
+
+            <div class="form-field input-field">
+              <label for='cc'>Cc: </label>
+              <input type="email" name="cc" id="cc" autocomplete="off">
+              <small></small>
+            </div>
+
 
             <div class="form-field input-field">
               <label for='subject'>Subject: </label>
               <input type="text" name="subject" id="subject" autocomplete="off">
               <small></small>
             </div>
-            <div class="form-field input-field col s12 row" >
+
+            <div class="form-field input-field col s12 row">
               <ul class="tabs">
                 <li class="tab col grey lighten-5"><a class="active gray-text center-align" href="#text">Text</a></li>
                 <li class="tab col grey lighten-5"><a class='gray-text center-align' href="#html">HTML</a></li>
               </ul>
               <div id="text" class="col s12">
-                <textarea id="message-text" class="materialize-textarea" autocomplete="off"></textarea> 
+                <textarea id="message-text" class="materialize-textarea" autocomplete="off"></textarea>
               </div>
               <div id="html" class="col s12">
-                <textarea id="message-html" class="materialize-textarea" autocomplete="off"></textarea> 
+                <textarea id="message-html" class="materialize-textarea" autocomplete="off"></textarea>
               </div>
             </div>
             <div class="form-field input-field col s12 center-align">
-              <button class="btn waves-effect waves-light" id="send"  type="submit" title="Send">
+              <button class="btn waves-effect waves-light" id="send" type="submit" title="Send">
                 <i class="material-icons isend">send</i>
               </button>
             </div>

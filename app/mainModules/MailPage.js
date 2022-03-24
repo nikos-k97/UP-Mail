@@ -643,7 +643,7 @@ MailPage.prototype.reload = async function (accountInfo){
 
 MailPage.prototype.renderComposeButton = function () {
   let html = `
-    <a id='compose-button' class="btn-floating btn-large waves-effect waves-light amber lighten-1"><i id='icompose' class="material-icons">mode_edit</i></a>
+    <a id='compose-button' class="btn-floating btn-large waves-effect waves-light amber lighten-1" title="Compose"><i id='icompose' class="material-icons">mode_edit</i></a>
   `;
   document.querySelector('.button-container').innerHTML = html;
 
@@ -1411,6 +1411,101 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let headerContentNode = document.createElement('div');
   headerContentNode.classList.add('header-content');
   let envelope = emailHeaders.envelope;
+  let toArray = envelope.to;
+  let toHTML = '';
+  let ccArray = envelope.cc;
+  let ccHTML = '';
+  let bccArray = envelope.bcc;
+  let bccHTML = '';
+  // This is done because the to, cc, bcc fields can contain multiple email adresses.
+  if (toArray && toArray.length){
+    for (let i=0; i<toArray.length; i++){
+      if (i===0){
+        toHTML = toHTML + `
+          <tr>
+            <th>To: &nbsp;</th>
+            <td><a href="javascript:void(0)">${envelope.to[i].mailbox}@${envelope.to[i].host}</a>  ${envelope.to[i].name ? ' &nbsp; ('+envelope.to[i].name+')' : ''}</td>
+          </tr>
+        `;
+      }
+      else {
+        toHTML = toHTML + `
+        <tr>
+          <td></td>
+          <td><a href="javascript:void(0)">${envelope.to[i].mailbox}@${envelope.to[i].host}</a>  ${envelope.to[i].name ? ' &nbsp; ('+envelope.to[i].name+')' : ''}</td>
+        </tr>
+      `;
+      }
+    }
+  }
+  else {
+    toHTML = toHTML + `
+      <tr>
+        <th>To: &nbsp;</th>
+        <td><a href="javascript:void(0)">Unknown</td>
+      </tr>
+    `;
+  }
+
+  
+  if (ccArray && ccArray.length){
+    for (let i=0; i<ccArray.length; i++){
+      if (i===0){
+        ccHTML = ccHTML + `
+          <tr>
+            <th>Cc: &nbsp;</th>
+            <td><a href="javascript:void(0)">${envelope.cc[i].mailbox}@${envelope.cc[i].host}</a>  ${envelope.cc[i].name ? ' &nbsp; ('+envelope.cc[i].name+')' : ''}</td>
+          </tr>
+        `;
+      }
+      else {
+        ccHTML = ccHTML + `
+        <tr>
+          <td></td>
+          <td><a href="javascript:void(0)">${envelope.cc[i].mailbox}@${envelope.cc[i].host}</a>  ${envelope.cc[i].name ? ' &nbsp; ('+envelope.cc[i].name+')' : ''}</td>
+        </tr>
+      `;
+      }
+    }
+  }
+  else {
+    ccHTML = ccHTML + `
+      <tr>
+        <th>Cc: &nbsp;</th>
+        <td><a href="javascript:void(0)">-</td>
+      </tr>
+    `;
+  }
+ 
+  if (bccArray && bccArray.length){
+    for (let i=0; i<bccArray.length; i++){
+      if (i===0){
+        bccHTML = bccHTML + `
+          <tr>
+            <th>Bcc: &nbsp;</th>
+            <td><a href="javascript:void(0)">${envelope.bcc[i].mailbox}@${envelope.bcc[i].host}</a>  ${envelope.bcc[i].name ? ' &nbsp; ('+envelope.bcc[i].name+')' : ''}</td>
+          </tr>
+        `;
+      }
+      else {
+        bccHTML = bccHTML + `
+        <tr>
+          <td></td>
+          <td><a href="javascript:void(0)">${envelope.bcc[i].mailbox}@${envelope.bcc[i].host}</a>  ${envelope.bcc[i].name ? ' &nbsp; ('+envelope.bcc[i].name+')' : ''}</td>
+        </tr>
+      `;
+      }
+    }
+  }
+  else {
+    bccHTML = bccHTML + `
+    <tr>
+      <th>Bcc: &nbsp;</th>
+      <td><a href="javascript:void(0)">-</td>
+    </tr>
+  `;
+  }
+
   let headerContent = `
     <br>
     <table class='header-table'>
@@ -1419,18 +1514,13 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           <th>From: &nbsp;</th>
           <td><a href="javascript:void(0)">${envelope.from[0].mailbox}@${envelope.from[0].host}</a>  ${envelope.from[0].name ? ' &nbsp; ('+envelope.from[0].name+')' : ''}</td>
         </tr>
-        <tr>
-          <th>To: &nbsp;</th>
-          <td><a href="javascript:void(0)">${envelope.to[0].mailbox}@${envelope.to[0].host}</a>  ${envelope.to[0].name ? ' &nbsp; ('+envelope.to[0].name+')' : ''}</td>
-        </tr>
-        <tr>
-          <th>Cc: &nbsp;</th>
-          <td>${envelope.cc ? '<a href="javascript:void(0)">'+ envelope.cc +'</a>' : '-'}</td>
-        </tr>
-        <tr>
-          <th>Bcc: &nbsp;</th>
-          <td>${envelope.bcc ? '<a href="javascript:void(0)">'+ envelope.bcc +'</a>' : '-'}</td>
-        </tr>
+  `;
+
+  headerContent = headerContent + toHTML;
+  headerContent = headerContent + ccHTML;
+  headerContent = headerContent + bccHTML;
+       
+  headerContent = headerContent + `
         <tr>
           <th>Date: &nbsp;</th>
           <td>${envelope.date}</td>
@@ -1634,7 +1724,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
             }
           }
         }
-        console.log(attachmentsToCheck)
         // Determine if inline attachments were already fetched before.
         let noFetch = await this.mailStore.findIfAttachmentsExist(attachmentsToCheck, uid, accountInfo.user);
   
@@ -1689,11 +1778,11 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           </tr>
           <tr>
             <th>Cc: &nbsp;</th>
-            <td>${envelope.cc ? '<a href="javascript:void(0)">'+ envelope.cc +'</a>' : '-'}</td>
+            <td>${envelope.cc ? '<a href="javascript:void(0)">'+ `${envelope.cc[0].mailbox}@${envelope.cc[0].host}</a>  ${envelope.cc[0].name ? ' &nbsp; ('+envelope.cc[0].name+')' : ''}` +'</a>' : '-'}</td>
           </tr>
           <tr>
             <th>Bcc: &nbsp;</th>
-            <td>${envelope.bcc ? '<a href="javascript:void(0)">'+ envelope.bcc +'</a>' : '-'}</td>
+            <td>${envelope.bcc ? '<a href="javascript:void(0)">'+ `${envelope.bcc[0].mailbox}@${envelope.bcc[0].host}</a>  ${envelope.bcc[0].name ? ' &nbsp; ('+envelope.bcc[0].name+')' : ''}` +'</a>' : '-'}</td>
           </tr>
           <tr>
             <th>Date: &nbsp;</th>

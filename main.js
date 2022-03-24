@@ -236,7 +236,8 @@ ipcMain.on('open', (event, arg) => {
     if (appWindows.length < 3){
         openWindow(arg.file);
     }
-})
+});
+
 
 // Choose folder to save attachment.
 ipcMain.on('saveAttachment', (event, file) => {

@@ -58,9 +58,12 @@ contextBridge.exposeInMainWorld(
             document.querySelector('#from').appendChild(option);
             option.textContent = account.user;
             materialize.FormSelect.init(document.querySelector('#from'));
+
+            // Also set the outgoing name from the database as the default value in the textbox.
+            document.querySelector('#from-name').value = account.smtp.name;
         },
         formatTextArea : () => {
-          let tabsInstance = materialize.Tabs.init(document.querySelector('.tabs'));
+          materialize.Tabs.init(document.querySelector('.tabs'));
           easymde = new easyMDE({
             element: document.getElementById('message-html'),
             autoDownloadFontAwesome: false,
@@ -71,18 +74,21 @@ contextBridge.exposeInMainWorld(
             scrollbarStyle : 'native',
             //sanitizerFunction: Custom function for sanitizing the HTML output of markdown renderer.
           });
-
         },
         setSendHandler : () => {
             const form = document.getElementById('send-mail-form');
 
             const to = form.elements['to'];
+            const cc = form.elements['cc'];
             const subject = form.elements['subject'];
 
             form.addEventListener('input', FormValidator.debounce(function (e) {
                 switch (e.target.id) {
                     case 'to':
                         FormValidator.checkEmailAddress(to);
+                        break;
+                    case 'cc':
+                        FormValidator.checkEmailAddress(cc);
                         break;
                     default: 
                 }
@@ -93,7 +99,10 @@ contextBridge.exposeInMainWorld(
                 e.preventDefault();
                 
                 let isEmailValid = FormValidator.checkEmailAddress(to);
-                if (isEmailValid) {
+                let isCcValid;
+                if (cc) isCcValid = FormValidator.checkEmailAddress(to);
+                else isCcValid = true;
+                if (isEmailValid && isCcValid) {
                     let emailContent;
                     let activeEditor = document.querySelector('div.active').getAttribute('id');
                     if (activeEditor === 'text'){
@@ -108,7 +117,9 @@ contextBridge.exposeInMainWorld(
                     if (isSubjectOK){
                         let message = {
                             from: form.elements['from'].value, //_id
+                            fromName : form.elements['from-name'].value,
                             to: form.elements['to'].value,
+                            cc: form.elements['cc'].value,
                             subject: form.elements['subject'].value,
                             message: emailContent
                         }
@@ -130,7 +141,9 @@ contextBridge.exposeInMainWorld(
                             materialize.Toast.getInstance(document.querySelector('.toast')).dismiss();
                             let message = {
                                 from: form.elements['from'].value,
+                                fromName : form.elements['from-name'].value,
                                 to: form.elements['to'].value,
+                                cc: form.elements['cc'].value,
                                 subject: undefined,
                                 message: emailContent
                             }

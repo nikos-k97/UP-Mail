@@ -212,13 +212,18 @@ e-mail{
 
 
 .user-button {
-  background-color: rgb(189,189,189) !important; 
-  color : rgb(97,97,97) !important;
-  border-radius: 7em !important;
+ 
+  background-color: rgb(97,97,97) !important; 
+  color : rgb(224, 224, 224) !important;
+  border-radius: 3px !important;
   margin-top : 4em;
   margin-bottom: 5px;
   text-transform: unset !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 
 #compose-button {
   margin-top : 10px;

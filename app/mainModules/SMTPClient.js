@@ -24,8 +24,12 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
        (an array of address strings) fields as all addresses from to, cc and bcc get merged into to when sending.
     */
     let mailOptions = {
-      from: message.from, // sender address (Firstname Lastname <Email Address>)
+      from: {
+        name: message.fromName,
+        address: message.from
+      },
       to: message.to, // list of receivers
+      cc: message.cc,
       subject: message.subject, // Subject line
       text: message.message, // plain text body
       html: message.message // html body
