@@ -1,6 +1,7 @@
 const Datastore   = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise     = require('bluebird');
 const jetpack     = require('fs-jetpack');
+const crypto      = require('crypto');
 const Utils       = require('./Utils');
 
 function MailStore (app, utils) {
@@ -9,7 +10,7 @@ function MailStore (app, utils) {
 }
 
 /**
- * Attempts to transform an email address into a DB.
+ * Attempts to create a persistent database for the specified email address.
  * @param  {string}  emailAddress [An email address to create the DB instance of]
  * @return {undefined}
  */
@@ -23,6 +24,21 @@ function MailStore (app, utils) {
       {
         filename: `${this.app.getPath('userData')}/db/${hash}.db`,
         autoload: false
+        /*
+          Data serialization is the process of converting an object into a stream of bytes to more easily save or transmit it. 
+          The reverse process—constructing a data structure or object from a series of bytes—is deserialization. 
+          Data formats such as JSON and XML are often used as the format for storing serialized data.
+          Hooks are the actions we perform before or after a specified database operation.    
+        
+          -afterSerialization (optional): hook you can use to transform data after it was serialized and before it 
+                                          is written to disk. Can be used for example to encrypt data before writing 
+                                          database to disk. This function takes a string as parameter (one line of 
+                                          an NeDB data file) and outputs the transformed string, which must 
+                                          absolutely not contain a \n character (or data will be lost).
+          -beforeDeserialization (optional): inverse of afterSerialization. Make sure to include both and not just 
+                                             one or you risk data loss. For the same reason, make sure both 
+                                             functions are inverses of one another.
+        */ 
       }
     );
     this.db = Promise.promisifyAll(mailDB);
@@ -150,7 +166,7 @@ MailStore.prototype.countEmails = async function (folder) {
   return await this.db.countAsync({ folder: folder })
 }
 
-// The following 3 methods, are about .json files that store the body of each retrieved email. They
+// The following methods, are about .json files that store the body of each retrieved email. They
 // are stored at path: mail/emailHash/hashedEmailUid. They have nothing to with 'this.db'.
 // ------------------------------------------------------------------------------------------------
 MailStore.prototype.saveMailBody = async function (uid, data, email) {
@@ -221,6 +237,15 @@ MailStore.prototype.findIfAttachmentsExist = async function(attachments, uid, em
 
   if (noIncluded === attachments.length) return true;
   else return false;
+}
+
+MailStore.prototype.deleteDB = function () {
+  let fs = jetpack.cwd(this.app.getPath('userData'), `db`);
+  let allContent = fs.find(`.`, {files : true, directories : true});
+  allContent.forEach(fileOrFolder => {
+    fs.remove(`${fileOrFolder}`);
+    console.log(`Removed ${fileOrFolder} from db.`);
+  });
 }
 
 

@@ -86,7 +86,6 @@ module.exports = function (name, options) {
   //Retrieve previous saved configurations. If with these configurations the window is not visible,
   //fallback to default
   let previous = restore();
-  console.log(previous)
   if (!previous.maximized) {
     state = ensureVisibleOnSomeDisplay(previous);
   };

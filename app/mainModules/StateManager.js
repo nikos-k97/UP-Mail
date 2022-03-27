@@ -19,10 +19,10 @@ function StateManager (app, ipcRenderer, logger, utils, router) {
     app.getAppPath():           C:\Users\xxx\Desktop\project-xxx (the directory where the project is saved)
   */
 
-  this.accountManager = new AccountManager(this.app, this.logger, this, this.utils);
+  this.accountManager = new AccountManager(this.app, this.logger, this, this.utils, this.ipcRenderer);
   this.welcomePage = new WelcomePage(this.logger, this, this.utils, this.accountManager); 
   this.mailStore = new MailStore(this.app,this.utils); 
-  this.mailPage = new MailPage(this.ipcRenderer, this.app, this.logger, this, this.utils, this.accountManager, this.mailStore);
+  this.mailPage = new MailPage(this.app, this.logger, this, this.utils, this.accountManager, this.mailStore);
     
   this.storeDir = jetpack.cwd(this.app.getPath('userData'));
   this.appDir = jetpack.cwd(this.app.getAppPath());
@@ -44,7 +44,7 @@ function StateManager (app, ipcRenderer, logger, utils, router) {
                         }
                       */
 
-StateManager.prototype.initialize = function(){
+StateManager.prototype.initialize = async function(){
   this.logger.info('*** Secure email client ***');
   this.logger.info(`Application Paths Found:
     App Dir   - ${this.app.getAppPath()}
@@ -118,6 +118,8 @@ StateManager.prototype.setup = async function (loginInfo) {
       (The old cycle is terminated when it reaches stateManager.setup() after the renderMailPage call, after
       which no more methods are called).
     */
+    // Logged in to IMAP and SMTP servers. From now on password from the DB will not be decrypted again.
+    // (was decrypted once in AccountManager.existingAccount or AccountManager.newAccount)
     if (initialized) this.mailPage.renderMailPage();
   }
 }

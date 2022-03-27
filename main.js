@@ -211,16 +211,16 @@ function openWindow (file) {
     const appMenu = Menu.buildFromTemplate(appMenuTemplate);
     //Insert menu to the app
     Menu.setApplicationMenu(appMenu);
-    if (file === 'compose'){
+    if (file === 'composeWindow'){
         appWindows[index].setMenu(null);
     }
     
-    appWindows[index].once('did-finish-load', () => { //or dome-ready
-        // Send Message
-     });
-    appWindows[index].webContents.on('did-finish-load', () => {
-        //appWindows[index].webContents.send('message', 'hello world');
-    });
+    // appWindows[index].once('did-finish-load', () => { //or dome-ready
+    //     // Send Message
+    //  });
+    // appWindows[index].webContents.on('did-finish-load', () => {
+    //     //appWindows[index].webContents.send('message', 'hello world');
+    // });
 
     // ipcMain.on('toMain', (event, ...args) => {
     //     console.log('[Main Process] event: '+event.sender+' args: '+args);

@@ -10,6 +10,7 @@ const Logger                       = require('./helperModules/logger');
 const FormValidator                = require('./helperModules/formValidator');
 const Header                       = require('./mainModules/Header');
 const SMTPClient                   = require('./mainModules/SMTPClient');
+const Clean                        = require('./mainModules/Clean');
 const easyMDE                      = require('easymde');
 const {marked}                     = require('marked')
 
@@ -72,7 +73,13 @@ contextBridge.exposeInMainWorld(
             unorderedListStyle : '*',
             spellChecker : false,
             scrollbarStyle : 'native',
-            //sanitizerFunction: Custom function for sanitizing the HTML output of markdown renderer.
+            uploadImage: true,
+            renderingConfig: {
+                sanitizerFunction: (renderedHTML) => {
+                    // Use non strict HTML sanitizer (the IMAP client of the receipient should do more filtering if needed)
+                    return Clean.cleanHTMLNonStrict(renderedHTML);
+                },
+            },
           });
         },
         setSendHandler : () => {
@@ -113,6 +120,8 @@ contextBridge.exposeInMainWorld(
                       emailContent = easymde.value();
                       emailContent = marked.parse(emailContent);
                     }
+                    // Sanitize email Content before sending.
+                    emailContent = Clean.cleanHTMLNonStrict(emailContent);
                     let isSubjectOK = FormValidator.checkEmailSubject(subject);
                     if (isSubjectOK){
                         let message = {

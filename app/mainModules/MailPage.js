@@ -8,14 +8,14 @@ const Clean                         = require('./Clean');
 const materialize                   = require("../helperModules/materialize.min.js");
 
 
-function MailPage (ipcRenderer, app, logger, stateManager, utils, accountManager, mailStore) {
-  this.ipcRenderer = ipcRenderer;
+function MailPage (app, logger, stateManager, utils, accountManager, mailStore) {
   this.app = app;
   this.logger = logger;
   this.stateManager = stateManager;
   this.utils = utils;
   this.accountManager = accountManager;
   this.mailStore = mailStore;
+  this.ipcRenderer = this.accountManager.ipcRenderer;
   //this.imapClient -> defined in 'initializeIMAP()'
   this.checkedUIDs = [];
 }
@@ -678,6 +678,8 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
       await this.mailStore.deleteEmails();
       await this.mailStore.deleteEmailBodies(accountInfo.user, [], true);
       await this.accountManager.removeAccount(accountInfo.user);
+      // Delete whole db folder
+      this.mailStore.deleteDB();
       this.imapClient = null;
       Header.hideTLSBar();
       this.stateManager.change('state', 'new');
@@ -1400,6 +1402,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let cleanContent;
   if (reloadedFromAttachmentButton){
     cleanContent = Clean.cleanHTMLNonStrict(dirtyContent);
+    
   }
   else {
     cleanContent = Clean.cleanHTMLStrict(dirtyContent);
@@ -1772,18 +1775,13 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
             <th>From: &nbsp;</th>
             <td><a href="javascript:void(0)">${envelope.from[0].mailbox}@${envelope.from[0].host}</a>  ${envelope.from[0].name ? ' &nbsp; ('+envelope.from[0].name+')' : ''}</td>
           </tr>
-          <tr>
-            <th>To: &nbsp;</th>
-            <td><a href="javascript:void(0)">${envelope.to[0].mailbox}@${envelope.to[0].host}</a>  ${envelope.to[0].name ? ' &nbsp; ('+envelope.to[0].name+')' : ''}</td>
-          </tr>
-          <tr>
-            <th>Cc: &nbsp;</th>
-            <td>${envelope.cc ? '<a href="javascript:void(0)">'+ `${envelope.cc[0].mailbox}@${envelope.cc[0].host}</a>  ${envelope.cc[0].name ? ' &nbsp; ('+envelope.cc[0].name+')' : ''}` +'</a>' : '-'}</td>
-          </tr>
-          <tr>
-            <th>Bcc: &nbsp;</th>
-            <td>${envelope.bcc ? '<a href="javascript:void(0)">'+ `${envelope.bcc[0].mailbox}@${envelope.bcc[0].host}</a>  ${envelope.bcc[0].name ? ' &nbsp; ('+envelope.bcc[0].name+')' : ''}` +'</a>' : '-'}</td>
-          </tr>
+      `;
+
+      selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + toHTML;
+      selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + ccHTML;
+      selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + bccHTML;
+         
+      selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + `
           <tr>
             <th>Date: &nbsp;</th>
             <td>${envelope.date}</td>
