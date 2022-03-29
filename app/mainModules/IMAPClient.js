@@ -655,7 +655,8 @@ IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path
     */
     if ( (attachment['contentType'] !== 'image/png' ) && (attachment['contentType'] !== 'image/jpeg' ) &&
          (attachment['contentType'] !== 'image/gif' ) && (attachment['contentType'] !== 'image/bmp' ) &&
-         (attachment['contentType'] !== 'image/avif' ) )
+         (attachment['contentType'] !== 'image/avif') && (attachment['contentType'] !== 'application/pgp-encrypted') &&
+         (attachment['contentType'] !== 'application/octet-stream'))
     {
       continue;
     }

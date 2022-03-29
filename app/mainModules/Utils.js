@@ -113,6 +113,10 @@ Utils.prototype.md5 = (string) => {
   return crypto.createHash('md5').update(string).digest('hex');
 }
 
+Utils.md5 = (string) => {
+  return crypto.createHash('md5').update(string).digest('hex');
+}
+
 /**
  * Time the runtime of a function, waits for a promise to end if it is a promise.
  *

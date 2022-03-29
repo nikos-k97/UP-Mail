@@ -1,10 +1,23 @@
-const CryptoJS   = require("crypto-js");
-const scrypt     = require('scryptsy');
-const keytar     = require('keytar');
+const CryptoJS    = require("crypto-js");
+const scrypt      = require('scryptsy');
+const keytar      = require('keytar');
+const openpgp     = require('openpgp');
+const jetpack     = require('fs-jetpack');
+const Utils       = require('./Utils');
 
-function Encrypt (){
+
+function Encrypt () {
+
 }
 
+
+/**
+ * Construct the app-general-key from the user password and the salt.
+ * The key is used to encrypt/ decrypt user's account password
+ *
+ * @param  {object} loginInfo
+ * @return {Buffer} 
+ */
 Encrypt.keyDerivationFunction = async function(loginInfo){
     /*
         A salt is required for scrypt to derive an encryption key from a password. A salt is a random value used to 
@@ -22,7 +35,7 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
         If the password is lost or forgotten, then the database cannot be decrypted or recovered.
     */
     let dbPass = await keytar.getPassword('email-client', 'app-general-key');
-    if (dbPass === null) {
+    if (!dbPass) {
         await keytar.setPassword('email-client', 'app-general-key', loginInfo.password);
         console.log('Added database password to the system keychain.')
         /*
@@ -46,11 +59,26 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
     }
 }
 
+
+/**
+ * Delete the app-general-key from the OS's keychain / Credential Manager.
+ *
+ */
 Encrypt.deleteAppKey = async function(){
     await keytar.deletePassword('email-client', 'app-general-key');
     console.log('Deleted database password from the system keychain.')
 }
 
+
+/**
+ * Encrypt plaintext with AES256-CBC using the app-general-key from the OS's
+ * keychain. If the key is in 'Buffer' format it must be converted to String
+ * before passing it as an arguement.
+ *
+ * @param  {String} key
+ * @param  {Object} plaintext
+ * @return {Object} 
+ */
 Encrypt.encryptAES256CBC = function(key, plaintext) {
     let ciphertext = CryptoJS.AES.encrypt(JSON.stringify(plaintext), key, { 
         padding: CryptoJS.pad.Pkcs7,
@@ -61,6 +89,16 @@ Encrypt.encryptAES256CBC = function(key, plaintext) {
     return ciphertext;
 }
 
+
+/**
+ * Decrypt ciphertect with AES256-CBC using the app-general-key from the OS's
+ * keychain. If the key is in 'Buffer' format it must be converted to String
+ * before passing it as an arguement.
+ *
+ * @param  {String} key
+ * @param  {Object} ciphertext
+ * @return {Object} 
+ */
 Encrypt.decryptAES256CBC = function(key, ciphertext) {
     const bytes  = CryptoJS.AES.decrypt(ciphertext, key, { 
         padding: CryptoJS.pad.Pkcs7,
@@ -69,6 +107,57 @@ Encrypt.decryptAES256CBC = function(key, ciphertext) {
         }
     );
     return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
+}
+
+
+/**
+ * Create new (Open)PGP key pair, along with a revocation certificate and save them
+ * as .asc files in the 'keys' directory of the 'appPath'. The private key is encrypted
+ * with the user account's password (which is decrypted using the app-general-key saved in
+ * the OS's keychain / Credential Manager).
+ *
+ * @param  {Object} accountInfo
+ * @param  {String} appPath
+ */
+Encrypt.createPGPKeyPair = async function(accountInfo, appPath){
+    let fs = jetpack.cwd(appPath);
+    fs.dir(`keys`);
+    fs = jetpack.cwd(appPath, `keys`);
+
+    // As the passphrase for the private key, use the dbPassword (the user account password).
+    let appGeneralKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+    let decryptedPassword = Encrypt.decryptAES256CBC(appGeneralKey,accountInfo.password);
+    
+    // Both the curve25519 and ed25519 curve options generate a primary key for signing using Ed25519 and 
+    // a subkey for encryption using Curve25519.
+    const { privateKey, publicKey, revocationCertificate } = await openpgp.generateKey({ // in base-64
+        type: 'ecc', // Elliptic Curve 
+        curve: 'curve25519', // ECC curve name 
+        userIDs: [{ name: accountInfo.smtp.name, email: accountInfo.user}], // Multiple user IDs can be used.
+        passphrase: decryptedPassword, // protects the private key
+        format: 'armored' // output key format, defaults to 'armored' (other options: 'binary' or 'object')
+    });
+
+    fs.dir(`${Utils.md5(accountInfo.user)}`);
+    fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+    fs.write(`${accountInfo.user}-public.asc`, publicKey);
+    fs.write(`${accountInfo.user}-private.asc`, privateKey);
+    fs.write(`${accountInfo.user}-revocationCert.asc`, revocationCertificate);
+}
+
+
+/**
+ * Delete the whole 'keys' directory containing all the user's (Open)PGP key pairs.
+ *
+ * @param  {String} appPath
+ */
+Encrypt.deleteKeyFolder = async function(appPath){
+    fs = jetpack.cwd(appPath, `keys`);
+    let allContent = fs.find(`.`, {files : true, directories : true});
+    allContent.forEach(fileOrFolder => {
+      fs.remove(`${fileOrFolder}`);
+      console.log(`Removed ${fileOrFolder} from key store.`);
+    });
 }
 
 

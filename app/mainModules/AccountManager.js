@@ -84,7 +84,7 @@ AccountManager.prototype.existingAccount = async function () {
     else{
     // Account info were retrieved, redirect to stateManager.
     const key = (await Encrypt.keyDerivationFunction(account)).toString(); 
-    account.password =  Encrypt.decryptAES256CBC(key, account.password) 
+    account.password = Encrypt.decryptAES256CBC(key, account.password) 
     await this.stateManager.setup(account);
     }
   }
@@ -105,6 +105,8 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
   // Search the OS's Credential Manager / Keychain for the app key. 
   // If there is not one present, create a key from the loginInfo.password using 'Scrypt'.
   // Use this key to encrypt the user password before storing it in the DB.
+  // Delete the app-general-key from the OS keychain (if it exists from a previous user).
+  await Encrypt.deleteAppKey();
   const key = (await Encrypt.keyDerivationFunction(loginInfo)).toString(); 
   let encryptedLoginInfo = loginInfo;
   encryptedLoginInfo.password = Encrypt.encryptAES256CBC(key, loginInfo.password);

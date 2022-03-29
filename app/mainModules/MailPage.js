@@ -680,11 +680,14 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
       this.imapClient.client.end();
       resolve();
     });
-    connectionEnded.then( async () => {
+    connectionEnded.then(async () => {
       materialize.toast({html: 'Logging out and deleting all locally stored data...', displayLength : 1000 ,classes: 'rounded'});
       await this.mailStore.deleteEmails();
       await this.mailStore.deleteEmailBodies(accountInfo.user, [], true);
       await this.accountManager.removeAccount(accountInfo.user);
+      // Delete folder containing user PGP keys.
+      let appPath = this.app.getPath('userData');
+      await Encrypt.deleteKeyFolder(appPath);
       // Delete whole db folder
       this.mailStore.deleteDB();
       // Delete the app-general-key from the OS keychain.
@@ -718,7 +721,11 @@ MailPage.prototype.createKeyManagementButton = function(){
   manageKeysButton.classList.add('manage-keys-button','center-align', 'waves-effect', 'waves-light', 'btn-floating','btn-large');
   manageKeysButton.setAttribute('title','Manage keys')
 
-  
+  manageKeysButton.addEventListener('click', async (e) => {
+    let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
+    let appPath = this.app.getPath('userData');
+    await Encrypt.createPGPKeyPair(accountInfo, appPath);
+  });
 }
 
 
@@ -1332,7 +1339,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
   let emailHeaders = await this.mailStore.loadEmail(uid, accountInfo.user);
   let path = emailHeaders.folder;
- 
+
   // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
     selectedItemWrapper.innerHTML = 'Loading email body ...';
@@ -1350,6 +1357,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     }
   }
   
+  console.log(emailHeaders)
+  console.log(emailContent)
   // The user clicked on the email, so we can safely mark it as 'Seen' both to the server and to the local storage.
   // 'uid' and 'metadata.uid' are in the format 'folderUID'
     /*
