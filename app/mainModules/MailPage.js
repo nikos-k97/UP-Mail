@@ -5,6 +5,7 @@ const Utils                         = require('./Utils');
 const IMAPClient                    = require('./IMAPClient');
 const Header                        = require('./Header');
 const Clean                         = require('./Clean');
+const Encrypt                       = require('./Encrypt');
 const materialize                   = require("../helperModules/materialize.min.js");
 
 
@@ -77,6 +78,8 @@ MailPage.prototype.checkIMAPStatus = async function (accountInfo) {
 
 // If this function is called from 'MailPage.reload()' then 'reloading' is true. If not its undefined.
 MailPage.prototype.renderMailPage = async function (reloading) {
+  // No need to decrypt the password again - User is already logged in, so the accountInfo.password remains
+  // encrypted from now on for safety.
   let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
   if (!this.utils.testLoaded('mailbox')){
@@ -211,6 +214,9 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
 
   // Render folders in the sidebar (mailbox.html)
   await this.renderFolderStructure(accountInfo);
+
+  // Render 'Key Management' button
+  this.createKeyManagementButton();
 
   // Render compose button since page content is now loaded.
   this.renderComposeButton();
@@ -675,11 +681,14 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
       resolve();
     });
     connectionEnded.then( async () => {
+      materialize.toast({html: 'Logging out and deleting all locally stored data...', displayLength : 1000 ,classes: 'rounded'});
       await this.mailStore.deleteEmails();
       await this.mailStore.deleteEmailBodies(accountInfo.user, [], true);
       await this.accountManager.removeAccount(accountInfo.user);
       // Delete whole db folder
       this.mailStore.deleteDB();
+      // Delete the app-general-key from the OS keychain.
+      await Encrypt.deleteAppKey();
       this.imapClient = null;
       Header.hideTLSBar();
       this.stateManager.change('state', 'new');
@@ -689,6 +698,27 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
       dispatchEvent(new Event('load'));
     });
   });
+}
+
+
+MailPage.prototype.createKeyManagementButton = function(){
+  let folderDiv = document.querySelector('#folders');
+
+  // Create div wrapper for the Key Management elements.
+  let keyManagementWrapper = document.createElement('div');
+  keyManagementWrapper.classList.add('key-management-wrapper', 'no-padding', 'center-align');
+  folderDiv.insertAdjacentElement('afterend', keyManagementWrapper);
+
+  // Create 'Manage keys' button.
+  let manageKeysButton = document.createElement('button');
+  manageKeysButton.innerHTML = `
+    <i class="material-icons imanage">vpn_key</i>
+  `;
+  keyManagementWrapper.appendChild(manageKeysButton);
+  manageKeysButton.classList.add('manage-keys-button','center-align', 'waves-effect', 'waves-light', 'btn-floating','btn-large');
+  manageKeysButton.setAttribute('title','Manage keys')
+
+  
 }
 
 

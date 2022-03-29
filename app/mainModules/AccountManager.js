@@ -87,7 +87,6 @@ AccountManager.prototype.existingAccount = async function () {
     account.password =  Encrypt.decryptAES256CBC(key, account.password) 
     await this.stateManager.setup(account);
     }
-
   }
 }
 

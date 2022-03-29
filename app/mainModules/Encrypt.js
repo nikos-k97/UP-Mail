@@ -24,6 +24,7 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
     let dbPass = await keytar.getPassword('email-client', 'app-general-key');
     if (dbPass === null) {
         await keytar.setPassword('email-client', 'app-general-key', loginInfo.password);
+        console.log('Added database password to the system keychain.')
         /*
             'scrypt' uses the password, salt, and other parameters to derive the encryption key. The other parameters 
             determine how much time it takes the CPU to derive the key, which mitigates brute force attacks, except for the
@@ -43,6 +44,11 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
         const key = scrypt(dbPass, dbSalt, 32768, 8, 1, 32)
         return key;
     }
+}
+
+Encrypt.deleteAppKey = async function(){
+    await keytar.deletePassword('email-client', 'app-general-key');
+    console.log('Deleted database password from the system keychain.')
 }
 
 Encrypt.encryptAES256CBC = function(key, plaintext) {

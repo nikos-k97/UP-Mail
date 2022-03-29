@@ -1,4 +1,5 @@
-const nodemailer = require('nodemailer')
+const nodemailer = require('nodemailer');
+const Encrypt    = require('./Encrypt');
 
 function SMTPClient (account, logger) {
   this.account = account;
@@ -10,6 +11,10 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
   let accountDetails = (await this.account.findAsync({ _id: message.from }))[0];
   // Change the 'message.from' to contain the emailAddress and not the _id of the accounts database.
   message.from = accountDetails.user;
+
+  // Decrypt the password in order to be used in the SMTP transporter.
+  const key = (await Encrypt.keyDerivationFunction(accountDetails)).toString(); 
+  accountDetails.password =  Encrypt.decryptAES256CBC(key, accountDetails.password) 
   this.createTransporterObject(accountDetails);
   let canSend = await this.verifyServerConnection(accountDetails);
   if (canSend){

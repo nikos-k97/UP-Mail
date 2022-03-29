@@ -278,3 +278,23 @@ e-mail{
 .iloadmore {
   font-size: 2rem !important;
 }
+
+.imanage {
+  color : rgb(97,97,97) !important;
+}
+
+.manage-keys-button{
+  background-color: rgb(224, 224, 224) !important; 
+  color : rgb(97, 97, 97) !important;
+  margin-top : 65px;
+  margin-bottom: 5px;
+  text-transform: unset !important;
+}
+
+.manage-keys-button:hover{
+  background-color: rgb(185, 185, 185) !important; 
+  color : rgb(97, 97, 97) !important;
+  margin-top : 55px;
+  margin-bottom: 5px;
+  text-transform: unset !important;
+}
