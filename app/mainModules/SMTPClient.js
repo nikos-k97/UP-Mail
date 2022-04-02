@@ -1,9 +1,11 @@
-const nodemailer = require('nodemailer');
-const Encrypt    = require('./Encrypt');
+const nodemailer     = require('nodemailer');
+const openpgpEncrypt = require('nodemailer-openpgp').openpgpEncrypt;
+const Encrypt        = require('./Encrypt');
 
-function SMTPClient (account, logger) {
+function SMTPClient (account, logger, appPath) {
   this.account = account;
   this.logger = logger;
+  this.appPath = appPath;
   this.transporters = {};
 }
 
@@ -14,7 +16,8 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
 
   // Decrypt the password in order to be used in the SMTP transporter.
   const key = (await Encrypt.keyDerivationFunction(accountDetails)).toString(); 
-  accountDetails.password =  Encrypt.decryptAES256CBC(key, accountDetails.password) 
+  accountDetails.password =  Encrypt.decryptAES256CBC(key, accountDetails.password);
+  
   this.createTransporterObject(accountDetails);
   let canSend = await this.verifyServerConnection(accountDetails);
   if (canSend){
@@ -28,6 +31,12 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
        The envelope object returned by sendMail() includes just from (address string) and to 
        (an array of address strings) fields as all addresses from to, cc and bcc get merged into to when sending.
     */
+    // let publickey = await Encrypt.getOwnPublicKeyWithoutArmor(accountDetails, this.appPath);
+    // publickey = publickey.toString();
+
+    // let signingKey = await Encrypt.getOwnPrivateKeyWithoutArmor(accountDetails, this.appPath);
+    // this.transporters[account.user].use('stream', openpgpEncrypt(signingKey));
+
     let mailOptions = {
       from: {
         name: message.fromName,
@@ -37,11 +46,12 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
       cc: message.cc,
       subject: message.subject, // Subject line
       text: message.message, // plain text body
-      html: message.message // html body
+      html: message.message, // html body
+      //encryptionKeys : [publickey]
     };
 
     try {
-      const messageSent = await this.send(accountDetails, mailOptions);
+      await this.send(accountDetails, mailOptions);
       return true;
     } catch (error) {
       this.logger.error(error);
@@ -109,7 +119,7 @@ SMTPClient.prototype.send = async function (account, mailMessage){
     return new Promise((resolve,reject) => {
       this.transporters[account.user].sendMail(mailMessage, (error, info) => {
         if (error) {
-          return this.logger.error(error);
+          this.logger.error(error);
           reject(error);
         }
         this.logger.log(`Message ${info.messageId} sent: ${info.response}`);

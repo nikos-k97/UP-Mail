@@ -1,7 +1,6 @@
 const Datastore   = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise     = require('bluebird');
 const jetpack     = require('fs-jetpack');
-const crypto      = require('crypto');
 const Utils       = require('./Utils');
 
 function MailStore (app, utils) {

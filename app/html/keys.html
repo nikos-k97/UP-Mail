@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<div class="wrapper">
+    <div class="row">
+        <br>
+        <br>
+        <div class="col offset-s1 s10 mainarea overflow">
+            <ul class="collection">
+                <li class="collection-header center-align"><h5>Contacts</h5></li>
+                <li class="collection-item">
+                    <div class="new-contact-button-wrapper center-align">
+                        <button class = 'add-new-contact btn waves-effect waves-light'>Add new contact</button>
+                    </div>
+                </li>
+            </ul>
+            <ul class="info">
+                <li>
+                    <small>- You can assign a <strong>PGP Public Key</strong> to each of your contacts, which will
+                        be used in the case that you want to send them an encrypted email.
+                    </small>
+                </li>
+            </ul>
+            <br>
+            <br>
+            <ul class="collection">
+                <li class="collection-header center-align"><h5>Personal Key Pair</h5></li>
+                <li class="collection-item create-new">
+                    <div class="new-keypair-button-wrapper center-align">
+                        <button class = 'create-keypair btn waves-effect waves-light'>Create New Key Pair</button>
+                        &nbsp;&nbsp;or&nbsp;&nbsp;
+                        <button class = 'import-keypair btn waves-effect waves-light'>Import Key Pair</button>
+                    </div>
+                </li>
+            </ul>
+            <ul class="info">
+                <li>
+                    <small>- To import or create a PGP Keypair, you will need a <strong>passphrase</strong>, which
+                    will be used to encrypt your private key. If you forget your passphrase, your Keypair will be
+                    rendered useless.
+                    </small>
+                </li>
+                <li>
+                    <small>- Once you create or import your PGP Keypair, you will have the option to
+                    include your <strong>Public Key</strong> as an attachment inside the emails that you send.</small>
+                </li>
+                <li>
+                    <small>- Your <strong>Private Key</strong> will be used when you want to decrypt a message that
+                    was sent to you and was encrypted with your Public Key mentioned above, as well as to sign the emails that you send.</small>
+                </li>
+            </ul>
+ 
+        </div>
+    </div>
+</div>

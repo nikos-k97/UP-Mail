@@ -143,6 +143,102 @@ Encrypt.createPGPKeyPair = async function(accountInfo, appPath){
     fs.write(`${accountInfo.user}-public.asc`, publicKey);
     fs.write(`${accountInfo.user}-private.asc`, privateKey);
     fs.write(`${accountInfo.user}-revocationCert.asc`, revocationCertificate);
+
+    Encrypt.openPGPEncrypt(accountInfo, appPath);
+}
+
+
+Encrypt.getOwnPublicKeyWithoutArmor = async function (accountInfo, appPath){
+    /*
+        Key 'armoring' is not encryption. Encryption prevents unauthorized use of data (formally, provides 
+        confidentiality) by making it unreadable in a way that can only be reversed by someone who has the
+        secret key. Armoring is a simple process that can be easily reversed by anybody who reads the specification.
+        Armoring looks like text while unarmored (binary) data looks like garbage to a person who uses 
+        inappropriate tools like cat or a text editor, but they are equally readable by someone competent.
+
+        The purpose of armor is to assist in correct processing. In the days when PGP was created to be used for 
+        email, most email systems could only handle text and would damage, mangle, or entirely discard binary data.
+        For PGP messages, and keyblocks, which are inherently binary, to be successfully transmitted, they were 
+        'armored' into textual form, and un-armored when received and processed. Nowadays nearly all email systems 
+        do handle binary data and this is rarely needed, but armoring still can be useful if you want to process 
+        the data using tools designed for text, for example cut-and-paste, or a webpage (HTML handles text but not binary).
+    */
+    let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+    //const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
+    const publicKeyArmored = await fs.readAsync(`publickey.nick-proton-test-1@protonmail.com-dd4942f57aa45c1ec122f2b1ad6d1f17ce33d747.asc`);
+    //const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
+    return publicKeyArmored;
+}
+
+
+Encrypt.getOwnPrivateKeyWithoutArmor = async function (accountInfo, appPath){
+    /*
+        Key 'armoring' is not encryption. Encryption prevents unauthorized use of data (formally, provides 
+        confidentiality) by making it unreadable in a way that can only be reversed by someone who has the
+        secret key. Armoring is a simple process that can be easily reversed by anybody who reads the specification.
+        Armoring looks like text while unarmored (binary) data looks like garbage to a person who uses 
+        inappropriate tools like cat or a text editor, but they are equally readable by someone competent.
+
+        The purpose of armor is to assist in correct processing. In the days when PGP was created to be used for 
+        email, most email systems could only handle text and would damage, mangle, or entirely discard binary data.
+        For PGP messages, and keyblocks, which are inherently binary, to be successfully transmitted, they were 
+        'armored' into textual form, and un-armored when received and processed. Nowadays nearly all email systems 
+        do handle binary data and this is rarely needed, but armoring still can be useful if you want to process 
+        the data using tools designed for text, for example cut-and-paste, or a webpage (HTML handles text but not binary).
+    */
+    let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+
+    const privateKeyArmored = await fs.readAsync(`${accountInfo.user}-private.asc`);
+
+    // As the passphrase for decrypting the private key, use the dbPassword (the user account password).
+    let appGeneralKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+    let decryptedPassword = Encrypt.decryptAES256CBC(appGeneralKey, accountInfo.password);
+    let passphrase = decryptedPassword;
+
+    const privateKey = await openpgp.decryptKey({
+        privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }),
+        passphrase
+    });
+
+    return privateKey;
+}
+
+
+Encrypt.openPGPEncrypt = async function (accountInfo, appPath){
+    let publicKey = Encrypt.getOwnPublicKeyWithoutArmor(accountInfo, appPath);
+    let privateKey = Encrypt.getOwnPrivateKeyWithoutArmor(accountInfo, appPath);
+
+    const plainData = await fs.readAsync("secrets.txt");
+    console.log('PlainText: ');
+    console.log(plainData);
+
+    const encrypted = await openpgp.encrypt({
+        message: await openpgp.createMessage({ text: plainData }), // input as Message object
+        encryptionKeys: publicKey,
+        signingKeys: privateKey // optional
+    });
+    console.log('Encrypted:')
+    console.log(encrypted); // '-----BEGIN PGP MESSAGE ... END PGP MESSAGE-----'
+
+    const message = await openpgp.readMessage({
+        armoredMessage: encrypted // parse armored message
+    });
+    const { data: decrypted, signatures } = await openpgp.decrypt({
+        message,
+        verificationKeys: publicKey, // optional
+        decryptionKeys: privateKey
+    });
+    
+    console.log('Decrypted:')
+    console.log(decrypted); 
+    
+    // check signature validity (signed messages only)
+    try {
+        await signatures[0].verified; // throws on invalid signature
+        console.log('Signature is valid');
+    } catch (e) {
+        throw new Error('Signature could not be verified: ' + e.message);
+    }
 }
 
 

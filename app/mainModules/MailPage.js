@@ -656,7 +656,6 @@ MailPage.prototype.renderComposeButton = function () {
   document.querySelector('#compose-button').addEventListener('click', (e) => {
     this.ipcRenderer.send('open', { file: 'composeWindow' });
   });
-
 }
 
 
@@ -674,12 +673,13 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
     this.reload(accountInfo);
   });
 
-   // Add functionality to newly added 'Logout' button.
-   document.querySelector('#logout-button').addEventListener('click', (e) => {
+  // Add functionality to newly added 'Logout' button.
+  document.querySelector('#logout-button').addEventListener('click', (e) => {
     let connectionEnded = new Promise (resolve => {
       this.imapClient.client.end();
       resolve();
     });
+
     connectionEnded.then(async () => {
       materialize.toast({html: 'Logging out and deleting all locally stored data...', displayLength : 1000 ,classes: 'rounded'});
       await this.mailStore.deleteEmails();
@@ -715,16 +715,14 @@ MailPage.prototype.createKeyManagementButton = function(){
   // Create 'Manage keys' button.
   let manageKeysButton = document.createElement('button');
   manageKeysButton.innerHTML = `
-    <i class="material-icons imanage">vpn_key</i>
+    <i class="material-icons imanage">person</i>
   `;
   keyManagementWrapper.appendChild(manageKeysButton);
   manageKeysButton.classList.add('manage-keys-button','center-align', 'waves-effect', 'waves-light', 'btn-floating','btn-large');
-  manageKeysButton.setAttribute('title','Manage keys')
+  manageKeysButton.setAttribute('title','Contacts & Keys')
 
   manageKeysButton.addEventListener('click', async (e) => {
-    let accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
-    let appPath = this.app.getPath('userData');
-    await Encrypt.createPGPKeyPair(accountInfo, appPath);
+    this.ipcRenderer.send('open', { file: 'keysWindow' });
   });
 }
 
@@ -1891,6 +1889,20 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   selectedMailItem.querySelector('#message-holder').querySelector('.back').addEventListener('click', (e) => {
     e.currentTarget.parentNode.innerHTML = ``;
   });
+
+  // Add 'back' button which closes the currently open email, without removing the selected-mail-item class.
+  selectedMailItem.querySelector('#message-holder .back').insertAdjacentHTML("afterend", 
+  `
+    <div>
+      <br>
+      <div class='encrypted'><strong>(This message was not encrypted.)<strong></div>
+      <div class='signed'><strong>(This message was not signed.)<strong></div>
+    </div>
+
+    <style>
+    </style>
+  `
+ );
 }
 
 MailPage.prototype.createTableRow = function(wrapper, header, recursion){

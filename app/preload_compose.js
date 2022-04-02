@@ -32,7 +32,7 @@ const accounts = Promise.promisifyAll(accountsDB);
 // which means they are undefined at the 'browser' side - 'app.js' and undefined on the electron side - 'main.js' ).
 const logger = new Logger ({}, app); 
 const header = new Header (app, BrowserWindow);
-const smtpClient = new SMTPClient (accounts, logger);
+const smtpClient = new SMTPClient (accounts, logger, app.getPath('userData'));
 
 let easymde;
 // Expose protected methods that allow the renderer process to use the ipcRenderer without exposing the entire object.

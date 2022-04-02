@@ -1,0 +1,197 @@
+::-webkit-scrollbar {
+    width: 0.5em;
+    height: 0.5em;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #DBDBDB;
+    border-radius: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: #ededed;
+  }
+  
+  body {
+    scrollbar-face-color: #DBDBDB;
+    scrollbar-track-color: #ededed;
+  }
+  
+  .wrapper {
+    padding: 0px;
+    min-height: 100%;
+    max-height: 100%;
+  }
+  
+  .wrapper .wide {
+    width: 100%;
+  }
+  
+  .wrapper .overflow {
+    height: calc(100vh - 30px - 2em);
+    overflow-y: auto;
+  }
+  
+  #content {
+    overflow: hidden;
+    height: calc(100vh - 30px);
+    background-color: #F5F5F5;
+  }
+  
+  .mainarea{
+    overflow-y: auto;
+    font-size: medium;
+    box-sizing: border-box;
+    padding-top: 80px;
+  }
+  
+  
+  .padding {
+    padding: 10px 10px 10px 10px;
+  }
+
+small{
+  color: rgb(97,97,97)
+}
+
+.import-public-key{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 15px;
+  height: fit-content;
+  border: 1px solid rgb(224, 224, 224);
+  border-radius: 6px;
+  color: rgb(97,97,97);
+  background-color: rgb(224, 224, 224);
+  padding: 5px;
+  margin-right: 2px;
+}
+
+.import-public-key:hover{
+  background-color : rgb(212, 210, 210);
+}
+
+.import-public-key:focus{
+  background-color : rgb(224, 224, 224);
+}
+
+.export-public-key{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 15px;
+  height: fit-content;
+  border: 1px solid rgb(224, 224, 224);
+  border-radius: 6px;
+  color: rgb(97,97,97);
+  background-color: rgb(224, 224, 224);
+  padding: 5px;
+  margin-right: 2px;
+}
+
+.export-public-key:hover{
+  background-color : rgb(212, 210, 210) ;
+}
+
+.export-public-key:focus{
+  background-color : rgb(224, 224, 224) ;
+}
+
+
+.delete-public-key{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 15px;
+  height: fit-content;
+  border: 1px solid rgb(231, 55, 55);
+  border-radius: 6px;
+  color: whitesmoke;
+  background-color: rgb(231, 55, 55);
+  padding: 5px;
+  margin-right: 2px;
+}
+
+.delete-public-key:hover{
+  background-color : rgb(214, 12, 12) ;
+}
+
+.delete-public-key:focus{
+  background-color : rgb(231, 55, 55) ;
+}
+
+.add-new-contact{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 15px;
+  height: fit-content;
+  border: 1px solid rgb(255,202,40);
+  border-radius: 6px;
+  color: rgb(97,97,97);
+  background-color: rgb(255,202,40);
+  padding: 5px;
+  margin-right: 2px;
+}
+
+.add-new-contact:hover{
+  background-color : rgb(234, 186, 40) ;
+}
+
+.add-new-contact:focus{
+  background-color : rgb(255,202,40) ;
+}
+
+.create-keypair{
+  text-decoration: none;
+  text-transform: none;
+  line-height: 15px;
+  height: fit-content;
+  cursor: pointer; 
+  border: 1px solid rgb(255,202,40);
+  border-radius: 6px;
+  color: rgb(97,97,97);
+  background-color: rgb(255,202,40);
+  padding: 6px;
+  margin-right: 2px;
+}
+
+.create-keypair:hover{
+  background-color : rgb(234, 186, 40) ;
+}
+
+.create-keypair:focus{
+  background-color : rgb(255,202,40) ;
+}
+
+.import-keypair{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 15px;
+  height: fit-content;
+  border: 1px solid rgb(255,202,40);
+  border-radius: 6px;
+  color: rgb(97,97,97);
+  background-color: rgb(255,202,40);
+  padding: 6px;
+  margin-right: 2px;
+}
+
+.import-keypair:hover{
+  background-color : rgb(234, 186, 40) ;
+}
+
+.import-keypair:focus{
+  background-color : rgb(255,202,40) ;
+}
+
+.collection {
+  border-radius: 8px;
+  border: 1px solid rgb(255,202,40);
+}
+
+.info{
+  list-style: circle !important;
+}

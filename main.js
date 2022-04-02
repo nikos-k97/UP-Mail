@@ -167,6 +167,36 @@ function openWindow (file) {
             }
         });
     }
+    else if (file === 'keysWindow'){
+        //Use window.js helper script to create and open the electron.js BrowserWindow
+        appWindows[index] = createWindow(file, {
+            width: 950,
+            height: 900,
+            icon: './icons/email-icon.png',
+            title:'Contacts & Keys', //overriden by the loaded html's <title/> tag (!!)
+            minWidth: 600,
+            minHeight: 550,
+            maximized: false,
+            maximizable : false,
+            fullscreenable : false,
+            maxWidth: 1050,
+            maxHeight: 1000,
+            frame: false,
+            show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
+            webPreferences: {
+                preload: path.join(__dirname, "/app/preload_keys.js"), // Preload is a mechanism to execute code before renderer scripts are loaded.
+                                                                          // safely get and set file system and 
+                                                                          // operating system values on behalf of the browser window.
+                sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
+                                // (only in conjunction with preload script - otherwise only IPC messages are permitted)
+                contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
+                                        // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
+                                        // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
+                nodeIntegration: false, // deny the renderer process access to the node.js API
+                enableRemoteModule: false //turn off remote (redundant, since Remote module was removed at electron.js v14)
+            }
+        });
+    }
   
     appWindows[index].once('ready-to-show', () => {
         appWindows[index].show(); //all content is loaded -> window can be shown
@@ -211,7 +241,7 @@ function openWindow (file) {
     const appMenu = Menu.buildFromTemplate(appMenuTemplate);
     //Insert menu to the app
     Menu.setApplicationMenu(appMenu);
-    if (file === 'composeWindow'){
+    if (file === 'composeWindow' || file === 'keysWindow'){
         appWindows[index].setMenu(null);
     }
     
@@ -233,7 +263,7 @@ function openWindow (file) {
 
 // Open compose window, but limit the capability of the user to create new Windows indefinetely.
 ipcMain.on('open', (event, arg) => {
-    if (appWindows.length < 3){
+    if (appWindows.length < 4){
         openWindow(arg.file);
     }
 });
