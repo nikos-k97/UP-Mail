@@ -263,7 +263,15 @@ function openWindow (file) {
 
 // Open compose window, but limit the capability of the user to create new Windows indefinetely.
 ipcMain.on('open', (event, arg) => {
-    if (appWindows.length < 4){
+    // When we close a window, it still remains in the appWindows array, but with null data (e.g. appWindows[2] = null).
+    // So we need to calculate the number of 'useful' windows (windows with non null content) before
+    // we decide to disallow the creation of a new window.
+    let usefulAppWindowsNo = 0;
+    for (let i=0; i < appWindows.length; i++){
+        if (appWindows[i]) usefulAppWindowsNo ++;
+    }
+    
+    if (usefulAppWindowsNo < 4){
         openWindow(arg.file);
     }
 });
