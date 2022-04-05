@@ -101,9 +101,9 @@ Encrypt.encryptAES256CBC = function(key, plaintext) {
  */
 Encrypt.decryptAES256CBC = function(key, ciphertext) {
     const bytes  = CryptoJS.AES.decrypt(ciphertext, key, { 
-        padding: CryptoJS.pad.Pkcs7,
-        mode: CryptoJS.mode.CBC,
-        hasher: CryptoJS.algo.SHA256
+            padding: CryptoJS.pad.Pkcs7,
+            mode: CryptoJS.mode.CBC,
+            hasher: CryptoJS.algo.SHA256
         }
     );
     return JSON.parse(bytes.toString(CryptoJS.enc.Utf8));
@@ -111,40 +111,41 @@ Encrypt.decryptAES256CBC = function(key, ciphertext) {
 
 
 /**
- * Create new (Open)PGP key pair, along with a revocation certificate and save them
- * as .asc files in the 'keys' directory of the 'appPath'. The private key is encrypted
- * with the user account's password (which is decrypted using the app-general-key saved in
- * the OS's keychain / Credential Manager).
+ * Create new (Open)PGP key pair and save them as .asc files in the 'keys' directory of the 'appPath'. 
+ * The private key is encrypted with the specified passphrase. The passphrase is encypted using the 
+ * app-general-key present in the OS's keychain (was created using the user's account password).
  *
+ * @param  {String} passphrase
  * @param  {Object} accountInfo
  * @param  {String} appPath
+ * @return {Object} 
  */
-Encrypt.createPGPKeyPair = async function(accountInfo, appPath){
+Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
     let fs = jetpack.cwd(appPath);
     fs.dir(`keys`);
     fs = jetpack.cwd(appPath, `keys`);
+    fs.dir(`${Utils.md5(accountInfo.user)}`);
+    fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
 
-    // As the passphrase for the private key, use the dbPassword (the user account password).
+    // Encrypt the provided passphrase using the app-general-key present in the OS's keychain, 
+    // and store the encrypted passphrase inside 'getPass.txt' in the 'keys' directory of the project's userData.
+    // The unencypted passphrase is used to encrypt the generated private PGP key.
     let appGeneralKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
-    let decryptedPassword = Encrypt.decryptAES256CBC(appGeneralKey,accountInfo.password);
-    
+    let encyptedPassphrase = Encrypt.encryptAES256CBC(appGeneralKey, passphrase);
+    fs.write(`getPass.txt`, encyptedPassphrase);
+ 
     // Both the curve25519 and ed25519 curve options generate a primary key for signing using Ed25519 and 
     // a subkey for encryption using Curve25519.
-    const { privateKey, publicKey, revocationCertificate } = await openpgp.generateKey({ // in base-64
+    const { privateKey, publicKey} = await openpgp.generateKey({ // in base-64
         type: 'ecc', // Elliptic Curve 
         curve: 'curve25519', // ECC curve name 
         userIDs: [{ name: accountInfo.smtp.name, email: accountInfo.user}], // Multiple user IDs can be used.
-        passphrase: decryptedPassword, // protects the private key
+        passphrase: passphrase, // protects the private key
         format: 'armored' // output key format, defaults to 'armored' (other options: 'binary' or 'object')
     });
 
-    fs.dir(`${Utils.md5(accountInfo.user)}`);
-    fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
     fs.write(`${accountInfo.user}-public.asc`, publicKey);
     fs.write(`${accountInfo.user}-private.asc`, privateKey);
-    fs.write(`${accountInfo.user}-revocationCert.asc`, revocationCertificate);
-
-    Encrypt.openPGPEncrypt(accountInfo, appPath);
 }
 
 
@@ -201,6 +202,15 @@ Encrypt.getOwnPrivateKeyWithoutArmor = async function (accountInfo, appPath){
     });
 
     return privateKey;
+}
+
+
+Encrypt.getPublicKeyFingerprint = async function (publicKeyArmored){
+    let publicKeyUnarmored;
+    try {
+        publicKeyUnarmored = await openpgp.readKey({armoredKey: publicKeyArmored });
+    } catch (error) {
+    }
 }
 
 

@@ -174,8 +174,8 @@ function openWindow (file) {
             height: 900,
             icon: './icons/email-icon.png',
             title:'Contacts & Keys', //overriden by the loaded html's <title/> tag (!!)
-            minWidth: 600,
-            minHeight: 550,
+            minWidth: 720,
+            minHeight: 720,
             maximized: false,
             maximizable : false,
             fullscreenable : false,
@@ -280,6 +280,19 @@ ipcMain.on('saveAttachment', (event, file) => {
     // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
     let filepath = dialog.showOpenDialogSync(appWindows[0], options);
     event.sender.send('saveFolder', filepath);
+})
+
+// Choose file and send its path to the renderer.
+ipcMain.on('selectFile', (event) => {
+    let options = {
+        title: `Choose the file to import:`,
+        buttonLabel: 'Choose',
+        defaultPath : app.getPath('downloads'),
+        properties: ['openFile']
+    }
+    // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
+    let filepath = dialog.showOpenDialogSync(appWindows[event.frameId], options);
+    event.sender.send('fileSelected', filepath);
 })
 
 

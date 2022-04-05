@@ -4,4 +4,6 @@
 window.api.loadHeader();
 window.api.setLoc('Contacts & Keys');
 window.api.loadContent();
+window.api.createNewContactListener();
+window.api.createPersonalKeysListener();
 

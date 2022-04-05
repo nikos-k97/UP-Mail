@@ -15,6 +15,7 @@
   body {
     scrollbar-face-color: #DBDBDB;
     scrollbar-track-color: #ededed;
+    background-color: #F5F5F5;
   }
   
   .wrapper {
@@ -33,9 +34,10 @@
   }
   
   #content {
+    margin-right : 40px;
+    margin-left : 40px;
     overflow: hidden;
     height: calc(100vh - 30px);
-    background-color: #F5F5F5;
   }
   
   .mainarea{
@@ -51,8 +53,32 @@
   }
 
 small{
+  color: rgb(97,97,97);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+small.key{
   color: rgb(97,97,97)
 }
+
+.key-wrapper{
+  display: flex;
+  min-width: 0;
+}
+
+/* label focus color */
+.input-field input:focus + label {
+  color: rgb(97,97,97) !important;
+}
+
+/* label underline focus color */
+.row .input-field input:focus {
+  border-bottom: 1px solid rgb(97,97,97) !important;
+  box-shadow: 0 1px 0 0 rgb(97,97,97) !important;
+}
+
 
 .import-public-key{
   cursor: pointer; 
@@ -76,7 +102,7 @@ small{
   background-color : rgb(224, 224, 224);
 }
 
-.export-public-key{
+.export-key-pair{
   cursor: pointer; 
   text-decoration: none;
   text-transform: none;
@@ -90,16 +116,15 @@ small{
   margin-right: 2px;
 }
 
-.export-public-key:hover{
+.export-key-pair:hover{
   background-color : rgb(212, 210, 210) ;
 }
 
-.export-public-key:focus{
+.export-key-pair:focus{
   background-color : rgb(224, 224, 224) ;
 }
 
-
-.delete-public-key{
+.delete-key-pair{
   cursor: pointer; 
   text-decoration: none;
   text-transform: none;
@@ -113,11 +138,33 @@ small{
   margin-right: 2px;
 }
 
-.delete-public-key:hover{
+.delete-key-pair:hover{
   background-color : rgb(214, 12, 12) ;
 }
 
-.delete-public-key:focus{
+.delete-key-pair:focus{
+  background-color : rgb(231, 55, 55) ;
+}
+
+.delete-contact{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 15px;
+  height: fit-content;
+  border: 1px solid rgb(231, 55, 55);
+  border-radius: 6px;
+  color: whitesmoke;
+  background-color: rgb(231, 55, 55);
+  padding: 5px;
+  margin-right: 2px;
+}
+
+.delete-contact:hover{
+  background-color : rgb(214, 12, 12) ;
+}
+
+.delete-contact:focus{
   background-color : rgb(231, 55, 55) ;
 }
 
@@ -187,11 +234,66 @@ small{
   background-color : rgb(255,202,40) ;
 }
 
+.ok{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 10px;
+  height: fit-content;
+  border: 1px solid rgb(59, 151, 59);
+  border-radius: 6px;
+  color: whitesmoke;
+  background-color: rgb(59, 151, 59);
+  padding: 5px;
+  margin-right: 2px;
+}
+
+.ok:hover{
+  background-color : rgb(49, 130, 49) ;
+}
+
+.ok:focus{
+  background-color : rgb(59, 151, 59) ;
+}
+
+
+.cancel{
+  cursor: pointer; 
+  text-decoration: none;
+  text-transform: none;
+  line-height: 10px;
+  height: fit-content;
+  border: 1px solid rgb(231, 55, 55);
+  border-radius: 6px;
+  color: whitesmoke;
+  background-color: rgb(231, 55, 55);
+  padding: 5px;
+  margin-right: 2px;
+}
+
+.cancel:hover{
+  background-color : rgb(214, 12, 12) ;
+}
+
+.cancel:focus{
+  background-color : rgb(231, 55, 55) ;
+}
+
 .collection {
   border-radius: 8px;
   border: 1px solid rgb(255,202,40);
 }
 
 .info{
-  list-style: circle !important;
+  display: block;
+}
+
+.info li{
+  display: block;
+  white-space: initial;
+}
+
+.info li small{
+  display: block;
+  white-space: initial;
 }

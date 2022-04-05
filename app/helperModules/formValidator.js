@@ -121,8 +121,9 @@ FormValidator.checkUsername = (usernameEl) => {
 }
 
 FormValidator.checkEmailSubject = (textEl) => {
-    let isSubjectEmpty = textEl.value === '' ? true : false;
+    let isSubjectEmpty = textEl.value.trim() === '' ? true : false;
     if (isSubjectEmpty) {
+        textEl = Clean.cleanForm(textEl.value.trim());
         let toastHTML = '<span>Are you sure you want to send this message without Subject ?</span><button class="btn-flat toast-no-subject">Yes</button><button class="btn-flat toast-give-subject">No</button>';
         M.toast({html: toastHTML, displayLength: Infinity, classes: 'rounded'});
         document.querySelector('#send').disabled = true;

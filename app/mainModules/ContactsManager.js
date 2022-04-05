@@ -72,5 +72,24 @@ ContactsManager.prototype.countContacts = async function () {
 }
 
 
+ContactsManager.prototype.deleteContact = async function (email) {
+  return await new Promise((resolve) => {
+    this.db.remove({ email: email}, { multi: true }, (err,numRemoved) => {
+      console.log('Deleted : '+numRemoved+' (email :'+email+')');
+      resolve();
+    });
+  })
+}
+
+
+ContactsManager.prototype.deleteAllContacts = async function () {
+  return await new Promise((resolve) => {
+    this.db.remove({}, { multi: true },( err , numRemoved) => {
+      console.log('Deleted : '+numRemoved);
+      resolve();
+    });
+  });
+}
+
 
 module.exports = ContactsManager;
