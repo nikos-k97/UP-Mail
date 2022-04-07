@@ -1,5 +1,6 @@
 const jetpack          = require('fs-jetpack');
 const AccountManager   = require('./AccountManager');
+const ContactsManager  = require('./ContactsManager');
 const WelcomePage      = require('./WelcomePage');
 const MailPage         = require('./MailPage');
 const MailStore        = require('./MailStore');
@@ -20,6 +21,7 @@ function StateManager (app, ipcRenderer, logger, utils, router) {
   */
 
   this.accountManager = new AccountManager(this.app, this.logger, this, this.utils, this.ipcRenderer);
+  this.contactsManager = new ContactsManager(this.app, this.utils);
   this.welcomePage = new WelcomePage(this.logger, this, this.utils, this.accountManager); 
   this.mailStore = new MailStore(this.app,this.utils); 
   this.mailPage = new MailPage(this.app, this.logger, this, this.utils, this.accountManager, this.mailStore);
@@ -78,6 +80,7 @@ StateManager.prototype.setup = async function (loginInfo) {
   let emailsFound = await this.mailStore.findEmails();
 
   if (emailsFound.length === 0 && loginInfo.personalFolders !== undefined){
+    this.logger.info('Something went wrong!');
     // The accounts database has folder information (uidvalidity etc) from a previous session, but the 
     // email database is empty, so we revert back to 'new'. 
     await this.mailStore.deleteEmails();

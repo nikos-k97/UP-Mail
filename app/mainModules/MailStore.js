@@ -17,6 +17,7 @@ function MailStore (app, utils) {
  MailStore.prototype.createEmailDB = async function (emailAddress) {
   // Detect whether we need to hash it ourselves, or if it is already hashed.
   let hash = emailAddress.includes('@') ? this.utils.md5(emailAddress) : emailAddress;
+
   if (typeof this.db === 'undefined') {
     // Create (only if it doesnt exist) the database that stores the mail for the particular emailAddress.
     const mailDB = new Datastore(

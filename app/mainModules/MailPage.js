@@ -684,12 +684,15 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
       materialize.toast({html: 'Logging out and deleting all locally stored data...', displayLength : 1000 ,classes: 'rounded'});
       await this.mailStore.deleteEmails();
       await this.mailStore.deleteEmailBodies(accountInfo.user, [], true);
+      await this.stateManager.contactsManager.deleteAllContacts();
       await this.accountManager.removeAccount(accountInfo.user);
       // Delete folder containing user PGP keys.
       let appPath = this.app.getPath('userData');
       await Encrypt.deleteKeyFolder(appPath);
       // Delete whole db folder
       this.mailStore.deleteDB();
+      // Delete whole contacts folder
+      this.stateManager.contactsManager.deleteDB();
       // Delete the app-general-key from the OS keychain.
       await Encrypt.deleteAppKey();
       this.imapClient = null;

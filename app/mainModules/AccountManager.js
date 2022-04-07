@@ -82,10 +82,26 @@ AccountManager.prototype.existingAccount = async function () {
       dispatchEvent(new Event('load'));
     }
     else{
-    // Account info were retrieved, redirect to stateManager.
-    const key = (await Encrypt.keyDerivationFunction(account)).toString(); 
-    account.password = Encrypt.decryptAES256CBC(key, account.password) 
-    await this.stateManager.setup(account);
+      // Account info were retrieved, redirect to stateManager.
+      try {
+        const key = (await Encrypt.keyDerivationFunction(account)).toString(); 
+        account.password = Encrypt.decryptAES256CBC(key, account.password);
+      
+        // Create database for contacts (if it doesnt exist)
+        this.stateManager.contactsManager.createContactsDB(account.user);
+
+        await this.stateManager.setup(account);
+
+      } catch (error) {
+        this.logger.error('Could not find the password hash inside the OS keychain.');
+        // Could not find hashed password inside the OS's keychain.
+        this.stateManager.change('state', 'new');
+        this.stateManager.checkUserState();
+        // Re-emit window.load event so that the StateManager.style function can work properly.
+        // (it is waiting for the window.load event to apply style)
+        dispatchEvent(new Event('load'));
+      }
+
     }
   }
 }
@@ -134,6 +150,9 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
   fs.dir(`mail`).dir(`${hash}`);
   fs = jetpack.cwd(this.app.getPath('userData'), `mail`,`${hash}`);
 
+  // Create database for contacts.
+  this.stateManager.contactsManager.createContactsDB(loginInfo.user);
+
   // If the account was an existing one (after logout), then we fetch all the stored info from the previous 
   // session, after the potential update to the login info we just did.
   // Account was updated, redirect to stateManager.
@@ -151,6 +170,7 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
     });
 
     // Account was inserted, redirect to stateManager.
+    encryptedLoginInfo.password = Encrypt.decryptAES256CBC(key, encryptedLoginInfo.password);
     await this.stateManager.setup(encryptedLoginInfo);
   }
 }

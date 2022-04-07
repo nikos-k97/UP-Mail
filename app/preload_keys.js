@@ -430,6 +430,7 @@ async function showPersonalKeyPair(){
     }
     else {
         // Since no keypair was found, we delete everything from the keys directory for safety.
+        logger.debug('Deleting all account key leftovers (if they exist) for safety.');
         Encrypt.deleteKeyFolder(app.getPath('userData'));
 
         // This means that the createNewKeypair and importKeyPair buttons will be rendered and 

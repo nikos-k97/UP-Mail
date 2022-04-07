@@ -1,5 +1,6 @@
 const Datastore   = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise     = require('bluebird');
+const jetpack     = require('fs-jetpack');
 
 
 function ContactsManager (app, utils) {
@@ -90,6 +91,16 @@ ContactsManager.prototype.deleteAllContacts = async function () {
     });
   });
 }
+
+ContactsManager.prototype.deleteDB = function () {
+  let fs = jetpack.cwd(this.app.getPath('userData'), `contacts`);
+  let allContent = fs.find(`.`, {files : true, directories : true});
+  allContent.forEach(fileOrFolder => {
+    fs.remove(`${fileOrFolder}`);
+    console.log(`Removed ${fileOrFolder} from contactsDB.`);
+  });
+}
+
 
 
 module.exports = ContactsManager;

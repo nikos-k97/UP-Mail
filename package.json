@@ -11,6 +11,7 @@
   "dependencies": {
     "@rmanibus/nedb": "^1.9.2",
     "base64-stream": "^1.0.0",
+    "bcrypt": "^5.0.1",
     "bluebird": "^3.7.2",
     "crypto-js": "^4.1.1",
     "dotenv": "^8.6.0",

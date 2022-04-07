@@ -1,5 +1,6 @@
 const CryptoJS    = require("crypto-js");
 const scrypt      = require('scryptsy');
+const bcrypt      = require("bcrypt");
 const keytar      = require('keytar');
 const openpgp     = require('openpgp');
 const jetpack     = require('fs-jetpack');
@@ -12,13 +13,20 @@ function Encrypt () {
 
 
 /**
- * Construct the app-general-key from the user password and the salt.
- * The key is used to encrypt/ decrypt user's account password
+ * Uses 'scrypt' to construct the app-general-key from the hashed (using 'bcrypt') user password 
+ * (which is stored in the OS's keychain) and a constant salt.
+ * The key is used to encrypt/ decrypt user's account password.
  *
  * @param  {object} loginInfo
  * @return {Buffer} 
  */
 Encrypt.keyDerivationFunction = async function(loginInfo){
+    /*
+       The functon is run with the 'loginInfo' parameter only when the user is new, and enters the password for the
+       first time. When an existing user uses the app, the function is run without the 'loginInfo' arguement, since
+       in this case, we want to decrypt the user's password that was stored in the DB in the previous session.
+    */
+                         
     /*
         A salt is required for scrypt to derive an encryption key from a password. A salt is a random value used to 
         mitigate rainbow tables. It does not need to be kept secret, but it needs to be consitent as only the same 
@@ -26,25 +34,36 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
         a salt on the first run of the app and store it somewhere. This will make the app more resilient to rainbow 
         table attacks, but the encrypted database will no longer be portable.
     */
-    const dbSalt = Buffer.from('FrcHay/J2isc0HcPPYyWAn==');
+    const scryptSalt = Buffer.from('FrcHay/J2isc0HcPPYyWAn==');
 
     /*
-        Retrieve the database encryption password from the system keychain. If no password exists in the keychain, 
-        prompt the user for one, then store it in the keychain. This, along with the salt, will be used by scrypt 
-        to generate an encryption key for the database. The same password must be used each time the app runs. 
-        If the password is lost or forgotten, then the database cannot be decrypted or recovered.
+        Retrieve the hashed user password from the system keychain. If keychain does not contain the hash, 
+        use 'bcrypt' with random salt to hash user's password, then store it in the keychain. 
+        This, along with the constant salt (scryptSalt), will be used by scrypt to generate an encryption 
+        key (which will be used to encrypt the account's password in order to store it inside the DB). 
     */
-    let dbPass = await keytar.getPassword('email-client', 'app-general-key');
-    if (!dbPass) {
-        await keytar.setPassword('email-client', 'app-general-key', loginInfo.password);
-        console.log('Added database password to the system keychain.')
+    let hashedPassword = await keytar.getPassword('email-client', 'accountPasswordHash');
+
+    if ( !hashedPassword ) {
+        // Generate the bcrypt hash from the loginInfo.password. The salt in this case does not to be stored
+        // since the hashing is performed only the first time the user logs in. (scryptSalt on the other hand
+        // needs to be the same each time, since the key is generated anew every time the app launches).
+        const passwordSaltRounds = 10;
+        const plaintextPassword = loginInfo.password; 
+        const bcryptSalt = bcrypt.genSaltSync(passwordSaltRounds);
+        const hashedPassword = bcrypt.hashSync(plaintextPassword, bcryptSalt);
+
+        // Set the password hash in the OS's keychain.
+        await keytar.setPassword('email-client', 'accountPasswordHash', hashedPassword);
+        console.log('Added hashed user password to the system keychain.');
+
         /*
-            'scrypt' uses the password, salt, and other parameters to derive the encryption key. The other parameters 
+            'scrypt' uses the password hash, salt, and other parameters to derive the encryption key. The other parameters 
             determine how much time it takes the CPU to derive the key, which mitigates brute force attacks, except for the
             last parameter which specifies the length of the key in bytes. A change to any of these parameters will result 
             in a different key.
         */
-        const key = scrypt(loginInfo.password, dbSalt, 32768, 8, 1, 32)
+        const key = scrypt(hashedPassword, scryptSalt, 32768, 8, 1, 32)
         return key;
     }
     else {
@@ -54,7 +73,7 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
         last parameter which specifies the length of the key in bytes. A change to any of these parameters will result 
         in a different key.
         */
-        const key = scrypt(dbPass, dbSalt, 32768, 8, 1, 32)
+        const key = scrypt(hashedPassword, scryptSalt, 32768, 8, 1, 32);
         return key;
     }
 }
@@ -65,8 +84,8 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
  *
  */
 Encrypt.deleteAppKey = async function(){
-    await keytar.deletePassword('email-client', 'app-general-key');
-    console.log('Deleted database password from the system keychain.')
+    await keytar.deletePassword('email-client', 'accountPasswordHash');
+    console.log(`Deleted previous user's hashed password from the system keychain.`)
 }
 
 
