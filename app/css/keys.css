@@ -59,6 +59,10 @@ small{
   white-space: nowrap;
 }
 
+.underline {
+  text-decoration: underline;
+}
+
 small.key{
   color: rgb(97,97,97)
 }

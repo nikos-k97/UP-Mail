@@ -115,13 +115,19 @@ contextBridge.exposeInMainWorld(
                 
                     try {
                         publicKeyPath = await dialogPromise;
-                        // Hide the import button after a successfull key import.
-                        e.target.outerHTML = '';
-                        // Show the imported key as a span instead of the import button.
-                        let keyInsertedSpan = document.querySelector('#key-inserted');
-                        keyInsertedSpan.textContent = publicKeyPath;
-                        keyInsertedSpan.removeAttribute('hidden');
-
+                        // Check if the public key file resembles a public PGP key.
+                        let importedKey = Clean.cleanForm(jetpack.read(publicKeyPath));
+                        if (importedKey.includes('PUBLIC')){
+                            // Hide the import button after a successfull key import.
+                            e.target.outerHTML = '';
+                            // Show the imported key as a span instead of the import button.
+                            let keyInsertedSpan = document.querySelector('#key-inserted');
+                            keyInsertedSpan.textContent = publicKeyPath;
+                            keyInsertedSpan.removeAttribute('hidden');
+                        }
+                        else {
+                            materialize.toast({html: 'The file specified is not a PGP public key!', displayLength : 2000, classes: 'rounded'});
+                        }
                     } catch (error) {
                         logger.error(error);
                     }
@@ -322,12 +328,42 @@ async function showPersonalKeyPair(){
     fs.dir(`${Utils.md5(accountInfo.user)}`);
     fs = jetpack.cwd(app.getPath('userData'), `keys`, `${Utils.md5(accountInfo.user)}`);
     let filesFound = fs.find(`.`, {files : true, directories : false});
+    let publicKeyName, privateKeyName; // will stay undefined if no keys are found
     if (filesFound){
         let filteredFiles = filesFound.filter(element => {
-            if (element === `${accountInfo.user}-public.asc` || element === `${accountInfo.user}-private.asc` ) return element;
+            if (element !== `getPass.txt`) return element;
         });
         if (filteredFiles.length === 2){
+            // Inside the keys directory there must always be 3 files (getPass.txt + a PGP key pair)
             keyPairFound = true;
+    
+            // Read the files and decide which is the private and which is the public key.
+            if (!publicKeyName && !privateKeyName){
+                let file1 = Clean.cleanForm(fs.read(filteredFiles[0]));
+                let file2 = Clean.cleanForm(fs.read(filteredFiles[1]));
+              
+                if (file1.includes('PUBLIC')) {
+                    publicKeyName = filteredFiles[0];
+                    if (file2.includes('PRIVATE')){
+                        privateKeyName = filteredFiles[1];
+                    }
+                    else {
+                        keyPairFound = false;
+                        materialize.toast({html: 'Could not decide which key is the public and which is the private.', displayLength : 1400, classes: 'rounded'});
+                    }
+                }
+                else if (file1.includes('PRIVATE')){
+                    privateKeyName = filteredFiles[0];
+                    if (file2.includes('PUBLIC')){
+                        publicKeyName = filteredFiles[1];
+                    }
+                    else {
+                        keyPairFound = false;
+                        materialize.toast({html: 'Could not decide which key is the public and which is the private.', displayLength : 1400, classes: 'rounded'});
+                    }
+                } 
+                else keyPairFound = false;
+            }
         }
     }
 
@@ -335,30 +371,66 @@ async function showPersonalKeyPair(){
     // createPersonalKeysListener()' is not run.
     if (keyPairFound){
         let listElementToDelete = document.querySelector('.collection-keys .create-new');
-        listElementToDelete.remove();
+        listElementToDelete.setAttribute('hidden', true);
         let keysCollectionHeader = document.querySelector('.collection-keys .collection-header');
         let html = `
-            <li class="collection-item avatar">
+            <li class="collection-item current-key-pair avatar">
                 <i class="material-icons circle">vpn_key</i>
-                <span class="public"><strong>Plaintext Public key</strong></span>
-                <p class="private">******</p>
+                <span class="public"><strong>Public Key: ${publicKeyName}</strong></span>
+                <p class="private">Private Key: ${privateKeyName}</p>
                 <a class="secondary-content">
                     <button class = 'export-key-pair btn waves-effect waves-light'>Export Key Pair</button>
                     <button class = 'delete-key-pair btn waves-effect waves-light'>Delete Key Pair</button>
                 </a>
             </li>
         `;
-
         keysCollectionHeader.insertAdjacentHTML('afterend', html);
-   
+
+        // Add event listeners to the 'ExportKeyPair' and 'DeleteKeyPair' buttons.
+        let insertedItem = document.querySelector('.collection-keys').querySelector('.current-key-pair');
+        let exportKeyPairButton = insertedItem.querySelector('a .export-key-pair');
+        let deleteKeyPairButton = insertedItem.querySelector('a .delete-key-pair');
+
+        deleteKeyPairButton.addEventListener('click', async (e) => {
+            await Encrypt.deleteKeyFolder(app.getPath('userData'));
+            e.target.parentNode.parentNode.outerHTML = '';
+            listElementToDelete.removeAttribute('hidden');
+            materialize.toast({html: 'Removed previous PGP keypair from the app.', displayLength : 2000, classes: 'rounded'});
+        });
+
+        exportKeyPairButton.addEventListener('click', async (e) => {
+            materialize.toast({html: 'Exporting PGP keypair ...', displayLength : 1000, classes: 'rounded'});
+            let exportedPublicKey = fs.read(publicKeyName);
+            let exportedPrivateKey = fs.read(privateKeyName);
+
+             // Choose folder to save.
+            let saveFolder;
+            let dialogPromise = new Promise ((resolve,reject) => {
+                ipcRenderer.send('saveAttachment', `PGP Keypair`);
+                ipcRenderer.on('saveFolder', (event, data) => { 
+                    saveFolder = data;
+                    if (!saveFolder) reject(new Error('Cancelled'));
+                    else resolve(data);
+                });
+            });
+        
+            try {
+                saveFolder = await dialogPromise;
+                saveFolder = String(saveFolder).toString() + '/';
+
+                let publicKeyPath = saveFolder + '/' + publicKeyName;
+                let privateKeyPath = saveFolder + '/' + privateKeyName;
+                jetpack.write(publicKeyPath, exportedPublicKey);
+                jetpack.write(privateKeyPath, exportedPrivateKey);
+                materialize.toast({html: 'PGP Keypair was exported to the selected path.', displayLength : 1400, classes: 'rounded'});
+            } catch (error) {
+                logger.error(error);
+            }
+        });
     }
     else {
         // Since no keypair was found, we delete everything from the keys directory for safety.
-        let filesFound = fs.find(`.`, {files : true, directories : true});
-        filesFound.forEach(fileOrFolder => {
-            fs.remove(`${fileOrFolder}`);
-            console.log(`Removed ${fileOrFolder} from keys directory.`);
-        });
+        Encrypt.deleteKeyFolder(app.getPath('userData'));
 
         // This means that the createNewKeypair and importKeyPair buttons will be rendered and 
         // the 'createPersonalKeysListener()' function inside the ContextBridge will create all the

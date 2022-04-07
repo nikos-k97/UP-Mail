@@ -286,7 +286,7 @@ ipcMain.on('saveAttachment', (event, file) => {
         properties: ['openDirectory']
     }
     // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
-    let filepath = dialog.showOpenDialogSync(appWindows[0], options);
+    let filepath = dialog.showOpenDialogSync(appWindows[event.frameId], options);
     event.sender.send('saveFolder', filepath);
 })
 
