@@ -130,9 +130,10 @@ Encrypt.decryptAES256CBC = function(key, ciphertext) {
 
 
 /**
- * Create new (Open)PGP key pair and save them as .asc files in the 'keys' directory of the 'appPath'. 
- * The private key is encrypted with the specified passphrase. The passphrase is encypted using the 
- * app-general-key present in the OS's keychain (was created using the user's account password).
+ * Create new (Open)PGP key pair and save it as .asc files in the 'keys' directory of the 'appPath'. 
+ * The private key is encrypted with the specified passphrase. The passphrase is encypted using a 
+ * key generated with scrypt from the hashed account password present in the OS's keychain. Then it is 
+ * stored in 'getPass.txt' for later use.
  *
  * @param  {String} passphrase
  * @param  {Object} accountInfo
@@ -163,6 +164,40 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
         format: 'armored' // output key format, defaults to 'armored' (other options: 'binary' or 'object')
     });
 
+    fs.write(`${accountInfo.user}-public.asc`, publicKey);
+    fs.write(`${accountInfo.user}-private.asc`, privateKey);
+}
+
+/**
+ * Import a (Open)PGP key pair and save it as .asc files in the 'keys' directory of the 'appPath'. 
+ * The private key is encrypted with the specified passphrase. The passphrase is encypted using a 
+ * key generated with scrypt from the hashed account password present in the OS's keychain. Then it is 
+ * stored in 'getPass.txt' for later use.
+ *
+ * @param  {String} passphrase
+ * @param  {Object} accountInfo
+ * @param  {String} appPath
+ * @return {Object} 
+ */
+ Encrypt.importPGPKeyPair = async function(passphrase, publicKeyPath, privateKeyPath, accountInfo, appPath){
+    let fs = jetpack.cwd(appPath);
+    fs.dir(`keys`);
+    fs = jetpack.cwd(appPath, `keys`);
+    fs.dir(`${Utils.md5(accountInfo.user)}`);
+    fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+
+    // Read content of the publicKeyPath and privateKeyPath
+    let publicKey = jetpack.read(publicKeyPath);
+    let privateKey = jetpack.read(privateKeyPath);
+
+    // Encrypt the provided passphrase using the app-general-key present in the OS's keychain, 
+    // and store the encrypted passphrase inside 'getPass.txt' in the 'keys' directory of the project's userData.
+    // The unencypted passphrase is used to encrypt the generated private PGP key.
+    let appGeneralKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+    let encyptedPassphrase = Encrypt.encryptAES256CBC(appGeneralKey, passphrase);
+    fs.write(`getPass.txt`, encyptedPassphrase);
+ 
+    
     fs.write(`${accountInfo.user}-public.asc`, publicKey);
     fs.write(`${accountInfo.user}-private.asc`, privateKey);
 }
@@ -223,14 +258,6 @@ Encrypt.getOwnPrivateKeyWithoutArmor = async function (accountInfo, appPath){
     return privateKey;
 }
 
-
-Encrypt.getPublicKeyFingerprint = async function (publicKeyArmored){
-    let publicKeyUnarmored;
-    try {
-        publicKeyUnarmored = await openpgp.readKey({armoredKey: publicKeyArmored });
-    } catch (error) {
-    }
-}
 
 
 Encrypt.openPGPEncrypt = async function (accountInfo, appPath){

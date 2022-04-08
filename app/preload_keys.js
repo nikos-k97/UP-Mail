@@ -73,10 +73,10 @@ contextBridge.exposeInMainWorld(
                                 <label for="name">Name</label>
                                 <small></small>
                             </div>
-                                <div class="input-field form-field col s3">
-                                    <input id = "key" type="button" value="Import Public Key" class = 'import-public-key btn waves-effect waves-light'></input>
-                                    <span id="key-inserted" hidden></span>
-                                    <small></small>
+                            <div class="input-field form-field col s3">
+                                <input id = "key" type="button" value="Import Public Key" class = 'import-public-key btn waves-effect waves-light'></input>
+                                <span id="key-inserted" hidden></span>
+                                <small></small>
                             </div>
                             <div class = input-field form-field col s2">
                                 <button class='cancel' title='Cancel'><i class="material-icons">cancel</i></button>
@@ -121,7 +121,7 @@ contextBridge.exposeInMainWorld(
                             // Hide the import button after a successfull key import.
                             e.target.outerHTML = '';
                             // Show the imported key as a span instead of the import button.
-                            let keyInsertedSpan = document.querySelector('#key-inserted');
+                            let keyInsertedSpan = form.querySelector('#key-inserted');
                             keyInsertedSpan.textContent = publicKeyPath;
                             keyInsertedSpan.removeAttribute('hidden');
                         }
@@ -242,6 +242,156 @@ contextBridge.exposeInMainWorld(
                     }
                     else {
                         materialize.toast({html: 'Private key passphrase cannot be blank!', displayLength : 1200, classes: 'rounded'});
+                    }
+                });
+            });
+
+            importKeysButton.addEventListener('click', (e) => {
+                // Disable generateKeyPair and importKeyPair buttons.
+                e.currentTarget.disabled = true;
+                generateKeysButton.disabled = true;
+
+                keysButtonWrapper.insertAdjacentHTML('afterend', `
+                    <form class="subtitle" id="keys-form" action="">
+                        <br>
+                        <div class="row">
+                            <div class="input-field form-field col s3">
+                                <input id="public-key" type="button" value="Choose Public Key" class='import-public-key btn waves-effect waves-light'></input>
+                                <span id="public-key-inserted" class='overflow' hidden></span>
+                                <small></small>
+                            </div>
+                            <div class="input-field form-field col s3">
+                                <input id="private-key" type="button" value="Choose Private Key" class='import-private-key btn waves-effect waves-light'></input>
+                                <span id="private-key-inserted" class='overflow' hidden></span>
+                                <small></small>
+                            </div>
+                            <div class="input-field form-field col s4">
+                                <input id="passphrase" name="passphrase" type="password">
+                                <label for="passphrase">Private Key Passphrase</label>
+                                <small></small>
+                            </div>
+                            <div class = input-field form-field col s2">
+                                <button class='cancel' title='Cancel'><i class="material-icons">cancel</i></button>
+                                <button class='ok' title='Confirm'><i class="material-icons">check</i></button>
+                            </div>
+                        </div>
+                    </form>
+                `);
+
+                let form = document.querySelector('#keys-form');
+
+                form.querySelector('#public-key').addEventListener('click', async (e) => {
+                    // Choose file(key) to upload.
+                    let publicKeyPath;
+                    let dialogPromise = new Promise ((resolve,reject) => {
+                        ipcRenderer.send('selectFile');
+                        ipcRenderer.on('fileSelected', (event, data) => { 
+                            if (!data) reject(new Error('Cancelled'));
+                            else resolve(data[0]);
+                        });
+                    });
+                
+                    try {
+                        publicKeyPath = await dialogPromise;
+                        // Check if the public key file resembles a public PGP key.
+                        let importedKey = Clean.cleanForm(jetpack.read(publicKeyPath));
+                        if (importedKey.includes('PUBLIC')){
+                            // Hide the import button after a successfull key import.
+                            e.target.outerHTML = '';
+                            // Show the imported key as a span instead of the import button.
+                            let keyInsertedSpan = form.querySelector('#public-key-inserted');
+                            keyInsertedSpan.textContent = publicKeyPath;
+                            keyInsertedSpan.removeAttribute('hidden');
+                        }
+                        else {
+                            materialize.toast({html: 'The file specified is not a PGP public key!', displayLength : 2000, classes: 'rounded'});
+                        }
+                    } catch (error) {
+                        logger.error(error);
+                    }
+                });
+
+                form.querySelector('#private-key').addEventListener('click', async (e) => {
+                    // Choose file(key) to upload.
+                    let privateKeyPath;
+                    let dialogPromise = new Promise ((resolve,reject) => {
+                        ipcRenderer.send('selectFile');
+                        ipcRenderer.on('fileSelected', (event, data) => { 
+                            if (!data) reject(new Error('Cancelled'));
+                            else resolve(data[0]);
+                        });
+                    });
+                
+                    try {
+                        privateKeyPath = await dialogPromise;
+                        // Check if the public key file resembles a public PGP key.
+                        let importedKey = Clean.cleanForm(jetpack.read(privateKeyPath));
+                        if (importedKey.includes('PRIVATE')){
+                            // Hide the import button after a successfull key import.
+                            e.target.outerHTML = '';
+                            // Show the imported key as a span instead of the import button.
+                            let keyInsertedSpan = form.querySelector('#private-key-inserted');
+                            keyInsertedSpan.textContent = privateKeyPath;
+                            keyInsertedSpan.removeAttribute('hidden');
+                        }
+                        else {
+                            materialize.toast({html: 'The file specified is not a PGP private key!', displayLength : 2000, classes: 'rounded'});
+                        }
+                    } catch (error) {
+                        logger.error(error);
+                    }
+                });
+
+
+
+                const passphraseElement = form.elements['passphrase'];
+                form.addEventListener('input', FormValidator.debounce(function (e) {
+                    switch (e.target.id) {
+                        case 'passphrase':
+                            FormValidator.checkPassword(passphraseElement);
+                            break;
+                        default: 
+                    }
+                }));
+
+                form.querySelector('.cancel').addEventListener('click', (e) => {
+                    generateKeysButton.disabled = false;
+                    importKeysButton.disabled = false;
+                    form.outerHTML = '';
+                });
+
+                form.querySelector('.ok').addEventListener('click', async (e) => {
+                    // Perform validation and escaping to the input data. Passphrase must exist,
+                    // but we dont check it's strength.
+                    let publicKey = form.querySelector('#public-key-inserted').textContent;
+                    let privateKey = form.querySelector('#private-key-inserted').textContent;
+                    let isPublicKeyPresent = true;
+                    let isPrivateKeyPresent = true;
+                    if ( ! publicKey || publicKey === '')  isPublicKeyPresent = false;
+                    if ( ! privateKey || privateKey === '')  isPrivateKeyPresent = false;
+                    let isPassphraseValid = FormValidator.checkPassword(passphraseElement);
+
+                    if (isPrivateKeyPresent && isPublicKeyPresent && isPassphraseValid){
+                        let passphrase = passphraseElement.value;
+                        const accountInfo = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
+                        materialize.toast({html: 'Saving the imported PGP keypair...', displayLength : 1400, classes: 'rounded'});
+                        try {
+                            await Encrypt.importPGPKeyPair(passphrase, publicKey, privateKey, accountInfo, app.getPath('userData'));
+                            materialize.toast({html: 'Key pair was imported successfully.', displayLength : 1400, classes: 'rounded'});
+                            // Key creation was successfull so close form.
+                            form.outerHTML = '';
+                            generateKeysButton.disabled = false;
+                            importKeysButton.disabled = false;
+                            // Render the keypair instead of the creation buttons.
+                            await showPersonalKeyPair();
+                        } catch (error) {
+                            materialize.toast({html: 'An error occurred while generating the PGP keypair.', displayLength : 1400, classes: 'rounded'});
+                            // Key creation was noy successfull so keep form open and the createNewPair and
+                            // importKeyPair buttons disabled.
+                        }
+                    }
+                    else {
+                        materialize.toast({html: 'Some fields are empty!', displayLength : 1200, classes: 'rounded'});
                     }
                 });
             });
