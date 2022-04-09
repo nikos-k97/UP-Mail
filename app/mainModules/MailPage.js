@@ -7,6 +7,7 @@ const Header                        = require('./Header');
 const Clean                         = require('./Clean');
 const Encrypt                       = require('./Encrypt');
 const materialize                   = require("../helperModules/materialize.min.js");
+const jetpack                       = require('fs-jetpack');
 
 
 function MailPage (app, logger, stateManager, utils, accountManager, mailStore) {
@@ -1402,7 +1403,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           images[i].setAttribute('src', URL.pathToFileURL(src));
         }
         else {
-          images[i].setAttribute('src',src);
+          images[i].setAttribute('src', src);
         }
    
       }
@@ -1435,8 +1436,52 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     // back to string
     dirtyContent = htmlDirtyContent.outerHTML ;
   }
-  else{
-    dirtyContent = emailContent.textAsHtml || emailContent.text;
+  else {
+    // Check for PGP attachments 
+    if (emailContent.attachments){
+      for (let j = 0; j < emailContent.attachments.length; j++){
+        if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
+          try {
+            let src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j]['filename']}`;
+            // If the encypted data has been previously fetched show them in unencypted form.
+            if (jetpack.inspect(src) && reloadedFromAttachmentButton) {
+              let encryptedData = jetpack.read(src);
+              let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
+              let senderInfo = await this.stateManager.contactsManager.loadContact(senderEmail);
+      
+              let senderPublicKey ;
+              if (senderInfo){
+                senderPublicKey = jetpack.read(senderInfo.publicKey);
+              }
+
+              let decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
+              let decryptedMessage = decryptionResults[0];
+
+              let signatureVerified = decryptionResults[1] || '';
+              let signatureState;
+              if (signatureVerified === true) signatureState = 'Signature Verified.';
+              else if (signatureVerified === false) signatureState = 'Signature Not Verified.';
+              else if (signatureVerified === '') signatureState = 'Message was not signed.';
+
+              let parsedDecryptedMessage = await this.imapClient.parseSignedMessage(decryptedMessage);
+              let parsedDecryptedMessageContent = parsedDecryptedMessage.html || parsedDecryptedMessage.textAsHtml || parsedDecryptedMessage.text;
+              dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text) + parsedDecryptedMessageContent;
+            }
+            else{
+              dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text) + 
+              `<br><br><hr>This email contains encypted data. If you trust the sender, press the <strong>Enable inline attachments</strong> button to view it.<hr><br>`;
+            }
+           
+          } catch (error) {
+            this.logger.error(error);
+            dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text);
+          }
+        }
+      }
+    }
+    else {
+      dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text);
+    }
   } 
 
   let cleanContent;
@@ -1747,7 +1792,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   } 
   else {
     selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
-    `<button class = 'fetch-inline'>Enable inline style (and images)</button>`);
+    `<button class = 'fetch-inline'>Enable inline attachments (and style)</button>`);
   }
   
   // Enable style and inline data (eg. images with content-disposition = inline)

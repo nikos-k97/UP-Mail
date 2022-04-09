@@ -4,6 +4,7 @@ const jetpack        = require('fs-jetpack');
 const IMAP           = require('node-imap');
 const base64         = require('base64-stream');
 const Utils          = require('./Utils');
+const Readable       = require('stream').Readable;
 
 /**
  * Logs the user in to their email server.
@@ -634,6 +635,50 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
 }
 
 
+IMAPClient.prototype.parseSignedMessage = async function (message){
+  let parsePromise, parsedHeaders, parsedData, parsedAttachments = [];
+
+  const stream = new Readable();
+  stream.push(message);
+  stream.push(null);
+
+  let parser = new MailParser();
+  let attachmentNo = 0;
+
+  parsePromise = new Promise(
+    (resolve, reject) => {
+      stream.pipe(parser)
+      .on('headers', (headers) => parsedHeaders = headers)
+      .on('data', (data) => {        
+        if (data.type === 'attachment'){
+          // Get necessary data and then remove the circular structure 'content'.
+          if (data.content.algo) data.algo = data.content.algo;
+          if (data.content.allowHalfOpen) data.allowHalfOpen = data.content.allowHalfOpen;
+          if (data.content.byteCount) data.byteCount = data.content.byteCount;
+          delete data.content; 
+
+          parsedAttachments[attachmentNo] = data;
+          data.release();
+          attachmentNo++;
+        }
+        if (data.type === 'text') parsedData = data;
+      })
+      .on('error', reject)
+      .once('end', resolve)
+    }
+  );
+  parser = null;
+
+  try {
+    await parsePromise;
+    return parsedData;
+  } catch (error) {
+    this.logger.error(error);
+  }
+ 
+}
+
+
 IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path){
   let parsedAttachments = content.attachments;
   let attachmentHeaders = content.attachmentHeaders;
@@ -655,7 +700,7 @@ IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path
     */
     if ( (attachment['contentType'] !== 'image/png' ) && (attachment['contentType'] !== 'image/jpeg' ) &&
          (attachment['contentType'] !== 'image/gif' ) && (attachment['contentType'] !== 'image/bmp' ) &&
-         (attachment['contentType'] !== 'image/avif') && (attachment['contentType'] !== 'application/pgp-encrypted') &&
+         (attachment['contentType'] !== 'image/avif') &&
          (attachment['contentType'] !== 'application/octet-stream'))
     {
       continue;

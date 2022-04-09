@@ -147,11 +147,11 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
     fs.dir(`${Utils.md5(accountInfo.user)}`);
     fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
 
-    // Encrypt the provided passphrase using the app-general-key present in the OS's keychain, 
-    // and store the encrypted passphrase inside 'getPass.txt' in the 'keys' directory of the project's userData.
-    // The unencypted passphrase is used to encrypt the generated private PGP key.
-    let appGeneralKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
-    let encyptedPassphrase = Encrypt.encryptAES256CBC(appGeneralKey, passphrase);
+    // Encrypt the provided passphrase using the scrypt key generated from the hashed account password present 
+    // in the OS's keychain, and store the encrypted passphrase inside 'getPass.txt' in the 'keys' directory of 
+    // the project's userData.The unencypted passphrase is used to encrypt the generated private PGP key.
+    let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+    let encyptedPassphrase = Encrypt.encryptAES256CBC(scryptKey, passphrase);
     fs.write(`getPass.txt`, encyptedPassphrase);
  
     // Both the curve25519 and ed25519 curve options generate a primary key for signing using Ed25519 and 
@@ -160,7 +160,7 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
         type: 'ecc', // Elliptic Curve 
         curve: 'curve25519', // ECC curve name 
         userIDs: [{ name: accountInfo.smtp.name, email: accountInfo.user}], // Multiple user IDs can be used.
-        passphrase: passphrase, // protects the private key
+        passphrase: passphrase, // protects the private key with the unencrypted passphrase
         format: 'armored' // output key format, defaults to 'armored' (other options: 'binary' or 'object')
     });
 
@@ -190,11 +190,11 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
     let publicKey = jetpack.read(publicKeyPath);
     let privateKey = jetpack.read(privateKeyPath);
 
-    // Encrypt the provided passphrase using the app-general-key present in the OS's keychain, 
-    // and store the encrypted passphrase inside 'getPass.txt' in the 'keys' directory of the project's userData.
-    // The unencypted passphrase is used to encrypt the generated private PGP key.
-    let appGeneralKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
-    let encyptedPassphrase = Encrypt.encryptAES256CBC(appGeneralKey, passphrase);
+        // Encrypt the provided passphrase using the scrypt key generated from the hashed account password present 
+    // in the OS's keychain, and store the encrypted passphrase inside 'getPass.txt' in the 'keys' directory of 
+    // the project's userData. The unencypted passphrase is used to encrypt the generated private PGP key.
+    let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+    let encyptedPassphrase = Encrypt.encryptAES256CBC(scryptKey, passphrase);
     fs.write(`getPass.txt`, encyptedPassphrase);
  
     
@@ -220,13 +220,13 @@ Encrypt.getOwnPublicKeyWithoutArmor = async function (accountInfo, appPath){
     */
     let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
     //const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
-    const publicKeyArmored = await fs.readAsync(`publickey.nick-proton-test-1@protonmail.com-dd4942f57aa45c1ec122f2b1ad6d1f17ce33d747.asc`);
-    //const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
-    return publicKeyArmored;
+    const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
+    const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
+    return publicKey;
 }
 
 
-Encrypt.getOwnPrivateKeyWithoutArmor = async function (accountInfo, appPath){
+Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, appPath){
     /*
         Key 'armoring' is not encryption. Encryption prevents unauthorized use of data (formally, provides 
         confidentiality) by making it unreadable in a way that can only be reversed by someone who has the
@@ -244,56 +244,84 @@ Encrypt.getOwnPrivateKeyWithoutArmor = async function (accountInfo, appPath){
     let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
 
     const privateKeyArmored = await fs.readAsync(`${accountInfo.user}-private.asc`);
+    const encryptedPassphraseKey = await fs.readAsync(`getPass.txt`);
 
-    // As the passphrase for decrypting the private key, use the dbPassword (the user account password).
-    let appGeneralKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
-    let decryptedPassword = Encrypt.decryptAES256CBC(appGeneralKey, accountInfo.password);
-    let passphrase = decryptedPassword;
+    // As the passphrase for decrypting the private key, use the passphrase that is stored in 'getPass.txt',
+    // after decrypting it with the scrypt key.
+    let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+    let decryptedPassphraseKey = Encrypt.decryptAES256CBC(scryptKey, encryptedPassphraseKey);
 
     const privateKey = await openpgp.decryptKey({
         privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }),
-        passphrase
+        passphrase: decryptedPassphraseKey
     });
 
     return privateKey;
 }
 
 
-
-Encrypt.openPGPEncrypt = async function (accountInfo, appPath){
-    let publicKey = Encrypt.getOwnPublicKeyWithoutArmor(accountInfo, appPath);
-    let privateKey = Encrypt.getOwnPrivateKeyWithoutArmor(accountInfo, appPath);
-
-    const plainData = await fs.readAsync("secrets.txt");
-    console.log('PlainText: ');
-    console.log(plainData);
-
+Encrypt.openPGPEncrypt = async function (plaintextMessage, receipientPublicKey, accountInfo, appPath){
     const encrypted = await openpgp.encrypt({
-        message: await openpgp.createMessage({ text: plainData }), // input as Message object
-        encryptionKeys: publicKey,
-        signingKeys: privateKey // optional
+        message: await openpgp.createMessage({ text: plaintextMessage }), // input as Message object
+        encryptionKeys: receipientPublicKey,
+
     });
     console.log('Encrypted:')
     console.log(encrypted); // '-----BEGIN PGP MESSAGE ... END PGP MESSAGE-----'
+}
+
+Encrypt.openPGPEncryptAndSign = async function (plaintextMessage, receipientPublicKey, accountInfo, appPath){
+    let privateKey = await Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor(accountInfo, appPath);
+
+    const encrypted = await openpgp.encrypt({
+        message: await openpgp.createMessage({ text: plaintextMessage }), // input as Message object
+        encryptionKeys: receipientPublicKey,
+        signingKeys: privateKey // optional
+    });
+
+    console.log('Encrypted and signed:')
+    console.log(encrypted); // '-----BEGIN PGP MESSAGE ... END PGP MESSAGE-----'
+}
+
+
+Encrypt.openPGPDecryptAndVerify = async function(encyptedMessage, senderPublicKey, accountInfo, appPath){
+    const privateKeyUnarmored = await Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor(accountInfo, appPath);
+    const publicKeyUnarmored = await openpgp.readKey({ armoredKey: senderPublicKey });
 
     const message = await openpgp.readMessage({
-        armoredMessage: encrypted // parse armored message
+        armoredMessage: encyptedMessage // parse armored message
     });
-    const { data: decrypted, signatures } = await openpgp.decrypt({
-        message,
-        verificationKeys: publicKey, // optional
-        decryptionKeys: privateKey
-    });
+
+    if (senderPublicKey){
+        const { data: decrypted, signatures } = await openpgp.decrypt({
+            message,
+            verificationKeys: publicKeyUnarmored, // optional
+            decryptionKeys: privateKeyUnarmored
+        });
+
+                
+        console.log('Decrypted:')
+        console.log(decrypted); 
+
+        // check signature validity (signed messages only)
+        try {
+            await signatures[0].verified; // throws on invalid signature
+            console.log('Signature is valid');
+            return [decrypted, signatures[0].verified]
+        } catch (e) {
+            throw new Error('Signature could not be verified: ' + e.message);
+        }
+    }
+    else {
+        const { data: decrypted} = await openpgp.decrypt({
+            message,
+            decryptionKeys: privateKeyUnarmored
+        });
+
     
-    console.log('Decrypted:')
-    console.log(decrypted); 
-    
-    // check signature validity (signed messages only)
-    try {
-        await signatures[0].verified; // throws on invalid signature
-        console.log('Signature is valid');
-    } catch (e) {
-        throw new Error('Signature could not be verified: ' + e.message);
+        console.log('Decrypted:')
+        console.log(decrypted); 
+        return decrypted;
     }
 }
 
