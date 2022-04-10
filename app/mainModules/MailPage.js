@@ -1176,7 +1176,6 @@ MailPage.prototype.newMailReceived = async function (){
       });
     }
   }
-
 }
 
 
@@ -1190,6 +1189,7 @@ MailPage.prototype.UIDValidityChanged = async function(){
   this.getChosenFolderInfo(this.stateManager.state.account.folder);
   return;
 }
+
 
 /*
   This function is run when an external message deletion (EXPUNGE) is observed.
@@ -1295,13 +1295,13 @@ MailPage.prototype.messageWasExpunged = async function(){
   }
 }
 
+
 /*
   Since this function is run inside an event listener (when a user clicks an email), the Shadow DOM has been
   loaded, so we can use 'shadowRoot.querySelector' sucessfully.
 */
 MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromAttachmentButton) {
   let metadata = await this.mailStore.loadEmail(uid);
-
   let emailElements = document.querySelectorAll('e-mail');
   /*
     For each <e-mail> element we clear its HTML content and remove the selected attribute. One of the emails
@@ -1310,7 +1310,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   */
   let selectedItemWrapper = undefined;
   let selectedMailItem = undefined;
-  let selectedEmailElement = undefined;
+ 
   for (i = 0; i < emailElements.length; i++){
     // Reset each message holder.
     let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
@@ -1335,8 +1335,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     }
   }
 
-
- 
   // Load the email body either from the DB if this message's body has been retrieved again, or fetch it.
   let emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
   let emailHeaders = await this.mailStore.loadEmail(uid, accountInfo.user);
@@ -1349,7 +1347,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     if ( !statusOK ) return;
 
     let message = emailHeaders;
-
     try {
       await this.fetchEmailBody(accountInfo, message);
       emailContent = await this.mailStore.loadEmailBody(uid, accountInfo.user);
@@ -1359,8 +1356,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     }
   }
   
-  console.log(emailHeaders)
-  console.log(emailContent)
   // The user clicked on the email, so we can safely mark it as 'Seen' both to the server and to the local storage.
   // 'uid' and 'metadata.uid' are in the format 'folderUID'
     /*
@@ -1380,10 +1375,165 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     - html : includes the HTML version of the message. Is set if the message has at least one ‘text/html’ node
     - textAsHtml : includes the plaintext version of the message in HTML format. Is set if the message has at least one ‘text/plain’ node.
   */
-  const app = this.app;
   let dirtyContent;
+  const app = this.app;
+
+  /*
+    ------------------------------------------------------------------------------------------------------------
+    Before processing the email content of the message, we need to check if the email is in PGP/MIME format.
+    If it is, the actual message will be inside an inline attachment (usually .asc file), which needs to be decrypted 
+    (and potentially needs to have its PGP signature verified). After decrypting and verifying, the decrypted
+    message will be the new 'emailContent' we need to process.
+    The decrypted data IS NOT stored in the disk. (Mailstore only contains the .asc file)
+    ------------------------------------------------------------------------------------------------------------
+  */
+
+  // Check emailContent (original email body) for PGP attachments (PGP/MIME).
+  let encapsulatedMIMEData = [];
+  let encapsulatedMIMEAttachments ;
+  let encapsulatedMIMEHeaders = [];
+  let wasMessageEncrypted = false;
+  let signatureState;
+  let decryptedEncapsulatedMIMEMessage;
+
+  if (emailContent.attachments){
+    for (let j = 0; j < emailContent.attachments.length; j++){
+      if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
+        wasMessageEncrypted = true;
+        try {
+          let src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j]['filename']}`;
+          
+          // If the encypted data has not been previously fetched, fetch it from inside the inline attachment.
+          if (!jetpack.inspect(src) ) {
+            await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+          }
+
+          // Now we have the encrypted data as file on disk. Prepare from decryption.
+          let readPromise = jetpack.readAsync(src);
+          let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
+          let senderInfo = await this.stateManager.contactsManager.loadContact(senderEmail);
+          let senderPublicKey ;
+          if (senderInfo){
+            senderPublicKey = await jetpack.readAsync(senderInfo.publicKey);
+          }
+          let encryptedData = await readPromise;
+          
+          // Get the decrypted data (new MIME message to be parsed) and the signatureState.
+          let decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
+          materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+          decryptedEncapsulatedMIMEMessage = decryptionResults[0];
+          let signatureVerified = decryptionResults[1] || '';
+          if (signatureVerified === true) signatureState = 'Signature Verified.';
+          else if (signatureVerified === false) signatureState = 'Signature Not Verified.';
+          else if (signatureVerified === '') signatureState = 'Message was not signed.';
+
+          /*
+            This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
+            The one contains control data (content-type='application/pgp-encrypted) and the other the actual encrypted
+            data (content-type='application/octet-stream). The real message is inside the second attachment.
+            So the 'new' message is now the attachment itself. So we parse the message as an attachment and we extract
+            its MIME format, like we did with non encrypted messages from the server.
+          */
+          // Parse the new MIME message, and get the headers, body and attachments of the encapsulated MIME message.
+          let parsedDecryptedMessage = await this.imapClient.parsePGPMIMEMessage(decryptedEncapsulatedMIMEMessage);
+          encapsulatedMIMEData.push(parsedDecryptedMessage.data);
+          encapsulatedMIMEAttachments = parsedDecryptedMessage.attachments;
+          for (const [name, value] of parsedDecryptedMessage.headers) {
+            // Construct an array of headers instead of using the Map object.
+            encapsulatedMIMEHeaders.push({ name, value });
+          }
+          // Append the headers inside the body.
+          encapsulatedMIMEData.headers = encapsulatedMIMEHeaders;
+ 
+
+        } catch (error) {
+          // If for some reason (for example we dont posses the right private key for the decryption) the decryption
+          // and the construction of the real MIME message failed, we show an error and inform the user that this was
+          // an encrypted message that could not be decrypted.
+          this.logger.error(error);
+          materialize.toast({html: 'Message could not be decrypted.', displayLength : 1400, classes: 'rounded'});
+          encapsulatedMIMEData.push({'html': `<br><br><hr>This email contains <strong>encypted data</strong>. It can be decrypted only if the app has access to the right private key.<hr><br><br>` });
+        }
+      }
+    }
+  }
+
+  /*
+    Usually when an email is encrypted in the PGP/MIME format, it does not contain any original text or html.
+    The real data is only inside the encrypted attachment. So if the above procedure was successfull in retrieving
+    the encapsulated MIME body and attachments, we inject the encapsulated message body to the body of the original
+    email (emailContent) before rendering it. However if for some reason the original email body did have
+    text or html, we simply append the encapsulated content we found inside the attachment to the previous
+    content that the email already had. If no PGP encrypted data is found, the email body stays as it is.
+  */
+  if (!emailContent.html) {
+    if (encapsulatedMIMEData.length > 0){
+      // Pick the best representation between HTML, textAsHTML and text.
+      emailContent.html = (encapsulatedMIMEData[0].html || encapsulatedMIMEData[0].textAsHtml || encapsulatedMIMEData[0].text);
+        for (let j = 1; j < encapsulatedMIMEData.length; j++){
+          emailContent.html = emailContent.html + (encapsulatedMIMEData[j].html || encapsulatedMIMEData[j].textAsHtml || encapsulatedMIMEData[j].text);
+        }
+    }
+  }
+  else {
+    for (let j = 0; j < encapsulatedMIMEData.length; j++){
+      emailContent.html = emailContent.html + (encapsulatedMIMEData[j].html || encapsulatedMIMEData[j].textAsHtml || encapsulatedMIMEData[j].text);
+    }
+  }
+
+  // Do the same for attachments. The headers were already put inside the 'encapsulatedMIMEData.headers'.
+  // These attachments (defined inside the decrypted encapsulated MIME data) are not going to be fetched
+  // from the server via 'imapClient.fetch()', since the server does not know their MIME 'partID' parameter.
+  // The server (our server) has only access to the encrypted message and not the internal encapsulated MIME 
+  // structure.
+  if (!emailContent.attachments) {
+    emailContent.attachments = [];
+    emailContent.attachmentHeaders = [];
+    if (encapsulatedMIMEAttachments && encapsulatedMIMEAttachments.length){
+      for (let j = 0; j < encapsulatedMIMEAttachments.length; j++){
+        emailContent.attachments.push(encapsulatedMIMEAttachments[j]);
+        emailContent.attachmentHeaders.push([]);
+        // Construct an array instead of using the Map object.
+        for (const [name, value] of encapsulatedMIMEAttachments[j].headers) {
+          emailContent.attachmentHeaders[emailContent.attachmentHeaders.length - 1].push({ name, value });
+        }
+      }
+    }
+  }
+  else {
+    if (encapsulatedMIMEAttachments && encapsulatedMIMEAttachments.length){
+      /*
+        If message was encrypted we dont need the PGP attachments anymore, since we already have the message content
+        that was stored inside the attachment.
+      */
+      if (wasMessageEncrypted){
+        emailContent.attachments = [];
+        emailContent.attachmentHeaders = [];
+      }
+      for (let j = 0; j < encapsulatedMIMEAttachments.length; j++){
+        emailContent.attachments.push(encapsulatedMIMEAttachments[j]);
+        emailContent.attachmentHeaders.push([]);
+        for (const [name, value] of encapsulatedMIMEAttachments[j].headers) {
+          // Construct an array instead of using the Map object.
+          emailContent.attachmentHeaders[emailContent.attachmentHeaders.length - 1].push({ name, value });
+        }
+      }
+    }
+  }
+
+  /*
+    --- CHANGE 'cid' OF INLINE ATTACHMENTS ---
+    Search the disk to find if the inline images inside the HTML body of the email are present. If they are 
+    found, change the 'cid' parameter of the image inside the MIME body to point to the disk location, so that
+    the images can be found when the user presses 'Show Inline images and style' button. 
+    - If they are not found, no error is thrown since if the user doesnt press the 'Show Inline Images and style' 
+      button, we use the strict HTML sanitization function which does not allow images. If the user presses the 
+      button, we check if the images are stored in the disk and fetch them. Then when the code reaches this specific
+      point, it will change the cid to point to the disk path.
+  */
   if (emailContent.html){
     if (emailContent.attachments){
+      // Convert string to HTML for using DOM queries.
       let dirtyHTML = this.utils.stringToHTML(emailContent.html);
       let images = dirtyHTML.querySelectorAll('img') ;
       for (let i=0; i<images.length; i++){
@@ -1399,21 +1549,30 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
             break;
           }
         }
+        // If the attachment was included with the mail (inline) then due to the above procedure, now the 'src'
+        // attribute is an absolute file system path. -> 'file:/' protocol
+        // So the non strict HTML sanitization function enables the 'file' protocol for images.
         if (src.includes('C:')){
           images[i].setAttribute('src', URL.pathToFileURL(src));
         }
+        // If the attachment was not included with the mail (inline attachment) or for some other reason the protocol is not
+        // 'file:/', we use the pure 'src' value. For example, a remote inline attachment (not included in the email)
+        // will use 'http' or 'https' as the 'src' protocol (scheme). It is up to the non strict sanitization
+        // function to allow or not such schemes. (currently we dont allow it since it conflicts with Contect Security Policy).
+        // https schemes are only allowed in links.
         else {
           images[i].setAttribute('src', src);
         }
    
       }
       // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
+      // Using outerHTML basically gets as a string from the HTML.
       dirtyContent = dirtyHTML.outerHTML;
     }
     else{
       dirtyContent = emailContent.html;
     }
-    
+
     /*
       Inject 'target=_blank' to all <a> elements inside the HTML. If the links are not pointing to '_target=blank'
       then due to the electron security policies defined in 'main.js', the link won't open at all. (If the links
@@ -1421,8 +1580,10 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       - in main.js we configured all the links that are designed to open in new tabs to be opened in the OS default
       browser. However without 'target=_blank' links in a normal browser environment would have opened in the same
       tab - in main.js we prohibited redirection inside the electron app.)
+      Also both the HTML sanitization functions allow the above functionality only to links using 'HTTPS' scheme.
     */
     // Also add a 'title' attribute to the <a> tag -> user can see the tooltip for the link that will be clicked
+    // so that the user has a clue of where their browser will redirect them.
     let htmlDirtyContent = this.utils.stringToHTML(dirtyContent);
     let aArray = htmlDirtyContent.querySelectorAll('a');
     for (let i=0; i<aArray.length; i++){
@@ -1433,69 +1594,31 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         aArray[i].target = '_blank';
       } 
     }
-    // back to string
+    // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
+    // Using outerHTML basically gets as a string from the HTML.
     dirtyContent = htmlDirtyContent.outerHTML ;
   }
   else {
-    // Check for PGP attachments 
-    if (emailContent.attachments){
-      for (let j = 0; j < emailContent.attachments.length; j++){
-        if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
-          try {
-            let src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j]['filename']}`;
-            // If the encypted data has been previously fetched show them in unencypted form.
-            if (jetpack.inspect(src) && reloadedFromAttachmentButton) {
-              let encryptedData = jetpack.read(src);
-              let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
-              let senderInfo = await this.stateManager.contactsManager.loadContact(senderEmail);
-      
-              let senderPublicKey ;
-              if (senderInfo){
-                senderPublicKey = jetpack.read(senderInfo.publicKey);
-              }
+    dirtyContent = emailContent.textAsHtml || emailContent.text;
+  }
 
-              let decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
-              let decryptedMessage = decryptionResults[0];
-
-              let signatureVerified = decryptionResults[1] || '';
-              let signatureState;
-              if (signatureVerified === true) signatureState = 'Signature Verified.';
-              else if (signatureVerified === false) signatureState = 'Signature Not Verified.';
-              else if (signatureVerified === '') signatureState = 'Message was not signed.';
-
-              let parsedDecryptedMessage = await this.imapClient.parseSignedMessage(decryptedMessage);
-              let parsedDecryptedMessageContent = parsedDecryptedMessage.html || parsedDecryptedMessage.textAsHtml || parsedDecryptedMessage.text;
-              dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text) + parsedDecryptedMessageContent;
-            }
-            else{
-              dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text) + 
-              `<br><br><hr>This email contains encypted data. If you trust the sender, press the <strong>Enable inline attachments</strong> button to view it.<hr><br>`;
-            }
-           
-          } catch (error) {
-            this.logger.error(error);
-            dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text);
-          }
-        }
-      }
-    }
-    else {
-      dirtyContent = Clean.cleanHTMLNonStrict(emailContent.textAsHtml || emailContent.text);
-    }
-  } 
-
+  // Sanitize the emailBody after all the above processing. Body is sanitized in all cases (HTML, textAsHTML, text).
+  // If the user clicked 'Show inline images and style' button, then we reload the function and render the email
+  // using the non strict HTML sanitization function which for example allows images (only those that use 'file:/' scheme)
   let cleanContent;
   if (reloadedFromAttachmentButton){
     cleanContent = Clean.cleanHTMLNonStrict(dirtyContent);
-    
   }
   else {
     cleanContent = Clean.cleanHTMLStrict(dirtyContent);
   }
 
 
+  // Begin rendering preparations.
   selectedItemWrapper.innerHTML = '';
 
+  // ------------------------------------ HEADER CONSTRUCTION -----------------------------------------------------
+ 
   let headerContentNode = document.createElement('div');
   headerContentNode.classList.add('header-content');
   let envelope = emailHeaders.envelope;
@@ -1728,7 +1851,11 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   `;
   headerContentNode.innerHTML = headerContent;
   selectedItemWrapper.appendChild(headerContentNode);
+  // -------------------------------------------------------------------------------------------------------
 
+
+  // ------------------------------- ATTACHMENT HANDLING (not inline)---------------------------------------
+  // (Show attachments right under the headers)
   // Create attachment div in the headers, if there are attachments.
   let attachmentsToShow = [];
   if (emailContent.attachments && emailContent.attachments.length){
@@ -1755,6 +1882,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     selectedItemWrapper.querySelector('.attachment-content').insertAdjacentHTML('afterend', 
     `<button class = 'fetch-attachments'>Download attachments</button><br><br><br>`);
 
+    // Fetch attachments event listener.
     selectedItemWrapper.querySelector('.fetch-attachments').addEventListener('click', async (e) => {
       let element = e.currentTarget;
       element.disabled = true;
@@ -1762,9 +1890,24 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       selectedItemWrapper.querySelector('.fetch-inline').disabled = true;
       selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
       
-      // Choose folder via dialog box and fetch chosen attachment(s) via fetch().
+      /*
+        Choose folder via dialog box and fetch chosen attachment(s).
+        - If the message was not encrypted use client.fetch(uid) and fetch attachments from the server using the
+          original message MIME partIDs.
+        - If the message was using PGP/MIME format, then the server has no information about the attachments and 
+          their MIME partIDs, since it only has access to the original encrypted message. So we use the
+          decryptedEncapsulatedMIMEMessage as the source insted of client.fetch(uid).
+      */
       materialize.toast({html: 'Choose folder where the attachments will be fetched', displayLength : 3000 ,classes: 'rounded'});
-      let fetched = await this.imapClient.fetchAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path, this.ipcRenderer);
+      let fetched;
+      
+      if (wasMessageEncrypted && decryptedEncapsulatedMIMEMessage ){
+        fetched = await this.imapClient.fetchPGPMIMEAttachments(emailContent, decryptedEncapsulatedMIMEMessage ,this.ipcRenderer);
+      }
+      else {
+        fetched = await this.imapClient.fetchAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), this.ipcRenderer);
+      }
+
       if (fetched){
         materialize.toast({html: 'Attachments fetched.', displayLength : 3000 ,classes: 'rounded'});
       }
@@ -1777,13 +1920,17 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = false;
     });
   }
+  // ---------------------------------------------------------------------------------------------------------
 
-
+  // --------------------------------- APPEND BODY CONTENT ---------------------------------------------------
   let bodyContentNode = document.createElement('div');
   bodyContentNode.classList.add('body-content');
   bodyContentNode.innerHTML = cleanContent + ' <br><br>';
   selectedItemWrapper.appendChild(bodyContentNode);
+  // ---------------------------------------------------------------------------------------------------------
 
+
+  // -------------------------------- HANDLE INLINE STYLE AND IMAGES -----------------------------------------
   // Show 'Enable inline attachments button' if the email has attachments.
   if (reloadedFromAttachmentButton){
     selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
@@ -1820,9 +1967,24 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           selectedItemWrapper.querySelector('.show-headers').disabled = true;
           selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
       
-          // Fetch attachments via fetch().
+           /*
+            Fetch inline attachment(s).
+            - If the message was not encrypted use client.fetch(uid) and fetch attachments from the server using the
+              original message MIME partIDs.
+            - If the message was using PGP/MIME format, then the server has no information about the attachments and 
+              their MIME partIDs, since it only has access to the original encrypted message. So we use the
+              decryptedEncapsulatedMIMEMessage as the source insted of client.fetch(uid).
+          */
           materialize.toast({html: 'Fetching...', displayLength : 3000 ,classes: 'rounded'});
-          await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+          
+          
+          if (wasMessageEncrypted && decryptedEncapsulatedMIMEMessage ){
+            
+          }
+          else {
+            await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+          }
+          
           // The third arguement 'true' is for the parameter : 'reloadedFromAttachmentButton' -> it will reload
           // the message with the inline attachments, but the 'Enable inline attachments button' will now say
           // 'Hide inline attachments'
@@ -1837,8 +1999,9 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         this.renderEmail(accountInfo, uid, false);
       }
     });
-  
+  // -----------------------------------------------------------------------------------------------------------
 
+  // --------------------------------- SHOW ALL HEADERS FUNCTIONALITY ------------------------------------------
   selectedItemWrapper.querySelector('.show-headers').addEventListener('click', (e) => {
     e.target.textContent = 'Hide All Headers';
     if (e.target.classList.contains('active')){
@@ -1912,7 +2075,9 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     `;
     }
   });
+  // ----------------------------------------------------------------------------------------------------------
 
+  // ---------------------------------- BACK BUTTON FUNCTIONALITY ---------------------------------------------
   // Add 'back' button which closes the currently open email, without removing the selected-mail-item class.
   selectedMailItem.querySelector('#message-holder .message-wrapper').insertAdjacentHTML("beforebegin", 
     `
@@ -1937,13 +2102,14 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   selectedMailItem.querySelector('#message-holder').querySelector('.back').addEventListener('click', (e) => {
     e.currentTarget.parentNode.innerHTML = ``;
   });
+  // -----------------------------------------------------------------------------------------------------------
 
-  // Add 'back' button which closes the currently open email, without removing the selected-mail-item class.
+  // -------------------------------- SHOW ENCRYPTION / SIGNED STATUS ------------------------------------------
   selectedMailItem.querySelector('#message-holder .back').insertAdjacentHTML("afterend", 
   `
     <div>
       <br>
-      <div class='encrypted'><strong>(This message was not encrypted.)<strong></div>
+      <div class='encrypted'><strong>(${wasMessageEncrypted} )<strong></div>
       <div class='signed'><strong>(This message was not signed.)<strong></div>
     </div>
 
@@ -1951,8 +2117,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     </style>
   `
  );
+ // ------------------------------------------------------------------------------------------------------------
 }
 
+/*
+  Used by 'Show all headers' button to render all the email's headers.
+*/
 MailPage.prototype.createTableRow = function(wrapper, header, recursion){
   let entities;
   if (!recursion) entities = {'<': '&lt;', '>': '&gt;'};
@@ -2048,6 +2218,7 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
 }
 
 
+
 MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
   let fetchedPromise = new Promise(async function(resolve,reject){
     try {
@@ -2055,7 +2226,7 @@ MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
         {bodies: '', struct: true, envelope: true}, 
         async function (seqno, content, attributes) {
           // Convert 'Map' of headers into 'Array' of headers for storage.
-          let headers= [];
+          let headers = [];
           for (const [name, value] of content.headers) {
             headers.push({ name, value });
           }

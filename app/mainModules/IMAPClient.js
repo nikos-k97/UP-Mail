@@ -635,7 +635,8 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
 }
 
 
-IMAPClient.prototype.parseSignedMessage = async function (message){
+IMAPClient.prototype.parsePGPMIMEMessage = async function (message){
+
   let parsePromise, parsedHeaders, parsedData, parsedAttachments = [];
 
   const stream = new Readable();
@@ -652,6 +653,7 @@ IMAPClient.prototype.parseSignedMessage = async function (message){
       .on('data', (data) => {        
         if (data.type === 'attachment'){
           // Get necessary data and then remove the circular structure 'content'.
+          
           if (data.content.algo) data.algo = data.content.algo;
           if (data.content.allowHalfOpen) data.allowHalfOpen = data.content.allowHalfOpen;
           if (data.content.byteCount) data.byteCount = data.content.byteCount;
@@ -660,6 +662,7 @@ IMAPClient.prototype.parseSignedMessage = async function (message){
           parsedAttachments[attachmentNo] = data;
           data.release();
           attachmentNo++;
+
         }
         if (data.type === 'text') parsedData = data;
       })
@@ -671,7 +674,7 @@ IMAPClient.prototype.parseSignedMessage = async function (message){
 
   try {
     await parsePromise;
-    return parsedData;
+    return {'data': parsedData, 'headers' : parsedHeaders, 'attachments' : parsedAttachments};
   } catch (error) {
     this.logger.error(error);
   }
@@ -719,6 +722,7 @@ IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path
         for (let j=0 ; j < attachmentNoI.length; j++){
           if (attachmentNoI[j].name === 'content-transfer-encoding' ){
             encoding = attachmentNoI[j].value;
+            console.log(encoding)
           }
         }
         
@@ -761,7 +765,7 @@ IMAPClient.prototype.fetchInlineAttachments = async function (content, uid, path
 }
 
 
-IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcRenderer){
+IMAPClient.prototype.fetchAttachments = async function (content, uid, ipcRenderer){
   let parsedAttachments = content.attachments;
   let attachmentHeaders = content.attachmentHeaders;
 
@@ -796,10 +800,10 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcR
     let fetchAttachmentObject = this.client.fetch(`${uid}`, { // We do not use imap.seq.fetch here.
       bodies: [attachment.partId]
     }); 
-    let fetchPromise = new Promise((resolve,reject) => {
-      // The buildAttMessageFunction returns a function.
+
+    let fetchPromise = new Promise((resolve) => {
+
       fetchAttachmentObject.on('message', async (msg) => {
-    
         let encoding;
         let filename = attachment.filename;
         let attachmentNoI = attachmentHeaders[i];
@@ -808,7 +812,7 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcR
             encoding = attachmentNoI[j].value;
           }
         }
-        
+ 
         msg.on('body', function(stream, info) {
           //Create a write stream so that we can stream the attachment to file;
           console.log('Streaming this attachment to file', filename, info);
@@ -841,6 +845,100 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, path, ipcR
     await fetchPromise;
   }
   return true;
+}
+
+IMAPClient.prototype.fetchPGPMIMEAttachments = async function (emailContent, sourceMIMENode, ipcRenderer){
+  let parsedAttachments = emailContent.attachments;
+  let attachmentHeaders = emailContent.attachmentHeaders;
+
+  for (let i = 0; i < parsedAttachments.length; i++) {
+    let attachment = parsedAttachments[i];
+    // We fetch only the attachments that are supposed to be inline (inside the HTML body).
+    if (attachment['contentDisposition'] !== 'attachment'){
+      continue;
+    }
+
+    // Choose folder to save.
+    let saveFolder;
+    let dialogPromise = new Promise ((resolve,reject) => {
+      ipcRenderer.send('saveAttachment', `${attachment.filename}`);
+      ipcRenderer.on('saveFolder', (event, data) => { 
+        saveFolder = data;
+        if (!saveFolder) reject(new Error('Cancelled'));
+        else resolve(data);
+      })
+    })
+   
+    try {
+      saveFolder = await dialogPromise;
+      saveFolder = String(saveFolder).toString()+'/';
+    } catch (error) {
+      this.logger.error(error);
+      if (i === parsedAttachments.length - 1) return false;
+      else continue;
+    }
+
+    this.logger.log(`Fetching attachment: ${attachment.filename}`);
+
+    // Filename to create.
+    let filename = attachment.filename;
+
+    // Find encoding of the attachment, so that it can be decoded before saving to disk.
+    let encoding;
+    let attachmentNoI = attachmentHeaders[i];
+    for (let j = 0 ; j < attachmentNoI.length; j++){
+      if (attachmentNoI[j].name === 'content-transfer-encoding'){
+        encoding = attachmentNoI[j].value;
+      }
+    }
+
+    //Create a write stream so that we can stream the attachment to file;     
+    const fs = jetpack.cwd(`${saveFolder}`);
+    let writeStream = fs.createWriteStream(`${saveFolder}\\${filename}`);
+    console.log('Streaming this attachment to file', filename);
+
+    // Create stream from the MIMEsource.
+    const mimeStream = new Readable();
+    mimeStream.push(sourceMIMENode);
+    mimeStream.push(null);
+
+    let parser = new MailParser();
+    let parsePromise = new Promise(
+      (resolve, reject) => {
+        mimeStream.pipe(parser)
+        .on('data', (data) => {        
+          if (data.type === 'attachment'){
+            // stream.pipe(writeStream); this would write base64 data to the file, so we decode during streaming using 
+            if (encoding === 'base64') {
+              data.content.pipe(writeStream);
+            } else  {
+              //here we have none or some other decoding streamed directly to the file which renders it useless probably
+              data.content.pipe(writeStream);
+            }  
+            delete data.content; 
+            data.release();
+          }
+        })
+        .on('error', reject)
+        .once('end', resolve)
+      }
+    );
+
+    writeStream.once('finish', function() {
+      console.log('Done writing to file %s', filename);
+      writeStream.destroy();
+    });
+
+    parser = null;
+  
+    try {
+      await parsePromise;
+      return true;
+    } catch (error) {
+      this.logger.error(error);
+      return false;
+    }
+  }
 }
 
 
