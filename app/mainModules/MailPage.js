@@ -1979,7 +1979,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           
           
           if (wasMessageEncrypted && decryptedEncapsulatedMIMEMessage ){
-            
+            await this.imapClient.fetchPGPMIMEInlineAttachments(emailContent, decryptedEncapsulatedMIMEMessage ,this.utils.stripStringOfNonNumericValues(uid), path);
           }
           else {
             await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);

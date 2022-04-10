@@ -942,6 +942,98 @@ IMAPClient.prototype.fetchPGPMIMEAttachments = async function (emailContent, sou
 }
 
 
+IMAPClient.prototype.fetchPGPMIMEInlineAttachments = async function (emailContent, sourceMIMENode, uid, path){
+  let parsedAttachments = emailContent.attachments;
+  let attachmentHeaders = emailContent.attachmentHeaders;
+
+  let user = this.client._config.user;
+  let hash = user.includes('@') ? this.utils.md5(user) : user;
+  let appPath = this.app.getPath('userData');
+  let md5 = this.utils.md5;
+
+  for (let i = 0; i < parsedAttachments.length; i++) {
+    let attachment = parsedAttachments[i];
+
+    // We fetch only the attachments that are supposed to be inline (inside the HTML body of the MIME Node).
+    if (attachment['contentDisposition'] !== 'inline'){
+      continue;
+    }
+
+    /*
+      Fetch only inline attachments with types:
+      image/png, image/jpeg, image/gif, image/bmp, image/avif
+    */
+    if ( (attachment['contentType'] !== 'image/png' ) && (attachment['contentType'] !== 'image/jpeg' ) &&
+         (attachment['contentType'] !== 'image/gif' ) && (attachment['contentType'] !== 'image/bmp' ) &&
+         (attachment['contentType'] !== 'image/avif'))
+    {
+      continue;
+    }
+ 
+    // Filename to create.
+    let filename = attachment.filename;
+    this.logger.log(`Fetching attachment: ${attachment.filename}`);
+
+    // Find encoding of the attachment, so that it can be decoded before saving to disk.
+    let encoding;
+    let attachmentNoI = attachmentHeaders[i];
+    for (let j = 0 ; j < attachmentNoI.length; j++){
+      if (attachmentNoI[j].name === 'content-transfer-encoding'){
+        encoding = attachmentNoI[j].value;
+      }
+    }
+
+    // The uid used here is the uid from the server, so since we locally use a combination
+    // of folder and uid, we need to store it with the folderUid format.
+    let hashuid = md5(`${path}${uid}`);
+
+    const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
+    fs.dir(`${hashuid}`);
+    let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+    console.log('Streaming this attachment to file', filename);
+
+    // Create stream from the MIMEsource.
+    const mimeStream = new Readable();
+    mimeStream.push(sourceMIMENode);
+    mimeStream.push(null);
+
+    let parser = new MailParser();
+    let parsePromise = new Promise(
+      (resolve, reject) => {
+        mimeStream.pipe(parser)
+        .on('data', (data) => {        
+          if (data.type === 'attachment'){
+            // stream.pipe(writeStream); this would write base64 data to the file, so we decode during streaming using 
+            if (encoding === 'base64') {
+              data.content.pipe(writeStream);
+            } else  {
+              //here we have none or some other decoding streamed directly to the file which renders it useless probably
+              data.content.pipe(writeStream);
+            }  
+            delete data.content; 
+            data.release();
+          }
+        })
+        .on('error', reject)
+        .once('end', resolve)
+      }
+    );
+
+    writeStream.once('finish', function() {
+      console.log('Done writing to file %s', filename);
+      writeStream.destroy();
+    });
+
+    parser = null;
+  
+    try {
+      await parsePromise;
+    } catch (error) {
+      this.logger.error(error);
+    }
+  }
+}
+
 
 IMAPClient.prototype.checkFlags = async function (path, readOnly){
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
