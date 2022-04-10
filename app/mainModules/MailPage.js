@@ -1393,10 +1393,10 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let encapsulatedMIMEAttachments ;
   let encapsulatedMIMEHeaders = [];
   let wasMessageEncrypted = false;
-  let signatureState;
+  let signatureState = 'Message was not signed by its sender';
   let decryptedEncapsulatedMIMEMessage;
 
-  if (emailContent.attachments){
+  if (emailContent.attachments ){
     for (let j = 0; j < emailContent.attachments.length; j++){
       if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
         wasMessageEncrypted = true;
@@ -1422,10 +1422,11 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           let decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
           materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
           decryptedEncapsulatedMIMEMessage = decryptionResults[0];
-          let signatureVerified = decryptionResults[1] || '';
-          if (signatureVerified === true) signatureState = 'Signature Verified.';
-          else if (signatureVerified === false) signatureState = 'Signature Not Verified.';
-          else if (signatureVerified === '') signatureState = 'Message was not signed.';
+          let signatureVerified = await decryptionResults[1] || '';
+          if (signatureVerified === true) signatureState = 'Signature Verified';
+          else if (signatureVerified === false) signatureState = 'Signature Not Verified';
+          // Only encryption
+          else if (signatureVerified === '') signatureState = 'Message was not signed by its sender';
 
           /*
             This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
@@ -2105,15 +2106,39 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   // -----------------------------------------------------------------------------------------------------------
 
   // -------------------------------- SHOW ENCRYPTION / SIGNED STATUS ------------------------------------------
+  let encryptionText ;
+  if (wasMessageEncrypted) encryptionText = '<span class="encrypted-message">(Message was sent encrypted using PGP)</span>';
+  else encryptionText = '<span class="unencrypted-message">(Message was sent unencrypted)</span>';
+
+  let signatureText;
+  if (signatureState === 'Signature Verified')  signatureText = `<span class="signed-message">(${signatureState})</span>`;
+  else if (signatureState === 'Signature Not Verified')  signatureText = `<span class="unsigned-message">(${signatureState})</span>`;
+  else if (signatureState === 'Message was not signed by its sender') signatureText = `<span class="unsigned-message">(${signatureState})</span>`;
+
   selectedMailItem.querySelector('#message-holder .back').insertAdjacentHTML("afterend", 
   `
-    <div>
+    <div class=encryption-status>
       <br>
-      <div class='encrypted'><strong>(${wasMessageEncrypted} )<strong></div>
-      <div class='signed'><strong>(This message was not signed.)<strong></div>
+      <div class='encrypted'><strong>${encryptionText}</strong></div>
+      <div class='signed'><strong>${signatureText}</strong></div>
     </div>
 
     <style>
+      div.signed strong span.signed-message{
+        color: rgb(62, 148, 62);
+      }
+      
+      div.signed strong span.unsigned-message{
+        color: rgb(201, 35, 35);
+      }
+      
+      div.encrypted strong span.encrypted-message{
+        color:rgb(62, 148, 62);
+      }
+      
+      div.encrypted strong span.unencrypted-message{
+        color:rgb(201, 35, 35);
+      }
     </style>
   `
  );
