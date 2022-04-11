@@ -13,7 +13,7 @@ function WelcomePage (logger, stateManager, utils, accountManager) {
 WelcomePage.prototype.load = function () { // No arrow functions. 'this' is bound via bind() in the preload script.
 	this.stateManager.page('welcome', ['basic','welcome']);
 	this.logger.debug('Loading up the welcome page ...');
-
+  
   Header.hideTLSBar();
   Header.setLoc('Login');
   materialize.CharacterCounter.init(document.querySelector('#outgoing_name'));
@@ -36,6 +36,7 @@ WelcomePage.prototype.load = function () { // No arrow functions. 'this' is boun
         document.querySelector('#error').innerHTML = '';
         // Fetch and sanitize the form information.
         let details = utils.getItemsFromForm(loginForm);
+        
         // Check if connection can be established to the IMAP and SMTP servers.
         materialize.toast({html: 'Establishing connections to IMAP and SMTP servers...', displayLength : 3000 ,classes: 'rounded'});
         let verified = await accountManager.testProvidedDetails(details);

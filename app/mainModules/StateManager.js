@@ -94,10 +94,15 @@ StateManager.prototype.setup = async function (loginInfo) {
   }
   else {
     // Create the folders where the mail bodies for this specific user will be stored.
-    // (If they dont already exist)
+    // (If they dont already exist) 
+    // Also create keys directory.
     const hash = String(loginInfo.user).includes('@') ? this.utils.md5(loginInfo.user) : loginInfo.user;
-    const fs = jetpack.cwd(this.app.getPath('userData'));
+    let fs = jetpack.cwd(this.app.getPath('userData'));
     fs.dir(`mail`).dir(`${hash}`);
+    fs.dir(`keys`);
+    fs = jetpack.cwd(this.app.getPath('userData'), `keys`);
+    fs.dir(`${this.utils.md5(loginInfo.user)}`);
+    fs = jetpack.cwd(this.app.getPath('userData'), `keys`, `${this.utils.md5(loginInfo.user)}`);
 
     // Global variable 'setupComplete' is used for 'Utils.testLoaded()' to indicated that the setup and 
     // the configuration info have been completed successfully so we can safely proceed to the MailPage.

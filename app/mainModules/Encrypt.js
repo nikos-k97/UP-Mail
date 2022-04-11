@@ -52,6 +52,7 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
         const plaintextPassword = loginInfo.password; 
         const bcryptSalt = bcrypt.genSaltSync(passwordSaltRounds);
         const hashedPassword = bcrypt.hashSync(plaintextPassword, bcryptSalt);
+ 
 
         // Set the password hash in the OS's keychain.
         await keytar.setPassword('email-client', 'accountPasswordHash', hashedPassword);
@@ -288,6 +289,8 @@ Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, a
     let decryptedAccountPassword = Encrypt.decryptAES256CBC(scryptKey, accountInfo.password);
     let decryptedPassphraseKey = Encrypt.decryptAES256CBC(decryptedAccountPassword, encryptedPassphraseKey);
 
+    console.log(privateKeyArmored)
+    console.log(decryptedPassphraseKey)
     const privateKey = await openpgp.decryptKey({
         privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }),
         passphrase: decryptedPassphraseKey

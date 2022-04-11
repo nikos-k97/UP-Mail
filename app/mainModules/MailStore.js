@@ -246,6 +246,7 @@ MailStore.prototype.deleteDB = function () {
     fs.remove(`${fileOrFolder}`);
     console.log(`Removed ${fileOrFolder} from db.`);
   });
+  delete this.db;
 }
 
 

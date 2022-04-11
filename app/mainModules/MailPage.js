@@ -698,6 +698,7 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
       await Encrypt.deleteAppKey();
       this.imapClient = null;
       Header.hideTLSBar();
+
       this.stateManager.change('state', 'new');
       this.stateManager.checkUserState();
       // Re-emit window.load event so that the StateManager.style function can work properly.

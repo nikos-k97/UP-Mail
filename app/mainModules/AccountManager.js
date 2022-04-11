@@ -85,12 +85,16 @@ AccountManager.prototype.existingAccount = async function () {
       // Account info were retrieved, redirect to stateManager.
       try {
         const key = (await Encrypt.keyDerivationFunction(account)).toString(); 
-        account.password = Encrypt.decryptAES256CBC(key, account.password);
-      
-        // Create database for contacts (if it doesnt exist)
-        this.stateManager.contactsManager.createContactsDB(account.user);
 
-        await this.stateManager.setup(account);
+        let decryptedAccount = {};
+        let decryptedPassword = Encrypt.decryptAES256CBC(key, account.password);
+        Object.assign(decryptedAccount, account);
+        decryptedAccount.password = decryptedPassword;
+
+        // Create database for contacts (if it doesnt exist)
+        this.stateManager.contactsManager.createContactsDB(decryptedAccount.user);
+        console.log(decryptedAccount)
+        await this.stateManager.setup(decryptedAccount);
 
       } catch (error) {
         this.logger.error('Could not find the password hash inside the OS keychain.');
@@ -101,7 +105,6 @@ AccountManager.prototype.existingAccount = async function () {
         // (it is waiting for the window.load event to apply style)
         dispatchEvent(new Event('load'));
       }
-
     }
   }
 }
@@ -115,18 +118,25 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
   let user = loginInfo.user;
   let hash = user.includes('@') ? this.utils.md5(user) : user;
   let dataExistedBeforeInsertion = false;
-  let existingData = this.findAccount(user);
-  if (existingData !== undefined && existingData !== {}) dataExistedBeforeInsertion = true;
-    
+  let existingData = await this.findAccount(user);
+  
+  // Check if existing data is undefined or empty object. {} is not the same as an empty object because of prototype
+  if (existingData !== undefined && Object.keys(existingData).length !== 0) dataExistedBeforeInsertion = true;
+
   // Search the OS's Credential Manager / Keychain for the app key. 
   // If there is not one present, create a key from the loginInfo.password using 'Scrypt'.
   // Use this key to encrypt the user password before storing it in the DB.
   // Delete the app-general-key from the OS keychain (if it exists from a previous user).
   await Encrypt.deleteAppKey();
   const key = (await Encrypt.keyDerivationFunction(loginInfo)).toString(); 
-  let encryptedLoginInfo = loginInfo;
-  encryptedLoginInfo.password = Encrypt.encryptAES256CBC(key, loginInfo.password);
-  
+
+  // Now the hashed password is stored in the OS keychain and the scrypt key is generated.
+  let encryptedLoginInfo = {};
+  let encryptedPassword = Encrypt.encryptAES256CBC(key, loginInfo.password);
+  // Copy the object, using '=' clones the object and we dont want that.
+  encryptedLoginInfo = Object.assign(encryptedLoginInfo, loginInfo);
+  encryptedLoginInfo.password = encryptedPassword;
+
   try {
     // Await for the promisified NeDB's 'insert' function to resolve.
     // NeDB automatically adds an '_id' field for each document.
@@ -141,8 +151,11 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
   }
 
   // Change state to 'existing' and add the 'user' and 'hash' fields to state.json.
+
+  let newUser = (await this.findAccount(loginInfo.user)).user;
   this.stateManager.change('state', 'existing');
   this.stateManager.change('account', {hash, user});
+
 
   // Create the folders where the mail bodies for this specific user will be stored.
   // (If they dont already exist)
@@ -159,6 +172,7 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
   if (dataExistedBeforeInsertion) {
     existingData = await this.findAccount(user);
     existingData.password = Encrypt.decryptAES256CBC(key, existingData.password);
+    // Use the decrypted data for authentication.
     await this.stateManager.setup(existingData);
   }
   else {
@@ -170,8 +184,13 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
     });
 
     // Account was inserted, redirect to stateManager.
-    encryptedLoginInfo.password = Encrypt.decryptAES256CBC(key, encryptedLoginInfo.password);
-    await this.stateManager.setup(encryptedLoginInfo);
+    let decryptedLoginInfo = {};
+    let decryptedPassword = Encrypt.decryptAES256CBC(key, encryptedPassword);
+    decryptedLoginInfo = Object.assign(decryptedLoginInfo, encryptedLoginInfo);
+    decryptedLoginInfo.password = decryptedPassword;
+    
+    // Use the decrypted data for authentication.
+    await this.stateManager.setup(decryptedLoginInfo);
   }
 }
 

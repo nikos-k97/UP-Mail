@@ -552,7 +552,7 @@ async function showPersonalKeyPair(){
             materialize.toast({html: 'Exporting PGP keypair ...', displayLength : 1000, classes: 'rounded'});
             let exportedPublicKey = fs.read(publicKeyName);
             let exportedPrivateKey = fs.read(privateKeyName);
-
+            
              // Choose folder to save.
             let saveFolder;
             let dialogPromise = new Promise ((resolve,reject) => {
