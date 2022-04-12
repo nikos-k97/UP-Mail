@@ -357,12 +357,14 @@ Encrypt.openPGPDecryptAndVerify = async function(encyptedMessage, senderPublicKe
         armoredMessage: encyptedMessage // parse armored message
     });
 
+
     if (senderPublicKey){
         const { data: decrypted, signatures } = await openpgp.decrypt({
             message,
             verificationKeys: publicKeyUnarmored, // optional
             decryptionKeys: privateKeyUnarmored
         });
+       
 
         // check signature validity (signed messages only)
         try {

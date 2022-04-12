@@ -906,17 +906,24 @@ IMAPClient.prototype.fetchPGPMIMEAttachments = async function (emailContent, sou
     let parsePromise = new Promise(
       (resolve, reject) => {
         mimeStream.pipe(parser)
-        .on('data', (data) => {        
+        .on('data', (data) => {    
           if (data.type === 'attachment'){
-            // stream.pipe(writeStream); this would write base64 data to the file, so we decode during streaming using 
-            if (encoding === 'base64') {
-              data.content.pipe(writeStream);
-            } else  {
-              //here we have none or some other decoding streamed directly to the file which renders it useless probably
-              data.content.pipe(writeStream);
-            }  
-            delete data.content; 
-            data.release();
+            // The mimeStream will find all attachments, we only want to fetch the one specified in this iteration.
+            if (data.filename === filename) {
+              // stream.pipe(writeStream); this would write base64 data to the file, so we decode during streaming using 
+              if (encoding === 'base64') {
+                data.content.pipe(writeStream);
+              } else  {
+                //here we have none or some other decoding streamed directly to the file which renders it useless probably
+                data.content.pipe(writeStream);
+              } 
+              delete data.content; 
+              data.release();
+            }
+            else {
+              delete data.content; 
+              data.release();
+            }
           }
         })
         .on('error', reject)
@@ -1003,15 +1010,22 @@ IMAPClient.prototype.fetchPGPMIMEInlineAttachments = async function (emailConten
         mimeStream.pipe(parser)
         .on('data', (data) => {        
           if (data.type === 'attachment'){
-            // stream.pipe(writeStream); this would write base64 data to the file, so we decode during streaming using 
-            if (encoding === 'base64') {
-              data.content.pipe(writeStream);
-            } else  {
-              //here we have none or some other decoding streamed directly to the file which renders it useless probably
-              data.content.pipe(writeStream);
-            }  
-            delete data.content; 
-            data.release();
+            // The mimeStream will find all attachments, we only want to fetch the one specified in this iteration.
+            if (data.filename === filename){
+              // stream.pipe(writeStream); this would write base64 data to the file, so we decode during streaming using 
+              if (encoding === 'base64') {
+                data.content.pipe(writeStream);
+              } else  {
+                //here we have none or some other decoding streamed directly to the file which renders it useless probably
+                data.content.pipe(writeStream);
+              }  
+              delete data.content; 
+              data.release();
+            }
+            else {
+              delete data.content; 
+              data.release();
+            }
           }
         })
         .on('error', reject)

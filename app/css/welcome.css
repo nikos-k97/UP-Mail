@@ -80,4 +80,7 @@
   font-size: 2rem !important;
 }
 
-
+small.info{
+  color: rgb(97,97,97);
+  text-decoration: underline;
+}

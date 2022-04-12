@@ -13,65 +13,68 @@
       </div>
       <form class="subtitle" id="login-form">
         <div class="row">
-        <div class="input-field form-field col s8">
-          <input id="email" name="user" type="email">
-          <label for="email">Email</label>
-          <small></small>
-        </div>
-        </div>
-        <div class="row">
-        <div class="input-field form-field col s8">
-          <input id="password" type="password" name="password">
-          <label for="password">Password</label>
-          <small></small>
-        </div>
+          <div class="input-field form-field col s8">
+            <input id="email" name="user" type="email">
+            <label for="email">Email</label>
+            <small></small>
+          </div>
         </div>
         <div class="row">
-        <div class="input-field form-field col s4">
-          <input id="host_incoming" type="text" name="host_incoming">
-          <label for="host_incoming">Incoming Host (IMAP)</label>
-          <small></small>
-        </div>
-        <div class="input-field form-field col s3">
-          <select id="tls_incoming" name="tls_incoming">
-            <option value="tls" selected>TLS</option>
-            <option value="unencrypted">Unencrypted</option>
-          </select>
-          <label>Choose (IMAP) channel encryption</label>
-        </div>
-        <div class="input-field form-field col s1">
-          <input id="port_incoming" type="number" name="port_incoming">
-          <label for="port_incoming">IMAP Port</label>
-          <small></small>
-        </div>
+          <div class="input-field form-field col s8">
+            <input id="password" type="password" name="password">
+            <label for="password">Password</label>
+            <small></small>
+          </div>
         </div>
         <div class="row">
-        <div class="input-field form-field col s4 ">
-          <input id="host_outgoing" type="text" name="host_outgoing">
-          <label for="host_outgoing">Outgoing Host (SMTP)</label>
-          <small></small>
-        </div>
-        <div class="input-field form-field col s3">
-          <select id="tls_outgoing" name="tls_outgoing">
-            <option value="tls" selected>TLS</option>
-            <option value="starttls">STARTTLS</option>
-            <option value="unencrypted">Unencrypted</option>
-          </select>
-          <label>Choose (SMTP) channel encryption</label>
-        </div>
-        <div class="input-field form-field col s1">
-          <input id="port_outgoing" type="number" name="port_outgoing">
-          <label for="port_outgoing">SMTP Port</label>
-          <small></small>
-        </div>
+          <div class="input-field form-field col s4">
+            <input id="host_incoming" type="text" name="host_incoming">
+            <label for="host_incoming">Incoming Host (IMAP)</label>
+            <small></small>
+          </div>
+          <div class="input-field form-field col s3">
+            <select id="tls_incoming" name="tls_incoming">
+              <option value="tls" selected>TLS</option>
+              <option value="unencrypted">Unencrypted</option>
+            </select>
+            <label>Choose (IMAP) channel encryption</label>
+          </div>
+          <div class="input-field form-field col s1">
+            <input id="port_incoming" type="number" name="port_incoming">
+            <label for="port_incoming">IMAP Port</label>
+            <small></small>
+          </div>
         </div>
         <div class="row">
-        <div class="input-field form-field col s8">
-          <input id="outgoing_name"type="text" name="outgoing_name" data-length="40">
-          <label for="outgoing_name">Send emails using this name</label>
-          <small></small>
+          <div class="input-field form-field col s4 ">
+            <input id="host_outgoing" type="text" name="host_outgoing">
+            <label for="host_outgoing">Outgoing Host (SMTP)</label>
+            <small></small>
+          </div>
+          <div class="input-field form-field col s3">
+            <select id="tls_outgoing" name="tls_outgoing">
+              <option value="tls" selected>TLS</option>
+              <option value="starttls">STARTTLS</option>
+              <option value="unencrypted">Unencrypted</option>
+            </select>
+            <label>Choose (SMTP) channel encryption</label>
+          </div>
+          <div class="input-field form-field col s1">
+            <input id="port_outgoing" type="number" name="port_outgoing">
+            <label for="port_outgoing">SMTP Port</label>
+            <small></small>
+          </div>
         </div>
+        <div class="row">
+          <div class="input-field form-field col s8">
+            <input id="outgoing_name" type="text" name="outgoing_name" data-length="40">
+            <label for="outgoing_name">Send emails using this name</label>
+            <small></small>
+          </div>
         </div>
+        <small class="input-field form-field col s8 center-align info">
+          Your credentials will only be stored locally on your computer. Your password will be stored encrypted.
+        </small>
         <div class="break col s8"></div>
         <div class="input-field form-field col s8 center-align">
           <button class="btn waves-effect waves-light login" type="submit" name="login" value="Login" title="Login">
