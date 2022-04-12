@@ -6,6 +6,7 @@ const IMAPClient                    = require('./IMAPClient');
 const Header                        = require('./Header');
 const Clean                         = require('./Clean');
 const Encrypt                       = require('./Encrypt');
+const ContactsManager               = require('./ContactsManager');
 const materialize                   = require("../helperModules/materialize.min.js");
 const jetpack                       = require('fs-jetpack');
 
@@ -1412,7 +1413,13 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           // Now we have the encrypted data as file on disk. Prepare from decryption.
           let readPromise = jetpack.readAsync(src);
           let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
-          let senderInfo = await this.stateManager.contactsManager.loadContact(senderEmail);
+
+          // this.stateManager.contactsManager.db was loaded before keys.js inserted the contact,
+          // so basically we reload the database
+          this.contactsManager = new ContactsManager(this.app, this.utils);
+          await this.contactsManager.createContactsDB(accountInfo.user);
+          let senderInfo = await this.contactsManager.loadContact(senderEmail);
+
           let senderPublicKey ;
           if (senderInfo){
             senderPublicKey = await jetpack.readAsync(senderInfo.publicKey);

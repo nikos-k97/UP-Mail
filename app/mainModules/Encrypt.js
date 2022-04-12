@@ -204,6 +204,7 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
 
     fs.write(`${accountInfo.user}-public.asc`, publicKey);
     fs.write(`${accountInfo.user}-private.asc`, privateKey);
+    fs = null;
 }
 
 /**
@@ -237,6 +238,7 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
     
     fs.write(`${accountInfo.user}-public.asc`, publicKey);
     fs.write(`${accountInfo.user}-private.asc`, privateKey);
+    fs = null;
 }
 
 
@@ -288,14 +290,16 @@ Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, a
     let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
     let decryptedAccountPassword = Encrypt.decryptAES256CBC(scryptKey, accountInfo.password);
     let decryptedPassphraseKey = Encrypt.decryptAES256CBC(decryptedAccountPassword, encryptedPassphraseKey);
-
-    console.log(privateKeyArmored)
-    console.log(decryptedPassphraseKey)
-    const privateKey = await openpgp.decryptKey({
-        privateKey: await openpgp.readPrivateKey({ armoredKey: privateKeyArmored }),
-        passphrase: decryptedPassphraseKey
-    });
-
+    
+    let privateKey;
+    try {
+        privateKey = await openpgp.decryptKey({
+            privateKey: await openpgp.readKey({ armoredKey: privateKeyArmored }),
+            passphrase: decryptedPassphraseKey
+        });
+    } catch (error) {
+        console.error(error);
+    }
     return privateKey;
 }
 

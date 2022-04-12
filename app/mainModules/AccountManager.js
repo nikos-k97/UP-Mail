@@ -85,7 +85,6 @@ AccountManager.prototype.existingAccount = async function () {
       // Account info were retrieved, redirect to stateManager.
       try {
         const key = (await Encrypt.keyDerivationFunction(account)).toString(); 
-
         let decryptedAccount = {};
         let decryptedPassword = Encrypt.decryptAES256CBC(key, account.password);
         Object.assign(decryptedAccount, account);
@@ -93,9 +92,9 @@ AccountManager.prototype.existingAccount = async function () {
 
         // Create database for contacts (if it doesnt exist)
         this.stateManager.contactsManager.createContactsDB(decryptedAccount.user);
-        console.log(decryptedAccount)
-        await this.stateManager.setup(decryptedAccount);
 
+        // Navigate to setup.
+        await this.stateManager.setup(decryptedAccount);
       } catch (error) {
         this.logger.error('Could not find the password hash inside the OS keychain.');
         // Could not find hashed password inside the OS's keychain.
@@ -151,11 +150,8 @@ AccountManager.prototype.newAccount = async function(loginInfo) {
   }
 
   // Change state to 'existing' and add the 'user' and 'hash' fields to state.json.
-
-  let newUser = (await this.findAccount(loginInfo.user)).user;
   this.stateManager.change('state', 'existing');
   this.stateManager.change('account', {hash, user});
-
 
   // Create the folders where the mail bodies for this specific user will be stored.
   // (If they dont already exist)
