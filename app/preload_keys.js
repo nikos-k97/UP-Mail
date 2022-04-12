@@ -376,14 +376,19 @@ contextBridge.exposeInMainWorld(
                         const accountInfo = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
                         materialize.toast({html: 'Saving the imported PGP keypair...', displayLength : 1400, classes: 'rounded'});
                         try {
-                            await Encrypt.importPGPKeyPair(passphrase, publicKey, privateKey, accountInfo, app.getPath('userData'));
-                            materialize.toast({html: 'Key pair was imported successfully.', displayLength : 1400, classes: 'rounded'});
-                            // Key creation was successfull so close form.
-                            form.outerHTML = '';
-                            generateKeysButton.disabled = false;
-                            importKeysButton.disabled = false;
-                            // Render the keypair instead of the creation buttons.
-                            await showPersonalKeyPair();
+                            let success = await Encrypt.importPGPKeyPair(passphrase, publicKey, privateKey, accountInfo, app.getPath('userData'));
+                            if (success) {
+                                materialize.toast({html: 'Key pair was imported successfully.', displayLength : 1400, classes: 'rounded'});
+                                // Key creation was successfull so close form.
+                                form.outerHTML = '';
+                                generateKeysButton.disabled = false;
+                                importKeysButton.disabled = false;
+                                // Render the keypair instead of the creation buttons.
+                                await showPersonalKeyPair();
+                            }
+                            else {
+                                materialize.toast({html: 'Provided passphrase is not correct!', displayLength : 1400, classes: 'rounded'});
+                            }
                         } catch (error) {
                             materialize.toast({html: 'An error occurred while generating the PGP keypair.', displayLength : 1400, classes: 'rounded'});
                             // Key creation was noy successfull so keep form open and the createNewPair and

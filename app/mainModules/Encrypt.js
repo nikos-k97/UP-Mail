@@ -229,16 +229,26 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
     let publicKey = jetpack.read(publicKeyPath);
     let privateKey = jetpack.read(privateKeyPath);
 
-    // See 'Encrypt.createNewPGPKeyPair()' for the logic here.
-    let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
-    let decryptedAccountPassword = Encrypt.decryptAES256CBC(scryptKey, accountInfo.password);
-    let encyptedPassphrase = Encrypt.encryptAES256CBC(decryptedAccountPassword, passphrase);
-    fs.write(`getPass.txt`, encyptedPassphrase);
- 
+    let isPassphraseRight = await Encrypt.testPrivateKeyPassphrase(privateKey, passphrase);
+    if (isPassphraseRight) {
+        // See 'Encrypt.createNewPGPKeyPair()' for the logic here. 
+        let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+        let decryptedAccountPassword = Encrypt.decryptAES256CBC(scryptKey, accountInfo.password);
+        let encyptedPassphrase = Encrypt.encryptAES256CBC(decryptedAccountPassword, passphrase);
+        fs.write(`getPass.txt`, encyptedPassphrase);
+
+
+        fs.write(`${accountInfo.user}-public.asc`, publicKey);
+        fs.write(`${accountInfo.user}-private.asc`, privateKey);
+        fs = null;
+        return true;
+    }
+    else {
+        fs = null;
+        return false;
+    }
+
     
-    fs.write(`${accountInfo.user}-public.asc`, publicKey);
-    fs.write(`${accountInfo.user}-private.asc`, privateKey);
-    fs = null;
 }
 
 
@@ -301,6 +311,22 @@ Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, a
         console.error(error);
     }
     return privateKey;
+}
+
+
+Encrypt.testPrivateKeyPassphrase = async function(privateKeyEncryptedAndArmored, unencryptedPassphrase){
+    let privateKeyDecryptedUnarmored;
+    try {
+        privateKeyDecryptedUnarmored = await openpgp.decryptKey({
+            privateKey: await openpgp.readKey({ armoredKey: privateKeyEncryptedAndArmored }),
+            passphrase: unencryptedPassphrase
+        });
+        if (privateKeyDecryptedUnarmored) return true;
+        else return false;
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
 }
 
 
