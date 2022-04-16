@@ -5,6 +5,7 @@ const keytar      = require('keytar');
 const openpgp     = require('openpgp');
 const jetpack     = require('fs-jetpack');
 const Utils       = require('./Utils');
+const Clean       = require('./Clean');
 
 
 function Encrypt () {
@@ -13,8 +14,8 @@ function Encrypt () {
 
 
 /**
- * Uses 'scrypt' to construct the app-general-key from the hashed (using 'bcrypt') user password 
- * (which is stored in the OS's keychain) and a constant salt.
+ * Uses 'scrypt' to construct the a key from the hashed (using 'bcrypt') user password 
+ * (which is stored in the OS's keychain) and from a constant salt.
  * The key is used to encrypt/ decrypt user's account password.
  *
  * @param  {object} loginInfo
@@ -81,18 +82,18 @@ Encrypt.keyDerivationFunction = async function(loginInfo){
 
 
 /**
- * Delete the app-general-key from the OS's keychain / Credential Manager.
+ * Delete the accountPasswordHash from the OS's keychain / Credential Manager.
  *
  */
 Encrypt.deleteAppKey = async function(){
     await keytar.deletePassword('email-client', 'accountPasswordHash');
-    console.log(`Deleted previous user's hashed password from the system keychain.`)
+    console.log(`Deleted previous user's hashed password from the system keychain.`);
 }
 
 
 /**
- * Encrypt plaintext with AES256-CBC using the app-general-key from the OS's
- * keychain. If the key is in 'Buffer' format it must be converted to String
+ * Encrypt plaintext with AES256-CBC using the specified key.
+ * If the key is in 'Buffer' format it must be converted to String
  * before passing it as an arguement.
  *
  * @param  {String} key
@@ -111,8 +112,8 @@ Encrypt.encryptAES256CBC = function(key, plaintext) {
 
 
 /**
- * Decrypt ciphertect with AES256-CBC using the app-general-key from the OS's
- * keychain. If the key is in 'Buffer' format it must be converted to String
+ * Decrypt ciphertect with AES256-CBC using the specified key. 
+ * If the key is in 'Buffer' format it must be converted to String
  * before passing it as an arguement.
  *
  * @param  {String} key
@@ -226,17 +227,20 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
     fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
 
     // Read content of the publicKeyPath and privateKeyPath
-    let publicKey = jetpack.read(publicKeyPath);
-    let privateKey = jetpack.read(privateKeyPath);
+    let publicKey = Clean.cleanForm(await jetpack.readAsync(publicKeyPath));
+    let privateKey = Clean.cleanForm(await jetpack.readAsync(privateKeyPath));
 
-    let isPassphraseRight = await Encrypt.testPrivateKeyPassphrase(privateKey, passphrase);
-    if (isPassphraseRight) {
+    // Confirm that the imported key belongs to the specific user (email address).
+    // Also confirm that the specified passphrase (parameter) can indeed decrypt the private key.
+    let isPrivateKeyOK = await Encrypt.testPrivateKey(privateKey, passphrase, accountInfo.user);
+    let isPublicKeyOK = await Encrypt.testPublicKey(publicKey, accountInfo.user);
+  
+    if (isPrivateKeyOK && isPublicKeyOK) {
         // See 'Encrypt.createNewPGPKeyPair()' for the logic here. 
         let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
         let decryptedAccountPassword = Encrypt.decryptAES256CBC(scryptKey, accountInfo.password);
         let encyptedPassphrase = Encrypt.encryptAES256CBC(decryptedAccountPassword, passphrase);
         fs.write(`getPass.txt`, encyptedPassphrase);
-
 
         fs.write(`${accountInfo.user}-public.asc`, publicKey);
         fs.write(`${accountInfo.user}-private.asc`, privateKey);
@@ -247,11 +251,30 @@ Encrypt.createPGPKeyPair = async function(passphrase, accountInfo, appPath){
         fs = null;
         return false;
     }
-
-    
 }
 
 
+/**
+ * Read the armored PGP public key of another user (stored in contacts). Parse the public key
+ * and return the parsed key object.
+ *
+ * @param  {Object} accountInfo
+ * @param  {String} appPath
+ * @return {Object} 
+ */
+ Encrypt.getContactPublicKeyWithoutArmor = async function (publicKeyArmored){
+    const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
+    return publicKey;
+}
+
+
+/**
+ * Read the saved armored public PGP key of the user and return the unarmored parsed key object.
+ *
+ * @param  {Object} accountInfo
+ * @param  {String} appPath
+ * @return {Object} 
+ */
 Encrypt.getOwnPublicKeyWithoutArmor = async function (accountInfo, appPath){
     /*
         Key 'armoring' is not encryption. Encryption prevents unauthorized use of data (formally, provides 
@@ -268,13 +291,20 @@ Encrypt.getOwnPublicKeyWithoutArmor = async function (accountInfo, appPath){
         the data using tools designed for text, for example cut-and-paste, or a webpage (HTML handles text but not binary).
     */
     let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
-    //const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
     const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
+
     const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
     return publicKey;
 }
 
-
+/**
+ * Read the saved (encrypted) armored private PGP key of the user, decrypt it with the stored
+ * passphrase and return the unarmored and decrypted parsed key object.
+ *
+ * @param  {Object} accountInfo
+ * @param  {String} appPath
+ * @return {Object} 
+ */
 Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, appPath){
     /*
         Key 'armoring' is not encryption. Encryption prevents unauthorized use of data (formally, provides 
@@ -313,20 +343,79 @@ Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, a
     return privateKey;
 }
 
-
-Encrypt.testPrivateKeyPassphrase = async function(privateKeyEncryptedAndArmored, unencryptedPassphrase){
+/**
+ * Test if the specified private key can be decrypted and parsed (using the specified passphrase).
+ * Also check if the private key is indeed the user's by checking the emailAddress that was used
+ * when creating it.
+ *
+ * @param  {String} privateKeyEncryptedAndArmored
+ * @param  {String} unencryptedPassphrase
+ * @param  {String} userEmailAddress
+ * @return {Boolean} 
+ */
+Encrypt.testPrivateKey = async function(privateKeyEncryptedAndArmored, unencryptedPassphrase, userEmailAddress){
     let privateKeyDecryptedUnarmored;
+    let keyBelongsToUser = false;
+
     try {
         privateKeyDecryptedUnarmored = await openpgp.decryptKey({
             privateKey: await openpgp.readKey({ armoredKey: privateKeyEncryptedAndArmored }),
             passphrase: unencryptedPassphrase
         });
-        if (privateKeyDecryptedUnarmored) return true;
+
+        if (privateKeyDecryptedUnarmored) {
+            // Confirm that the imported key belongs to the specific user (email address).
+            try {
+                let keyEmailAddress = privateKeyDecryptedUnarmored.users[0].userID.email;
+                if (keyEmailAddress === userEmailAddress){
+                    keyBelongsToUser = true;
+                }
+            } catch (error) {
+                console.error(error);
+            }
+
+            if (keyBelongsToUser) return true;
+            else return false;
+        }
         else return false;
     } catch (error) {
         console.error(error);
         return false;
     }
+}
+
+
+/**
+* Test if the specified public key can be parsed. Also check if it is indeed the user's by checking the 
+* emailAddress that was used when creating it.
+*
+* @param  {String} publicKeyArmored
+* @param  {String} userEmailAddress
+* @return {Boolean} 
+*/
+Encrypt.testPublicKey = async function (publicKeyArmored, userEmailAddress){
+    try {
+        const publicKeyUnarmored = await openpgp.readKey({ armoredKey: publicKeyArmored });
+        if (publicKeyUnarmored){
+            try {
+                let keyEmailAddress = publicKeyUnarmored.users[0].userID.email;
+                if (keyEmailAddress === userEmailAddress){
+                    return true;
+                }
+                else {
+                    return false;
+                }
+            } catch (error) {
+                console.error(error);
+                return false;
+            }
+        }
+    } catch (error) {
+        console.error(error);
+        return false;
+    }
+    
+ 
 }
 
 

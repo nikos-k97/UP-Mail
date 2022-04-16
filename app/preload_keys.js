@@ -2,17 +2,18 @@
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
 const {contextBridge, ipcRenderer}  = require("electron");
 const {app, BrowserWindow}          = require('@electron/remote');
-const Datastore                    = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
-const Promise                      = require('bluebird');
-const jetpack                      = require('fs-jetpack');
-const materialize                  = require("./helperModules/materialize.min.js");
-const Logger                       = require('./helperModules/logger'); 
-const Header                       = require('./mainModules/Header');
-const Clean                        = require('./mainModules/Clean');
-const Utils                        = require('./mainModules/Utils');
-const ContactsManager              = require('./mainModules/ContactsManager');
-const Encrypt                      = require('./mainModules/Encrypt');
-const FormValidator                = require('./helperModules/formValidator');
+const Datastore                     = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Promise                       = require('bluebird');
+const jetpack                       = require('fs-jetpack');
+const materialize                   = require("./helperModules/materialize.min.js");
+const Logger                        = require('./helperModules/logger'); 
+const Header                        = require('./mainModules/Header');
+const Clean                         = require('./mainModules/Clean');
+const Utils                         = require('./mainModules/Utils');
+const ContactsManager               = require('./mainModules/ContactsManager');
+const Encrypt                       = require('./mainModules/Encrypt');
+const FormValidator                 = require('./helperModules/formValidator');
+const https                         = require('https');
 
 
 const appDir = jetpack.cwd(app.getAppPath());
@@ -120,6 +121,7 @@ contextBridge.exposeInMainWorld(
                         if (importedKey.includes('PUBLIC')){
                             // Hide the import button after a successfull key import.
                             e.target.outerHTML = '';
+
                             // Show the imported key as a span instead of the import button.
                             let keyInsertedSpan = form.querySelector('#key-inserted');
                             keyInsertedSpan.textContent = publicKeyPath;
@@ -152,11 +154,21 @@ contextBridge.exposeInMainWorld(
                         let emailExistsInDB = await contactsManager.loadContact(email);
                         // If the email exists in DB then we dont add the contact again.
                         if (!emailExistsInDB){
+
+                            // Test if the email specified inside the public key is indeed the contact's email.
                             key = Clean.cleanForm(key);
-                            addNewContactButton.disabled = false;
-                            form.outerHTML = '';
-                            await contactsManager.saveContact(email,name,key);
-                            showContacts(onlyAdd = {'email':email, 'name':name, 'key':key});
+                            let importedKey = Clean.cleanForm(jetpack.read(key));
+                            let keyBelongsToUser = await Encrypt.testPublicKey(importedKey, email);
+
+                            if (keyBelongsToUser){
+                                addNewContactButton.disabled = false;
+                                form.outerHTML = '';
+                                await contactsManager.saveContact(email,name,key);
+                                showContacts(onlyAdd = {'email':email, 'name':name, 'key':key});
+                            }
+                            else {
+                                materialize.toast({html: 'This public key does not belong to the email entered.', displayLength : 1200, classes: 'rounded'});
+                            }
                         }
                         else {
                             materialize.toast({html: 'This email is already one of your contacts!', displayLength : 1200, classes: 'rounded'});
@@ -363,8 +375,8 @@ contextBridge.exposeInMainWorld(
                 form.querySelector('.ok').addEventListener('click', async (e) => {
                     // Perform validation and escaping to the input data. Passphrase must exist,
                     // but we dont check it's strength.
-                    let publicKey = form.querySelector('#public-key-inserted').textContent;
-                    let privateKey = form.querySelector('#private-key-inserted').textContent;
+                    let publicKey = Clean.cleanForm(form.querySelector('#public-key-inserted').textContent);
+                    let privateKey = Clean.cleanForm(form.querySelector('#private-key-inserted').textContent);
                     let isPublicKeyPresent = true;
                     let isPrivateKeyPresent = true;
                     if ( ! publicKey || publicKey === '')  isPublicKeyPresent = false;
@@ -376,6 +388,7 @@ contextBridge.exposeInMainWorld(
                         const accountInfo = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
                         materialize.toast({html: 'Saving the imported PGP keypair...', displayLength : 1400, classes: 'rounded'});
                         try {
+                            // Read and check the keys, check if the passphrase is correct, and save them in the keys directory.
                             let success = await Encrypt.importPGPKeyPair(passphrase, publicKey, privateKey, accountInfo, app.getPath('userData'));
                             if (success) {
                                 materialize.toast({html: 'Key pair was imported successfully.', displayLength : 1400, classes: 'rounded'});
@@ -387,7 +400,7 @@ contextBridge.exposeInMainWorld(
                                 await showPersonalKeyPair();
                             }
                             else {
-                                materialize.toast({html: 'Provided passphrase is not correct!', displayLength : 1400, classes: 'rounded'});
+                                materialize.toast({html: 'Error: You are not either not the owner of one (or both) the keys, or the passphrase is wrong!', displayLength : 2400, classes: 'rounded'});
                             }
                         } catch (error) {
                             materialize.toast({html: 'An error occurred while generating the PGP keypair.', displayLength : 1400, classes: 'rounded'});
