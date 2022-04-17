@@ -1342,6 +1342,10 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let emailHeaders = await this.mailStore.loadEmail(uid, accountInfo.user);
   let path = emailHeaders.folder;
 
+  // 'emailContent' variable contents will change over the course of the function, so we store a copy of the original values.
+  let emailContentOriginal = {};
+  emailContentOriginal = Object.assign(emailContentOriginal, emailContent);
+
   // The mail content is not yet stored in the database. Fetch it with the help of IMAP Client.
   if (typeof emailContent === 'undefined') {
     selectedItemWrapper.innerHTML = 'Loading email body ...';
@@ -1398,70 +1402,109 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let signatureState = 'Message was not signed by its sender';
   let decryptedEncapsulatedMIMEMessage;
 
-  if (emailContent.attachments ){
-    for (let j = 0; j < emailContent.attachments.length; j++){
-      if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
+  /*
+    Check if the message was encrypted in PGP/MIME format.
+    OpenPGP encrypted data is denoted by the "multipart/encrypted" content type, and MUST have a "protocol" 
+    parameter value of "application/pgp-encrypted". The value of the parameter MUST be enclosed in quotes.
+  */
+  for (let i = 0; i < emailContent.headers.length; i++){
+    let headerName = emailContent.headers[i].name;
+    if (headerName === 'content-type') {
+      if (emailContent.headers[i].value && emailContent.headers[i].value.value && 
+          emailContent.headers[i].value.value === 'multipart/encrypted' && 
+          emailContent.headers[i].value.params && emailContent.headers[i].value.params.protocol &&
+          emailContent.headers[i].value.params.protocol === 'application/pgp-encrypted'){
         wasMessageEncrypted = true;
-        try {
-          let src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j]['filename']}`;
-          
-          // If the encypted data has not been previously fetched, fetch it from inside the inline attachment.
-          if (!jetpack.inspect(src) ) {
-            await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+        break;
+      }
+
+      
+    }
+  }
+
+  if (emailContent.attachments && wasMessageEncrypted){
+    /*
+      The multipart/encrypted MIME body MUST consist of exactly two body parts, the first with content type 
+      "application/pgp-encrypted". This body contains the control information. A message complying with this
+      standard MUST contain a "Version: 1" field in this body.  Since the OpenPGP packet format contains all 
+      other information necessary for decrypting, no other information is required here.
+      The second MIME body part MUST contain the actual encrypted data. It MUST be labeled with a content type 
+      of "application/octet-stream".
+    */
+    let numberOfPGPEncryptedParts = 0;
+    let numberOfOctetStreamParts = 0;
+    for (let j = 0; j < emailContent.attachments.length; j++){
+      if (emailContent.attachments[j]['contentType'] === "application/pgp-encrypted"){
+        numberOfPGPEncryptedParts++;
+      }
+      if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
+        numberOfOctetStreamParts++;
+      }
+    }
+    if (numberOfOctetStreamParts === 1 && numberOfPGPEncryptedParts === 1){
+      for (let j = 0; j < emailContent.attachments.length; j++){
+        if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
+          try {
+            let src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j]['filename']}`;
+            
+            // If the encypted data has not been previously fetched, fetch it from inside the inline attachment.
+            if (!jetpack.inspect(src) ) {
+              await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+            }
+  
+            // Now we have the encrypted data as file on disk. Prepare from decryption.
+            let readPromise = jetpack.readAsync(src);
+            let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
+  
+            // this.stateManager.contactsManager.db was loaded before keys.js inserted the contact,
+            // so basically we reload the database
+            this.contactsManager = new ContactsManager(this.app, this.utils);
+            await this.contactsManager.createContactsDB(accountInfo.user);
+            let senderInfo = await this.contactsManager.loadContact(senderEmail);
+  
+            let senderPublicKey ;
+            if (senderInfo){
+              senderPublicKey = await jetpack.readAsync(senderInfo.publicKey);
+            }
+            let encryptedData = await readPromise;
+            
+            // Get the decrypted data (new MIME message to be parsed) and the signatureState.
+            let decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
+            materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+            decryptedEncapsulatedMIMEMessage = decryptionResults[0];
+            let signatureVerified = await decryptionResults[1] || '';
+            if (signatureVerified === true) signatureState = 'Signature Verified';
+            else if (signatureVerified === false) signatureState = 'Signature Not Verified';
+            // Only encryption
+            else if (signatureVerified === '') signatureState = 'Message was not signed by its sender';
+  
+            /*
+              This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
+              The one contains control data (content-type='application/pgp-encrypted) and the other the actual encrypted
+              data (content-type='application/octet-stream). The real message is inside the second attachment.
+              So the 'new' message is now the attachment itself. So we parse the message as an attachment and we extract
+              its MIME format, like we did with non encrypted messages from the server.
+            */
+            // Parse the new MIME message, and get the headers, body and attachments of the encapsulated MIME message.
+            let parsedDecryptedMessage = await this.imapClient.parsePGPMIMEMessage(decryptedEncapsulatedMIMEMessage);
+            encapsulatedMIMEData.push(parsedDecryptedMessage.data);
+            encapsulatedMIMEAttachments = parsedDecryptedMessage.attachments;
+            for (const [name, value] of parsedDecryptedMessage.headers) {
+              // Construct an array of headers instead of using the Map object.
+              encapsulatedMIMEHeaders.push({ name, value });
+            }
+            // Append the headers inside the body.
+            encapsulatedMIMEData.headers = encapsulatedMIMEHeaders;
+   
+  
+          } catch (error) {
+            // If for some reason (for example we dont posses the right private key for the decryption) the decryption
+            // and the construction of the real MIME message failed, we show an error and inform the user that this was
+            // an encrypted message that could not be decrypted.
+            this.logger.error(error);
+            materialize.toast({html: 'Message could not be decrypted.', displayLength : 1400, classes: 'rounded'});
+            encapsulatedMIMEData.push({'html': `<br><br><hr>This email contains <strong>encypted data</strong>. It can be decrypted only if the app has access to the right private key.<hr><br><br>` });
           }
-
-          // Now we have the encrypted data as file on disk. Prepare from decryption.
-          let readPromise = jetpack.readAsync(src);
-          let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
-
-          // this.stateManager.contactsManager.db was loaded before keys.js inserted the contact,
-          // so basically we reload the database
-          this.contactsManager = new ContactsManager(this.app, this.utils);
-          await this.contactsManager.createContactsDB(accountInfo.user);
-          let senderInfo = await this.contactsManager.loadContact(senderEmail);
-
-          let senderPublicKey ;
-          if (senderInfo){
-            senderPublicKey = await jetpack.readAsync(senderInfo.publicKey);
-          }
-          let encryptedData = await readPromise;
-          
-          // Get the decrypted data (new MIME message to be parsed) and the signatureState.
-          let decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
-          materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
-          decryptedEncapsulatedMIMEMessage = decryptionResults[0];
-          let signatureVerified = await decryptionResults[1] || '';
-          if (signatureVerified === true) signatureState = 'Signature Verified';
-          else if (signatureVerified === false) signatureState = 'Signature Not Verified';
-          // Only encryption
-          else if (signatureVerified === '') signatureState = 'Message was not signed by its sender';
-
-          /*
-            This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
-            The one contains control data (content-type='application/pgp-encrypted) and the other the actual encrypted
-            data (content-type='application/octet-stream). The real message is inside the second attachment.
-            So the 'new' message is now the attachment itself. So we parse the message as an attachment and we extract
-            its MIME format, like we did with non encrypted messages from the server.
-          */
-          // Parse the new MIME message, and get the headers, body and attachments of the encapsulated MIME message.
-          let parsedDecryptedMessage = await this.imapClient.parsePGPMIMEMessage(decryptedEncapsulatedMIMEMessage);
-          encapsulatedMIMEData.push(parsedDecryptedMessage.data);
-          encapsulatedMIMEAttachments = parsedDecryptedMessage.attachments;
-          for (const [name, value] of parsedDecryptedMessage.headers) {
-            // Construct an array of headers instead of using the Map object.
-            encapsulatedMIMEHeaders.push({ name, value });
-          }
-          // Append the headers inside the body.
-          encapsulatedMIMEData.headers = encapsulatedMIMEHeaders;
- 
-
-        } catch (error) {
-          // If for some reason (for example we dont posses the right private key for the decryption) the decryption
-          // and the construction of the real MIME message failed, we show an error and inform the user that this was
-          // an encrypted message that could not be decrypted.
-          this.logger.error(error);
-          materialize.toast({html: 'Message could not be decrypted.', displayLength : 1400, classes: 'rounded'});
-          encapsulatedMIMEData.push({'html': `<br><br><hr>This email contains <strong>encypted data</strong>. It can be decrypted only if the app has access to the right private key.<hr><br><br>` });
         }
       }
     }
@@ -1471,9 +1514,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     Usually when an email is encrypted in the PGP/MIME format, it does not contain any original text or html.
     The real data is only inside the encrypted attachment. So if the above procedure was successfull in retrieving
     the encapsulated MIME body and attachments, we inject the encapsulated message body to the body of the original
-    email (emailContent) before rendering it. However if for some reason the original email body did have
-    text or html, we simply append the encapsulated content we found inside the attachment to the previous
-    content that the email already had. If no PGP encrypted data is found, the email body stays as it is.
+    email (emailContent) before rendering it. However if for some reason the original email body also contained
+    unencrypted content, due to the EFAIL vulnerability, the unencrypted content is discarded.
   */
   if (!emailContent.html) {
     if (encapsulatedMIMEData.length > 0){
@@ -1485,8 +1527,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     }
   }
   else {
+    // Discard the previous content.
     for (let j = 0; j < encapsulatedMIMEData.length; j++){
-      emailContent.html = emailContent.html + (encapsulatedMIMEData[j].html || encapsulatedMIMEData[j].textAsHtml || encapsulatedMIMEData[j].text);
+      if (emailContent.text) emailContent.text = null;
+      if (emailContent.textAsHtml) emailContent.textAsHtml = null;
+      emailContent.html = null;
+      emailContent.html = encapsulatedMIMEData[j].html || encapsulatedMIMEData[j].textAsHtml || encapsulatedMIMEData[j].text;
     }
   }
 
