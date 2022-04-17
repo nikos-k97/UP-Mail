@@ -1393,14 +1393,35 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     The decrypted data IS NOT stored in the disk. (Mailstore only contains the .asc file)
     ------------------------------------------------------------------------------------------------------------
   */
+  let wasMessageEncrypted = false;      // Will become true is the email is detected to be encrypted with PGP/MIME.
+  let encryptedEncapsulatedMIMEMessage; // If message is encrypted, this is the whole encrypted message before parsing.
+  let decryptedEncapsulatedMIMEMessage; // If the message was decrypted successfully, this is the whole decrypted message before parsing.
 
-  // Check emailContent (original email body) for PGP attachments (PGP/MIME).
+  // The following three variables will get populated once the decryptedEncapsulatedMIMEMessage is parsed.
   let encapsulatedMIMEData = [];
   let encapsulatedMIMEAttachments ;
   let encapsulatedMIMEHeaders = [];
-  let wasMessageEncrypted = false;
+
+  // Needed for signature verification (if the message is signed).
+  let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
+  // 'this.stateManager.contactsManager.db' was loaded before keys.js inserted the contact, so basically we reload the database
+  this.contactsManager = new ContactsManager(this.app, this.utils);
+  await this.contactsManager.createContactsDB(accountInfo.user);
+  let senderInfo = await this.contactsManager.loadContact(senderEmail);
+  let senderPublicKey ;
+  if (senderInfo){
+    senderPublicKey = await jetpack.readAsync(senderInfo.publicKey);
+  }
+
+
   let signatureState = 'Message was not signed by its sender';
-  let decryptedEncapsulatedMIMEMessage;
+  // .....
+  // let signatureVerified = await decryptionResults[1] || '';
+            // if (signatureVerified === true) signatureState = 'Signature Verified';
+            // else if (signatureVerified === false) signatureState = 'Signature Not Verified';
+            // // Only encryption
+            // else if (signatureVerified === '') signatureState = 'Message was not signed by its sender';
+
 
   /*
     Check if the message was encrypted in PGP/MIME format.
@@ -1417,8 +1438,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         wasMessageEncrypted = true;
         break;
       }
-
-      
     }
   }
 
@@ -1454,29 +1473,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   
             // Now we have the encrypted data as file on disk. Prepare from decryption.
             let readPromise = jetpack.readAsync(src);
-            let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
-  
-            // this.stateManager.contactsManager.db was loaded before keys.js inserted the contact,
-            // so basically we reload the database
-            this.contactsManager = new ContactsManager(this.app, this.utils);
-            await this.contactsManager.createContactsDB(accountInfo.user);
-            let senderInfo = await this.contactsManager.loadContact(senderEmail);
-  
-            let senderPublicKey ;
-            if (senderInfo){
-              senderPublicKey = await jetpack.readAsync(senderInfo.publicKey);
-            }
             let encryptedData = await readPromise;
             
-            // Get the decrypted data (new MIME message to be parsed) and the signatureState.
-            let decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
+            // Get the decrypted data (new MIME message to be parsed).
+            let decryptionResults = await Encrypt.openPGPDecrypt(encryptedData, accountInfo, this.app.getPath('userData'));
             materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
-            decryptedEncapsulatedMIMEMessage = decryptionResults[0];
-            let signatureVerified = await decryptionResults[1] || '';
-            if (signatureVerified === true) signatureState = 'Signature Verified';
-            else if (signatureVerified === false) signatureState = 'Signature Not Verified';
-            // Only encryption
-            else if (signatureVerified === '') signatureState = 'Message was not signed by its sender';
+            decryptedEncapsulatedMIMEMessage = decryptionResults;
   
             /*
               This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
@@ -1493,10 +1495,55 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
               // Construct an array of headers instead of using the Map object.
               encapsulatedMIMEHeaders.push({ name, value });
             }
-            // Append the headers inside the body.
-            encapsulatedMIMEData.headers = encapsulatedMIMEHeaders;
-   
-  
+        
+            // ----------------------------- Check for PGP signature ----------------------------------------
+            /*
+              If the parsedDecryptedMessage's 'content-type' header is 'multipart/signed', then we are sure
+              that the encapsulated MIME message (immediately after the decryption and before any parsing) is
+              signed with the sender's private key according to RFC 3156. So we need to posses the sender's 
+              public key in order to verify the signature. The signature can either be detached (in an attachment)
+              inside the encrypted body (two 'files', the signature and the original unchanged document), either
+              the whole message can be signed (original document including the signature - the document itself is 
+              signed). In the second case the 'content-type' header is probably not 'multipart/signed'.
+
+              > From RFC 3156:  
+                - OpenPGP signed messages are denoted by the "multipart/signed" content type, 
+                with a "protocol" parameter which MUST have a value of "application/pgp-signature" (MUST be quoted).
+                The "micalg" parameter for the "application/pgp-signature" protocol MUST contain exactly one 
+                hash-symbol of the format "pgp-<hash- identifier>", where <hash-identifier> identifies the Message
+                Integrity Check (MIC) algorithm used to generate the signature. 
+                - The multipart/signed body MUST consist of exactly two parts. The first part contains the signed 
+                data in MIME canonical format, including a set of appropriate content headers describing the data.
+                The second body MUST contain the OpenPGP digital signature. It MUST be labeled with a content type 
+                of "application/pgp-signature".
+                - The data is first signed as a multipart/signature body, and then encrypted to form the final
+                multipart/encrypted body.
+            */
+        
+            // --- Detached signature case ---
+            if (encapsulatedMIMEHeaders[0]['name'] === 'content-type'){
+              if (encapsulatedMIMEHeaders[0]['value'].value === 'multipart/signed') {
+                let detachedSignature = await this.imapClient.fetchPGPSignature(encapsulatedMIMEAttachments, decryptedEncapsulatedMIMEMessage, this.utils.stripStringOfNonNumericValues(uid), path);
+                if (detachedSignature) {
+                  // We found the signature, so now IF we have the necessary public key, we can verify the content.
+                  if (senderPublicKey){
+                    // Get the non parsed encapsulated MIME message without the signature.
+                    let messageBoundary = encapsulatedMIMEHeaders[0].value.params.boundary;
+                    let originalMessage = Encrypt.prepareMessageForDetachedVerification(decryptedEncapsulatedMIMEMessage, messageBoundary);
+                    let verified = await Encrypt.openPGPVerifyDetachedSignature(originalMessage, senderPublicKey, detachedSignature);
+                    if (verified){
+                      // Say it was verified
+                    }
+                    else {
+                      // Say it was not verified
+                    }
+                  }
+                  else {
+                    // Say we dont have the public key
+                  }
+                }
+              }
+            }
           } catch (error) {
             // If for some reason (for example we dont posses the right private key for the decryption) the decryption
             // and the construction of the real MIME message failed, we show an error and inform the user that this was
@@ -1575,6 +1622,19 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       }
     }
   }
+
+  // Put the encapsulated message's headers inside the emailContent.
+  if (encapsulatedMIMEHeaders && encapsulatedMIMEHeaders.length){
+    emailContent.internalMIMEHeaders = encapsulatedMIMEHeaders[0];
+  }
+
+  // if (emailContent.internalMIMEHeaders['name'] === 'content-type'){
+  //   if (emailContent.internalMIMEHeaders['value'].value === 'multipart/signed') {
+      
+  //   }
+  // }
+
+
 
   /*
     --- CHANGE 'cid' OF INLINE ATTACHMENTS ---
@@ -1916,7 +1976,10 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   if (emailContent.attachments && emailContent.attachments.length){
     for (let k=0; k<emailContent.attachments.length; k++){
       if (emailContent.attachments[k]['contentDisposition'] === 'attachment'){
-        attachmentsToShow.push(emailContent.attachments[k]);
+        // Dont show detached PGP signatures as downloadable attachments
+        if (emailContent.attachments[k]['contentType'] !== "application/pgp-signature"){
+          attachmentsToShow.push(emailContent.attachments[k]);
+        }
       }
     }
   }

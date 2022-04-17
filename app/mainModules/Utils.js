@@ -49,6 +49,25 @@ Utils.prototype.stripStringOfNonNumericValues = function (str) {
 }
 
 
+Utils.findSubstringPositionsInString = function (string , substring){
+  let i = true;
+  let startingIndex = 0;
+  let positions = [];
+  while (i){
+    let index = string.indexOf(substring, startingIndex);
+    if (index && index !== -1) {
+      startingIndex = index + substring.length;
+      positions.push(index);
+    }
+    else i = false;
+  } 
+  return positions;
+}
+
+Utils.removeLinebreaks = function(str) {
+  return str.replace( /[\r\n]+/gm, "" );
+}
+
 /**
  * Tests whether the setup has been completed.
  *

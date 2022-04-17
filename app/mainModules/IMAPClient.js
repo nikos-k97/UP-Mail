@@ -847,6 +847,84 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, ipcRendere
   return true;
 }
 
+
+IMAPClient.prototype.fetchPGPSignature = async function (attachments, sourceMIMENode, uid, path){
+  let parsedAttachments = attachments;
+
+  let user = this.client._config.user;
+  let hash = user.includes('@') ? this.utils.md5(user) : user;
+  let appPath = this.app.getPath('userData');
+  let md5 = this.utils.md5;
+
+  for (let i = 0; i < parsedAttachments.length; i++) {
+    let attachment = parsedAttachments[i];
+
+    // We fetch only the attachments that are supposed to be inline (inside the HTML body of the MIME Node).
+    if (attachment['contentDisposition'] !== 'attachment'){
+      continue;
+    }
+
+    if (attachment['contentType'] === "application/pgp-signature"){
+      // Filename to create.
+      let filename = attachment.filename;
+      this.logger.log(`Fetching attachment: ${attachment.filename}`);
+
+      // The uid used here is the uid from the server, so since we locally use a combination
+      // of folder and uid, we need to store it with the folderUid format.
+      let hashuid = md5(`${path}${uid}`);
+
+      const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
+      fs.dir(`${hashuid}`);
+      let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+      console.log('Streaming this attachment to file', filename);
+
+      // Create stream from the MIMEsource.
+      const mimeStream = new Readable();
+      mimeStream.push(sourceMIMENode);
+      mimeStream.push(null);
+
+      let parser = new MailParser();
+      let parsePromise = new Promise(
+        (resolve, reject) => {
+          mimeStream.pipe(parser)
+          .on('data', (data) => {        
+            if (data.type === 'attachment'){
+              // The mimeStream will find all attachments, we only want to fetch the one specified in this iteration.
+              if (data.filename === filename){
+                data.content.pipe(writeStream);
+                delete data.content; 
+                data.release();
+              }
+              else {
+                delete data.content; 
+                data.release();
+              }
+            }
+          })
+          .on('error', reject)
+          .once('end', resolve)
+        }
+      );
+
+      writeStream.once('finish', function() {
+        console.log('Done writing to file %s', filename);
+        writeStream.destroy();
+      });
+
+      parser = null;
+    
+      try {
+        await parsePromise;
+        return await fs.readAsync(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+      } catch (error) {
+        this.logger.error(error);
+        return null;
+      }
+    }
+  }   
+}
+
+
 IMAPClient.prototype.fetchPGPMIMEAttachments = async function (emailContent, sourceMIMENode, ipcRenderer){
   let parsedAttachments = emailContent.attachments;
   let attachmentHeaders = emailContent.attachmentHeaders;

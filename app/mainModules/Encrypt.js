@@ -419,58 +419,121 @@ Encrypt.testPublicKey = async function (publicKeyArmored, userEmailAddress){
 }
 
 
-Encrypt.openPGPEncrypt = async function (plaintextMessage, receipientPublicKey, accountInfo, appPath){
-    const encrypted = await openpgp.encrypt({
-        message: await openpgp.createMessage({ text: plaintextMessage }), // input as Message object
-        encryptionKeys: receipientPublicKey,
+Encrypt.prepareMessageForDetachedVerification = function (decryptedMessage, multiPartSignedBoundary){
+    let boundaryIndexes = Utils.findSubstringPositionsInString(decryptedMessage, multiPartSignedBoundary);
 
-    });
+    // Keep only the string part begining after the first boundary (we do not want the multipart/signed part) 
+    // until the part before the detached PGP signature begins.
+    let startingBoundary = boundaryIndexes[1] + multiPartSignedBoundary.length; // First time that the boundary appears
+    let endingBoundary = boundaryIndexes[boundaryIndexes.length - 2];   // (Last time - 1) that the boundary appears 
+    let originalMessage = decryptedMessage.slice(0, endingBoundary);
+    originalMessage = originalMessage.slice(startingBoundary, originalMessage.length - 2); // length - 2 : Remove the last two '--' after the ending boundary
+ 
+    // Remove not wanted linebreaks.
+    let textArray = originalMessage.split(/^/gm); // ^ : Split the message string at the line breaks (\n).
+    if (textArray[0] === "\n") textArray.splice(0, 1); // Remove possible linebreak in the first line of the 'originalMessage'
+    if (textArray[textArray.length - 1] === "\n") textArray.splice(textArray.length - 1, 1); // Remove possible linebreak at the last line (a line that only contains a linebreak).
+    textArray[textArray.length - 1] = Utils.removeLinebreaks(textArray[textArray.length - 1]); // Remove all linebreaks in the last line (after the boundary it is possible that a linebreak remains causing the whole message to appear as it had an empty line at the end)
+    
+    // Construct the original break again, after removing the unwanted linebreaks.
+    originalMessage = textArray.join('');
+    textArray = null;
+    
+    /*
+        RFC 3156: 
+        Upon receipt of a signed message, an application MUST:
+        (1) :  Convert line endings to the canonical <CR><LF> sequence before the signature can be verified.
+               This is necessary since the local MTA may have converted to a local end of line convention.
+        (2) :  Pass both the signed data and its associated content header along with the OpenPGP signature to 
+               the signature verification service.
+    */
+    let originalMessageCanonical = originalMessage.replace(/\n/g, "\r\n");
+
+
+    /*
+        RFC 3156: 
+        The accepted OpenPGP convention is for signed data to end with a <CR><LF> sequence. Note that the <CR><LF> 
+        sequence immediately preceding a MIME boundary delimiter line is considered to be part of the delimiter. 
+        Thus, it is not part of the signed data preceding the delimiter line. An implementation which elects to 
+        adhere to the OpenPGP convention has to make sure it inserts a <CR><LF> pair on the last line of the data 
+        to be signed and transmitted (signed message and transmitted message MUST be identical).
+    */
+    originalMessageCanonical = originalMessageCanonical + '\r\n';
+    return originalMessageCanonical;
 }
 
-Encrypt.openPGPEncryptAndSign = async function (plaintextMessage, receipientPublicKey, accountInfo, appPath){
-    let privateKey = await Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor(accountInfo, appPath);
 
-    const encrypted = await openpgp.encrypt({
-        message: await openpgp.createMessage({ text: plaintextMessage }), // input as Message object
-        encryptionKeys: receipientPublicKey,
-        signingKeys: privateKey // optional
-    });
-}
-
-
-Encrypt.openPGPDecryptAndVerify = async function(encyptedMessage, senderPublicKey, accountInfo, appPath){
-    const privateKeyUnarmored = await Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor(accountInfo, appPath);
-    const publicKeyUnarmored = await openpgp.readKey({ armoredKey: senderPublicKey });
-
-    const message = await openpgp.readMessage({
-        armoredMessage: encyptedMessage // parse armored message
-    });
-
-
-    if (senderPublicKey){
-        const { data: decrypted, signatures } = await openpgp.decrypt({
-            message,
-            verificationKeys: publicKeyUnarmored, // optional
-            decryptionKeys: privateKeyUnarmored
+Encrypt.openPGPVerifyNonDetachedSignature = async function(cleartextMessage, senderPublicKey){
+    try {
+        const signedMessage = await openpgp.readCleartextMessage({
+            cleartextMessage : cleartextMessage // parse armored message
         });
-       
-
-        // check signature validity (signed messages only)
+    
+        const verificationResult = await openpgp.verify({
+            message: signedMessage,
+            verificationKeys: senderPublicKey
+        });
+    
+        const { verified, keyID } = verificationResult.signatures[0];
+    
         try {
-            await signatures[0].verified; // throws on invalid signature
-            console.log('Signature is valid');
-            return [decrypted, signatures[0].verified]
+            await verified; // throws on invalid signature
+            console.log('Signed by Key ID : ' + keyID.toHex());
         } catch (e) {
             throw new Error('Signature could not be verified: ' + e.message);
         }
+    } catch (error) {
+        console.error(error);
     }
-    else {
+}
+
+
+Encrypt.openPGPVerifyDetachedSignature = async function(cleartextMessage, senderPublicKey, detachedSignature){
+    try {
+        const message = await openpgp.createMessage({ text: cleartextMessage });
+   
+        const signature = await openpgp.readSignature({
+            armoredSignature: detachedSignature // parse detached signature
+        });
+    
+        const publicKeyUnarmored = await openpgp.readKey({ armoredKey: senderPublicKey });
+ 
+        const verificationResult = await openpgp.verify({
+            message, // Message object
+            signature,
+            verificationKeys: publicKeyUnarmored
+        });
+    
+        const { verified, keyID } = verificationResult.signatures[0];
+        
+        try {
+            await verified; // throws on invalid signature
+            console.log('Signed by Key ID : ' + keyID.toHex());
+        } catch (e) {
+            throw new Error('Signature could not be verified: ' + e.message);
+        } 
+    } catch (error) {
+        console.error(error)
+    }
+}
+
+
+Encrypt.openPGPDecrypt = async function(encyptedMessage, accountInfo, appPath){
+    try {
+        const privateKeyUnarmored = await Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor(accountInfo, appPath);
+
+        const message = await openpgp.readMessage({
+            armoredMessage: encyptedMessage // parse armored message
+        });
+    
         const { data: decrypted} = await openpgp.decrypt({
             message,
             decryptionKeys: privateKeyUnarmored
         });
-
+    
         return decrypted;
+    } catch (error) {
+        console.error(error);
     }
 }
 
