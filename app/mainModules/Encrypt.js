@@ -290,11 +290,16 @@ Encrypt.getOwnPublicKeyWithoutArmor = async function (accountInfo, appPath){
         do handle binary data and this is rarely needed, but armoring still can be useful if you want to process 
         the data using tools designed for text, for example cut-and-paste, or a webpage (HTML handles text but not binary).
     */
-    let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
-    const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
+   try {
+        let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+        const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
 
-    const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
-    return publicKey;
+        const publicKey = await openpgp.readKey({ armoredKey: publicKeyArmored });
+        return publicKey;
+   } catch (error) {
+       console.error(error);
+   }
+
 }
 
 /**
@@ -320,27 +325,31 @@ Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, a
         do handle binary data and this is rarely needed, but armoring still can be useful if you want to process 
         the data using tools designed for text, for example cut-and-paste, or a webpage (HTML handles text but not binary).
     */
-    let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+   try {
+        let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
 
-    const privateKeyArmored = await fs.readAsync(`${accountInfo.user}-private.asc`);
-    const encryptedPassphraseKey = await fs.readAsync(`getPass.txt`);
+        const privateKeyArmored = await fs.readAsync(`${accountInfo.user}-private.asc`);
+        const encryptedPassphraseKey = await fs.readAsync(`getPass.txt`);
 
-    // As the passphrase for decrypting the private key, use the passphrase that is stored in 'getPass.txt',
-    // after decrypting it with the scrypt key.
-    let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
-    let decryptedAccountPassword = Encrypt.decryptAES256CBC(scryptKey, accountInfo.password);
-    let decryptedPassphraseKey = Encrypt.decryptAES256CBC(decryptedAccountPassword, encryptedPassphraseKey);
-    
-    let privateKey;
-    try {
-        privateKey = await openpgp.decryptKey({
-            privateKey: await openpgp.readKey({ armoredKey: privateKeyArmored }),
-            passphrase: decryptedPassphraseKey
-        });
-    } catch (error) {
+        // As the passphrase for decrypting the private key, use the passphrase that is stored in 'getPass.txt',
+        // after decrypting it with the scrypt key.
+        let scryptKey = (await Encrypt.keyDerivationFunction(accountInfo)).toString();
+        let decryptedAccountPassword = Encrypt.decryptAES256CBC(scryptKey, accountInfo.password);
+        let decryptedPassphraseKey = Encrypt.decryptAES256CBC(decryptedAccountPassword, encryptedPassphraseKey);
+        
+        let privateKey;
+        try {
+            privateKey = await openpgp.decryptKey({
+                privateKey: await openpgp.readKey({ armoredKey: privateKeyArmored }),
+                passphrase: decryptedPassphraseKey
+            });
+        } catch (error) {
+            console.error(error);
+        }
+        return privateKey; 
+   } catch (error) {
         console.error(error);
-    }
-    return privateKey;
+   }
 }
 
 /**
@@ -419,22 +428,28 @@ Encrypt.testPublicKey = async function (publicKeyArmored, userEmailAddress){
 }
 
 
-Encrypt.prepareMessageForDetachedVerification = function (decryptedMessage, multiPartSignedBoundary){
+Encrypt.prepareMessageForDetachedVerification = function (decryptedMessage, multiPartSignedBoundary, onlySignedMessage){
     let boundaryIndexes = Utils.findSubstringPositionsInString(decryptedMessage, multiPartSignedBoundary);
 
     // Keep only the string part begining after the first boundary (we do not want the multipart/signed part) 
     // until the part before the detached PGP signature begins.
+    // We use 'boundaryIndexes[1]' and not 'boundaryIndexes[0]' since the first time the boundary is found is inside the headers.
     let startingBoundary = boundaryIndexes[1] + multiPartSignedBoundary.length; // First time that the boundary appears
     let endingBoundary = boundaryIndexes[boundaryIndexes.length - 2];   // (Last time - 1) that the boundary appears 
     let originalMessage = decryptedMessage.slice(0, endingBoundary);
     originalMessage = originalMessage.slice(startingBoundary, originalMessage.length - 2); // length - 2 : Remove the last two '--' after the ending boundary
- 
+
+    // Convert canonical UNIX linebreaks (CR LF - \r\n) into local linebreaks (\n) in order to use split().
+    // If the message source is the client itself then the linebreaks will usually be in canonical format. If the
+    // message is source is the decrypted PGP attachment, the linebreaks will be in local format by default.
+    originalMessage = originalMessage.replace(/\r\n/g, "\n");
+
     // Remove not wanted linebreaks.
     let textArray = originalMessage.split(/^/gm); // ^ : Split the message string at the line breaks (\n).
     if (textArray[0] === "\n") textArray.splice(0, 1); // Remove possible linebreak in the first line of the 'originalMessage'
     if (textArray[textArray.length - 1] === "\n") textArray.splice(textArray.length - 1, 1); // Remove possible linebreak at the last line (a line that only contains a linebreak).
     textArray[textArray.length - 1] = Utils.removeLinebreaks(textArray[textArray.length - 1]); // Remove all linebreaks in the last line (after the boundary it is possible that a linebreak remains causing the whole message to appear as it had an empty line at the end)
-    
+
     // Construct the original break again, after removing the unwanted linebreaks.
     originalMessage = textArray.join('');
     textArray = null;
@@ -447,8 +462,8 @@ Encrypt.prepareMessageForDetachedVerification = function (decryptedMessage, mult
         (2) :  Pass both the signed data and its associated content header along with the OpenPGP signature to 
                the signature verification service.
     */
+    // Revert back to the UNIX canonical format.
     let originalMessageCanonical = originalMessage.replace(/\n/g, "\r\n");
-
 
     /*
         RFC 3156: 
@@ -465,25 +480,29 @@ Encrypt.prepareMessageForDetachedVerification = function (decryptedMessage, mult
 
 Encrypt.openPGPVerifyNonDetachedSignature = async function(cleartextMessage, senderPublicKey){
     try {
-        const signedMessage = await openpgp.readCleartextMessage({
-            cleartextMessage : cleartextMessage // parse armored message
-        });
+   
+        const message = await openpgp.createMessage({ text: cleartextMessage });
+   
+        const publicKeyUnarmored = await openpgp.readKey({ armoredKey: senderPublicKey });
     
         const verificationResult = await openpgp.verify({
-            message: signedMessage,
-            verificationKeys: senderPublicKey
+            message: message,
+            verificationKeys: publicKeyUnarmored
         });
+        console.log(verificationResult)
     
         const { verified, keyID } = verificationResult.signatures[0];
     
         try {
             await verified; // throws on invalid signature
             console.log('Signed by Key ID : ' + keyID.toHex());
+            return 'verified';
         } catch (e) {
             throw new Error('Signature could not be verified: ' + e.message);
         }
     } catch (error) {
         console.error(error);
+        return 'not signed';
     }
 }
 
@@ -509,6 +528,7 @@ Encrypt.openPGPVerifyDetachedSignature = async function(cleartextMessage, sender
         try {
             await verified; // throws on invalid signature
             console.log('Signed by Key ID : ' + keyID.toHex());
+            return true;
         } catch (e) {
             throw new Error('Signature could not be verified: ' + e.message);
         } 
@@ -521,7 +541,7 @@ Encrypt.openPGPVerifyDetachedSignature = async function(cleartextMessage, sender
 Encrypt.openPGPDecrypt = async function(encyptedMessage, accountInfo, appPath){
     try {
         const privateKeyUnarmored = await Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor(accountInfo, appPath);
-
+   
         const message = await openpgp.readMessage({
             armoredMessage: encyptedMessage // parse armored message
         });
@@ -537,6 +557,39 @@ Encrypt.openPGPDecrypt = async function(encyptedMessage, accountInfo, appPath){
     }
 }
 
+
+Encrypt.openPGPDecryptAndVerify = async function(encyptedMessage, senderPublicKey, accountInfo, appPath){
+    try {
+        const privateKeyUnarmored = await Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor(accountInfo, appPath);
+        const publicKeyUnarmored = await openpgp.readKey({ armoredKey: senderPublicKey });
+
+        const message = await openpgp.readMessage({
+            armoredMessage: encyptedMessage // parse armored message
+        });
+    
+        const { data: decrypted, signatures} = await openpgp.decrypt({
+            message,
+            verificationKeys: publicKeyUnarmored,
+            decryptionKeys: privateKeyUnarmored
+        });
+
+        if (signatures && signatures[0]){
+            try {
+                await signatures[0].verified; // throws on invalid signature
+                console.log('Signature is valid');
+                return [decrypted, await signatures[0].verified];
+            } catch (e) {
+                console.error(e);
+                return [decrypted, await signatures[0].verified];
+            }
+        }
+        else {
+            return [decrypted, 'notsigned'];
+        }
+    } catch (error) {
+        console.error(error);
+    }
+}
 
 /**
  * Delete the whole 'keys' directory containing all the user's (Open)PGP key pairs.

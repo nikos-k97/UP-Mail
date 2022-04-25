@@ -487,7 +487,7 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
     */
     fetchObject.on('message', (msg, seqno) => {
       // This 'seqno' is the one stored in the server. Not the one we pass as arguement in the function.
-      let parsePromise, parsedHeaders, parsedData, parsedAttachments = [], attributes;
+      let parsePromise, parsedHeaders, parsedData, parsedAttachments = [], attributes, pureMessageBody;
       /*
         msg (typeof : ImapMessage) -> 'body' event
           body(<ReadableStream> stream, <object> info) - Event emitted for each requested body. 
@@ -635,8 +635,48 @@ IMAPClient.prototype.checkUID = async function (path, readOnly, oldUidValidity, 
 }
 
 
-IMAPClient.prototype.parsePGPMIMEMessage = async function (message){
+IMAPClient.prototype.getRawEmail = async function(path, readOnly, seqno, options){
+  // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
+  if (this.currentPath !== path) {  
+    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
+    try {
+      this.mailbox = await this.openBox(path, readOnly);
+    } catch (error) {
+      this.logger.error(error);
+      return new Promise((resolve,reject) => {
+        reject(error);
+      })
+    }
+  }
 
+  return new Promise(function (resolve, reject) {
+    this.logger.log("Grabbing raw content of: " + `${seqno}.`);
+    
+    let fetchObject = this.client.seq.fetch(`${seqno}`, options); 
+    let rawMessageBody;
+   
+    fetchObject.on('message', (msg, seqno) => {
+      // This 'seqno' is the one stored in the server. Not the one we pass as arguement in the function.
+      msg.on('body', (stream, info) => {
+        rawMessageBody = stream;
+      });
+    });
+
+    fetchObject.once('error', (err) => {
+      this.logger.error(`Fetch error: ${err}`);
+      reject(err);
+    })
+
+   
+    fetchObject.once('end', () => {
+      resolve(rawMessageBody);
+    });
+
+  }.bind(this)) // Bind 'this' to point to the function not the promise.
+}
+
+
+IMAPClient.prototype.parsePGPMIMEMessage = async function (message){
   let parsePromise, parsedHeaders, parsedData, parsedAttachments = [];
 
   const stream = new Readable();
@@ -848,7 +888,7 @@ IMAPClient.prototype.fetchAttachments = async function (content, uid, ipcRendere
 }
 
 
-IMAPClient.prototype.fetchPGPSignature = async function (attachments, sourceMIMENode, uid, path){
+IMAPClient.prototype.fetchPGPSignatureForDecryptedMessage = async function (attachments, sourceMIMENode, uid, path){
   let parsedAttachments = attachments;
 
   let user = this.client._config.user;
@@ -921,8 +961,79 @@ IMAPClient.prototype.fetchPGPSignature = async function (attachments, sourceMIME
         return null;
       }
     }
-  }   
+  } 
+  return null;  
 }
+
+
+IMAPClient.prototype.fetchPGPSignatureForCleartextMessage = async function (attachments, uid, path){
+  let parsedAttachments = attachments;
+
+  let user = this.client._config.user;
+  let hash = user.includes('@') ? this.utils.md5(user) : user;
+  let appPath = this.app.getPath('userData');
+  let md5 = this.utils.md5;
+
+  let signatureToReturn; 
+
+    for (let i = 0; i < parsedAttachments.length; i++) {
+      let attachment = parsedAttachments[i];
+      let filename = attachment.filename;
+  
+      // We fetch only the attachments that are supposed to be inline (inside the HTML body).
+      if (attachment['contentDisposition'] !== 'attachment'){
+        continue;
+      }
+  
+      if (attachment['contentType'] === "application/pgp-signature"){
+        this.logger.log(`Fetching attachment: ${attachment.filename}`);
+  
+        let fetchAttachmentObject = this.client.fetch(`${uid}`, { // We do not use imap.seq.fetch here.
+          bodies: [attachment.partId]
+        }); 
+  
+        // The uid used here is the uid from the server, so since we locally use a combination
+        // of folder and uid, we need to store it with the folderUid format.
+        let hashuid = md5(`${path}${uid}`);
+        const fs = jetpack.cwd(appPath, `mail`,`${hash}`);
+        fs.dir(`${hashuid}`);
+        let writeStream = fs.createWriteStream(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+  
+
+        let fetchAndWritePromise = new Promise ((resolve, reject) => {
+          fetchAttachmentObject.on('message', async (msg) => {
+            msg.on('body', function(stream, info) {
+              //Create a write stream so that we can stream the attachment to file;
+              console.log('Streaming this attachment to file', filename, info);
+              stream.pipe(writeStream);
+            });
+    
+            msg.once('end', function() {
+              console.log('Finished receiving attachment :', filename);
+              writeStream.once('finish', function() {
+                console.log('Done writing to file %s', filename);
+                writeStream.destroy(); 
+                try {
+                  let signature =  jetpack.read(`${appPath}\\mail\\${hash}\\${hashuid}\\${filename}`);
+                  resolve(signature);
+                } catch (error) {
+                  this.logger.error(error);
+                  reject(error);
+                }
+              });
+            });
+          });
+        });
+
+        signatureToReturn = await fetchAndWritePromise;
+      }
+    }
+
+    return signatureToReturn;
+
+}
+
+
 
 
 IMAPClient.prototype.fetchPGPMIMEAttachments = async function (emailContent, sourceMIMENode, ipcRenderer){

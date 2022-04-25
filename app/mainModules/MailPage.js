@@ -60,7 +60,7 @@ MailPage.prototype.initializeIMAP = async function(accountInfo) {
 
 
 MailPage.prototype.checkIMAPStatus = async function (accountInfo) {
-  // Possible client / connection states are: 'connected', 'authenticated', 'disconnected'. 
+  // Possible client / connection states are: 'connected', 'authenticated', 'disconnected'.
   // We always want to be in the 'authenticated' state in order to be able to perform IMAP operations.
   if (this.imapClient.client.state === 'disconnected' || this.imapClient.client.state === 'connected') {
     this.logger.log('Client disconnected. Reconnecting...');
@@ -100,7 +100,7 @@ MailPage.prototype.renderMailPage = async function (reloading) {
     Header.setLoc([accountInfo.user]);
     Header.showTLSBar(this.imapClient.client._sock.encrypted, this.imapClient.client._sock.servername, false);
     document.querySelector('#mail').innerHTML = `
-      <span id="doing"></span> 
+      <span id="doing"></span>
       <span id="number"></span><br>
       <span id="mailboxes"></span>
     `;
@@ -108,7 +108,7 @@ MailPage.prototype.renderMailPage = async function (reloading) {
     // Get the mailboxes info for the particular user (along with potential out of date folder info
     // from previous sessions).
     await this.getFolderInfo(accountInfo, reloading);
-  } 
+  }
 }
 
 
@@ -125,14 +125,14 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   if ( !statusOK ) return;
   let namespaces = await this.imapClient.fetchNamespaces();
   this.logger.debug(`Number of available namespaces that probably contain mailboxes : ${namespaces.prefix.length}`);
- 
+
   // Get mailboxes / folders of all namespaces.
   statusOK = await this.checkIMAPStatus(accountInfo);
   if ( !statusOK ) return;
   document.querySelector('#doing').innerText = 'Grabbing your mailboxes ...';
   let personalBoxes = {};
   // ...
-  
+
   for (let i=0 ; i < namespaces.prefix.length; i++){
     let boxes = JSON.parse(JSON.stringify(await this.imapClient.getBoxes(namespaces.prefix[i]),this.utils.getCircularReplacer()));
     if (namespaces.type[i] === 'personal'){
@@ -145,13 +145,13 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   // let personalBoxesLinear = IMAPClient.linearBoxes(personalBoxes);
   // personalBoxesLinear.reverse();
   // personalBoxesLinear = personalBoxesLinear.filter((n) => { return n != undefined && JSON.stringify(n) != '[]' });
-  
+
   // // Store the new boxes format as a data member in the MailPage 'class'.
   // this.personalBoxesLinear = personalBoxesLinear;
-  
+
   // Merge current folders (information stored in account database for an existing user) with the new folder
   // information we obtained via the IMAP getBoxes() call. Each conficting field is overrided with the new info.
-  /* 
+  /*
     > Structure of the value returned by 'this.utils.removeCircular(personalBoxes)'
       (in other words this is the new folder infromation we obtain from IMAP.getboxes() -> personalBoxes)
       {
@@ -192,7 +192,7 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
       }
   */
 
-  /* 
+  /*
     For new user the 'accountInfo.personalFolders' is undefined (no folder data from previous session).
     For existing user the 'accountInfo.personalFolders' has the old/ potentially out of date folder data.
     We merge the data we just got from 'client.getBoxes()' and the extra folder info from previous session
@@ -204,7 +204,7 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   //personalFolders = merge(personalFolders, this.utils.removeCircular(personalBoxes));
   personalFolders = merge(personalFolders, personalBoxes);
   this.logger.log(`Retrieved all mailboxes from ${accountInfo.user}.`);
-  
+
   // Save all the folders data in the accounts database for the next client session.
   //await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : this.utils.removeCircular(personalFolders)});
   await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
@@ -226,13 +226,13 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   // Render actions button and nested buttons.
   this.addActionsButtonFunctionality(accountInfo);
 
-  // Get the necessary information from the IMAP server in order to render the email inside the folder 
+  // Get the necessary information from the IMAP server in order to render the email inside the folder
   // that 'state.json' dictates.
   await this.getChosenFolderInfo(this.stateManager.state.account.folder);
 
   document.querySelector('.navlink-delete').addEventListener('click', async (e) => {
     let newFlag = '\\Deleted';
-    let path = this.imapClient.compilePath(this.stateManager.state.account.folder);  
+    let path = this.imapClient.compilePath(this.stateManager.state.account.folder);
     for (let i = 0; i < this.checkedUIDs.length; i++){
       let metadata = await this.mailStore.loadEmail(this.checkedUIDs[i]);
       let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
@@ -253,14 +253,14 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
       this.logger.debug(`Number of new messages arrived: ${numNewMsgs}`);
       await this.newMailReceived();
     });
-    
+
     // Listen for expunged mails in the active mailbox.
     this.imapClient.client.on('expunge', async (deletedSeqNo) => {
       this.logger.info(`Server message with seqno : '${deletedSeqNo}' was expunged externally.`);
       await this.messageWasExpunged();
     });
 
-    // Listen for UIDValidity change in the active mailbox. This should never happen. 
+    // Listen for UIDValidity change in the active mailbox. This should never happen.
     this.imapClient.client.on('uidvalidity', async (uidvalidity) => {
       this.logger.info(`UIDValidity value for the current mailbox changed from: ${this.imapClient.mailbox.uidvalidity} to: ${uidvalidity}`);
       this.logger.info(`Reloading all the folder data...`);
@@ -272,7 +272,7 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
 
 MailPage.prototype.pickFolderToRenderEmails = function(accountInfo){
   /*
-    Choose the folder that is present in 'state.json' (the folder that was last opened 
+    Choose the folder that is present in 'state.json' (the folder that was last opened
     in the previous session). If 'folder' is not specified in 'state.json' then we assign 'Inbox'
     as the folder.
   */
@@ -326,7 +326,7 @@ MailPage.prototype.generateFolderList = async function (email, folders, journey)
     </div>
     `;
   }
-  
+
   for (let folder in folders) {
     let pathSoFar = journey.concat({ name: folder, delimiter: folders[folder].delimiter });
 
@@ -347,33 +347,33 @@ MailPage.prototype.generateFolderList = async function (email, folders, journey)
 }
 
 MailPage.prototype.linkFolders = function (accountInfo, children) {
-  // Children are all the (inside - second level) div elements 
+  // Children are all the (inside - second level) div elements
   // with id either the (base64) email hash or the (base64) folder path.
-  children.forEach( 
+  children.forEach(
     (element) => {
       // Replace every '=' in the div id with the escaped '\='.
       let divElement = document.querySelector(`#${CSS.escape(element.id)}`);
 
-      // Add 'click' functionality only on folders- not on accounts. 
+      // Add 'click' functionality only on folders- not on accounts.
       if (divElement.classList.contains('folder-tree')){
         divElement.addEventListener('click', (clickedElement) => {
           // example: Switching page to [{"name": "Inbox", "delimeter":"/""}]
           this.logger.log(`Switching page to ${decodeURIComponent(escape(atob(clickedElement.target.id)))}`);
-  
+
           // Store in 'state.json' the folder that user has selected last.
           // example: {"state": "mail","account": {"hash": "9xxxxxxxxxxxxxxxxx77","emailAddress": "test@test.com",
-          //           "folder": [{"name": "Inbox","delimiter": "/"}]}}            
-          this.stateManager.change('account', Object.assign(this.stateManager.state.account, 
+          //           "folder": [{"name": "Inbox","delimiter": "/"}]}}
+          this.stateManager.change('account', Object.assign(this.stateManager.state.account,
             { folder: JSON.parse(decodeURIComponent(escape(atob(clickedElement.target.id)))) }
           ));
-          
+
           // Change the css for the currently selected / clicked folder.
           let otherFolders = document.querySelectorAll('.folder-tree');
           for (let i=0; i<otherFolders.length; i++){
             otherFolders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
           }
           document.querySelector(`#${CSS.escape(clickedElement.target.id)}`).classList.add('amber','lighten-1','grey-text','text-darken-1');
-          this.getChosenFolderInfo(JSON.parse(decodeURIComponent(escape(atob(clickedElement.target.id)))));                  
+          this.getChosenFolderInfo(JSON.parse(decodeURIComponent(escape(atob(clickedElement.target.id)))));
         });
       }
       // Search for child folders.
@@ -396,7 +396,7 @@ MailPage.prototype.highlightFolder = function () {
   for (let i=0; i< folders.length; i++){
     folders[i].classList.remove('amber','lighten-1','grey-text','text-darken-1');
   }
-  
+
   //CSS.escape(btoa(JSON.stringify(this.stateManager.state.account.folder)))
   let currentFolder = document.querySelector(`#${CSS.escape(btoa(unescape(encodeURIComponent(JSON.stringify(this.stateManager.state.account.folder)))))}`);
   currentFolder.classList.add('amber','lighten-1','grey-text','text-darken-1');
@@ -411,7 +411,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   this.logger.debug(this.imapClient.client._events);
 
   document.querySelector('#mail').innerHTML = `
-    <span id="doing"></span> 
+    <span id="doing"></span>
     <span id="number"></span><br>
     <span id="mailboxes"></span>
   `;
@@ -426,12 +426,12 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   // chosenFolder : [ {"delimiter": "/" ,"name": "Inbox"} ]
   // path         : Inbox
   // objectPath   : ["Inbox"]
-  let path = this.imapClient.compilePath(chosenFolder);  
-  let objectPath = IMAPClient.compileObjectPath(chosenFolder); 
+  let path = this.imapClient.compilePath(chosenFolder);
+  let objectPath = IMAPClient.compileObjectPath(chosenFolder);
 
   /*
     'folderInfo' contains all the information we got from merging the folder info stored in accounts.db and
-    the new folder info we got from fetching the folders inside the personal namespace. Because 
+    the new folder info we got from fetching the folders inside the personal namespace. Because
     IMAP.openBox() hasnt been used yet, the UIDValidity value of each folder is the old one (the one saved
     from a previous session, so we use that to see if we need to re-fetch the emails or load them from the db)
     The only updated fields of the 'personalFolders' variable are:
@@ -447,7 +447,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   // _.get is an even more convenient way of doing it.
   let folderInfo = _.get(personalFolders, objectPath);
 
-  // Get the 'highest message sequence number' value from the last session 
+  // Get the 'highest message sequence number' value from the last session
   // If it is a new user then 'highest' defaults to 1.
   let highestSeqNo = folderInfo.highestSeqNo || 1;
   // Get the mailbox length = message count from the last session.
@@ -494,9 +494,9 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
         this.mailStore.deleteEmails(path); // For safety
         highestSeqNo = 1; // For safety
         try {
-          await this.imapClient.getEmails(path, true, true, highestSeqNo, 
+          await this.imapClient.getEmails(path, true, true, highestSeqNo,
             {
-            // fetch(source, options). For options we use the 'options' object which 
+            // fetch(source, options). For options we use the 'options' object which
             // contains the 'bodies','envelope' and 'struct' options.
               /*
                 An envelope includes the following fields (a value is only included in the response if it is set).
@@ -513,10 +513,10 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
               */
               bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
               envelope: true
-            }, 
+            },
             // The 'onLoad' function is run for each message inside a mailbox.
             // (highestSeqNo, parsedContent from mailParser, attribues)
-            function onLoad(seqno, msg, attributes) {  
+            function onLoad(seqno, msg, attributes) {
               promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
               if (seqno > highestSeqNo) highestSeqNo = seqno;
               document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
@@ -541,12 +541,12 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
         let newUids = Utils.findMissing(serverUidSequence, UIDSequence);
         if (newUids.length !== 0) {
           try {
-            await this.imapClient.getEmails(path, true, true, highestSeqNo, 
+            await this.imapClient.getEmails(path, true, true, highestSeqNo,
               {
                 bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
                 envelope: true
-              }, 
-              function onLoad(seqno, msg, attributes) {  
+              },
+              function onLoad(seqno, msg, attributes) {
                 promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
                 if (seqno > highestSeqNo) highestSeqNo = seqno;
                 document.querySelector('#number').innerText = `Total emails fetched: ${++totalEmails}`;
@@ -569,7 +569,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
 
   this.logger.info(`Highest Local SeqNo after switch: ${highestSeqNo}`);
   this.logger.info(`Highest Server SeqNo after switch: ${this.imapClient.mailbox.messages.total}`);
-  
+
   // Check for flag changes since last login.
   statusOK = await this.checkIMAPStatus(accountInfo);
   if ( !statusOK ) return;
@@ -608,7 +608,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
     this.logger.error(error);
     return;
   }
- 
+
   // Wait for all the database inserts/ updated to be resolved.
   await Promise.all(promises);
 
@@ -784,7 +784,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         </div>
         <e-mail class="email-item description"></e-mail>
       </div>
-    `; 
+    `;
 
     // Create <e-mail> tags equal to mailbox length.
     for (let i = 0; i < mail.length; i++) {
@@ -798,7 +798,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
           </div>
           <e-mail class="email-item" data-uid="${escape(mail[i].uid)}"></e-mail>
         </div>
-      `; 
+      `;
     }
 
     if (await this.mailStore.countEmails(this.imapClient.compilePath(this.stateManager.state.account.folder)) > 100 * (page + 1)) {
@@ -816,7 +816,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
     let emailCustomElements = document.getElementsByTagName('e-mail');
     for (let i=0; i < emailCustomElements.length; i++){
       let shadowRoot = emailCustomElements[i].shadowRoot;
-      
+
       if (emailCustomElements[i].classList.contains('description')){
         shadowRoot.innerHTML = this.utils.createDescriptionItem(this.imapClient.compilePath(this.stateManager.state.account.folder));
       }
@@ -825,7 +825,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
         shadowRoot.innerHTML = 'Loading...';
         /*
         ------------------------------ DATA ATTRIBUTES --------------------------------------------
-        Any attribute on any element whose attribute name starts with data- is a data attribute. 
+        Any attribute on any element whose attribute name starts with data- is a data attribute.
         Used to store some extra information that doesn't have any visual representation.
         Reading the values of these attributes out in JavaScript is done by either:
         - getting the property by the part of the attribute name after data- (dashes are converted to camelCase).
@@ -860,7 +860,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
             if (emailItemText.classList.contains('unread')){
               emailItemText.classList.remove('unread');
               emailItemText.classList.add('read');
-            } 
+            }
             this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
           }
         });
@@ -890,7 +890,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
             });
             // We reset the array by reseting its length, not by 'this.checkedUIDs' = [], because we want to
             // keep the event listeners.
-            this.checkedUIDs.splice(0); 
+            this.checkedUIDs.splice(0);
           }
         });
       }
@@ -932,7 +932,7 @@ MailPage.prototype.render = async function(accountInfo, folderPage) {
 /*
   For this function to run, it means the folder that the new Mail just arrived, has been opened
   at least once in the current session, so we have the mailbox info from the server (UIDValidity etc)
-  However we need to check these values because there is a chance that UIDValidity changes during the 
+  However we need to check these values because there is a chance that UIDValidity changes during the
   current session, and the other values (UIDNext, MessageCount etc.) change too every time a new mail arrives.
   The change in UIDValidity is handled by another function. -> 'MailPage.UIDValidityChanged()'
   In the case that a message is deleted and and then a new message arrives , the deletion is handled by
@@ -945,8 +945,8 @@ MailPage.prototype.newMailReceived = async function (){
   if ( !statusOK ) return;
 
   let personalFolders = accountInfo.personalFolders;
-  let path = this.imapClient.compilePath(this.stateManager.state.account.folder);  
-  let objectPath = IMAPClient.compileObjectPath(this.stateManager.state.account.folder); 
+  let path = this.imapClient.compilePath(this.stateManager.state.account.folder);
+  let objectPath = IMAPClient.compileObjectPath(this.stateManager.state.account.folder);
   // This is the folder info got from 'MailPage.getChosenFolderInfo()' , in other words the updated info
   // from the IMAP server. However for each new mail that the current mailbox receives, we need to also
   // update the local store.
@@ -985,12 +985,12 @@ MailPage.prototype.newMailReceived = async function (){
   let uid ; // Will have the format 'folderUID'
   let pureUid; // Just the number.
   try {
-    await this.imapClient.getEmails(path, true, false, highestSeqNo, 
+    await this.imapClient.getEmails(path, true, false, highestSeqNo,
       {
         bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
         envelope: true
-      }, 
-      async function onLoad(seqno, msg, attributes) {  
+      },
+      async function onLoad(seqno, msg, attributes) {
         // If the UID is already present we dont fetch it again.
         if (storedUIDSequence.includes(attributes.uid)) return ;
         await this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path);
@@ -1008,7 +1008,7 @@ MailPage.prototype.newMailReceived = async function (){
 
   // UID is undefined since we didnt fetch any emails (the mail was already in the DB)
   // If multiple mail come at the same time, there might be some problems with the highestSeqNo (local < server)
-  // even after reloading the mailbox via clicking the folder again. 
+  // even after reloading the mailbox via clicking the folder again.
   // So we increment the highestSeqNo and call this function again until there is no problem.
   if (!uid){
     this.logger.info('Uid was not found.');
@@ -1016,12 +1016,12 @@ MailPage.prototype.newMailReceived = async function (){
     await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
     this.newMailReceived();
     return;
-  } 
+  }
 
   /*
-    The mailStore is already updated when we fetched the new mail. The 'personalFolders' field in the 
-    accounts.db needs to also be updated with the new UIDNext, messageCount, highestseqNo and 
-    UIDsequence array. 
+    The mailStore is already updated when we fetched the new mail. The 'personalFolders' field in the
+    accounts.db needs to also be updated with the new UIDNext, messageCount, highestseqNo and
+    UIDsequence array.
   */
   // We know that the server's UIDsequence array and the locally store UIDsequence array are the same.
   // So we just push the new UID to the local array.
@@ -1038,13 +1038,13 @@ MailPage.prototype.newMailReceived = async function (){
   this.logger.info(`Server has : ${this.imapClient.mailbox.messages.new} new messages after finish.`);
 
 
-  // No need to check for flagInformation, since the email is new and we just got it. So the account.db's 
+  // No need to check for flagInformation, since the email is new and we just got it. So the account.db's
   // 'personalFolders.flagInformation' attribute has not changed.
 
   _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
   _.set(personalFolders, objectPath.concat(['UIDSequence']), storedUIDSequence);
   _.set(personalFolders, objectPath.concat(['messageCount']), storedMessageCount);
-  
+
   try {
     // Reload box to get the new uidnext
     await this.imapClient.reloadBox(path,false);
@@ -1056,13 +1056,13 @@ MailPage.prototype.newMailReceived = async function (){
   for (let j = 0; j < boxKeys.length; j++) {
     _.set(personalFolders, objectPath.concat([boxKeys[j]]), this.imapClient.mailbox[boxKeys[j]]);
   }
-  
+
   // Save all the folders data in the accounts database.
   await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
-  
+
   // Get the new info that we just stored in the accounts database.
   accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
-  
+
   // Insert new mail node just beneath the description node. (The new mail must appear first in the mailbox).
   let html = '';
   html += `
@@ -1075,7 +1075,7 @@ MailPage.prototype.newMailReceived = async function (){
       </div>
       <e-mail class="email-item new" data-uid="${escape(uid)}"></e-mail>
     </div>
-  `; // data-uid 
+  `; // data-uid
   let description = document.querySelector('.wrapper-description');
 
   if (description) {
@@ -1103,7 +1103,7 @@ MailPage.prototype.newMailReceived = async function (){
   let newEmailTag = document.querySelector('.new');
   let shadowRoot = newEmailTag.shadowRoot;
   uid = unescape(newEmailTag.getAttribute('data-uid')); //data-uid attribute is inserted to the html in MailPage.render().
-  
+
   await this.mailStore.loadEmail(uid).then((mail) => {
     let newHTML = this.utils.createNewMailElement(mail, this.imapClient.compilePath(this.stateManager.state.account.folder), this.stateManager.state.account.user);
     shadowRoot.innerHTML = newHTML;
@@ -1125,7 +1125,7 @@ MailPage.prototype.newMailReceived = async function (){
       if (emailItemText.classList.contains('unread')){
         emailItemText.classList.remove('unread');
         emailItemText.classList.add('read');
-      } 
+      }
       this.renderEmail(accountInfo, unescape(e.currentTarget.attributes['data-uid'].nodeValue));
     }
 
@@ -1154,7 +1154,7 @@ MailPage.prototype.newMailReceived = async function (){
           });
           // We reset the array by reseting its length, not by 'this.checkedUIDs' = [], because we want to
           // keep the event listeners.
-          this.checkedUIDs.splice(0); 
+          this.checkedUIDs.splice(0);
         }
       });
     }
@@ -1202,8 +1202,8 @@ MailPage.prototype.messageWasExpunged = async function(){
   if ( !statusOK ) return;
 
   let personalFolders = accountInfo.personalFolders;
-  let path = this.imapClient.compilePath(this.stateManager.state.account.folder);  
-  let objectPath = IMAPClient.compileObjectPath(this.stateManager.state.account.folder); 
+  let path = this.imapClient.compilePath(this.stateManager.state.account.folder);
+  let objectPath = IMAPClient.compileObjectPath(this.stateManager.state.account.folder);
 
   let folderInfo = _.get(personalFolders, objectPath);
 
@@ -1256,7 +1256,7 @@ MailPage.prototype.messageWasExpunged = async function(){
   _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
   _.set(personalFolders, objectPath.concat(['UIDSequence']), storedUIDSequence);
   _.set(personalFolders, objectPath.concat(['messageCount']), storedMessageCount);
-  
+
   // Reload box to get the new uidnext
   // try {
   //   await this.imapClient.reloadBox(path,false);
@@ -1269,14 +1269,14 @@ MailPage.prototype.messageWasExpunged = async function(){
   for (let j = 0; j < boxKeys.length; j++) {
     _.set(personalFolders, objectPath.concat([boxKeys[j]]), this.imapClient.mailbox[boxKeys[j]]);
   }
-  
+
   // Save all the folders data in the accounts database.
   await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
 
   // Delete the mail bodies of the UIDs we just deleted.
   let usefulEmails = await this.mailStore.findEmails(undefined, { uid: 1 , _id : 0 });
   await this.mailStore.deleteEmailBodies(accountInfo.user, usefulEmails);
-  
+
   // Get the new info that we just stored in the accounts database.
   accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
@@ -1312,7 +1312,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   */
   let selectedItemWrapper = undefined;
   let selectedMailItem = undefined;
- 
+
   for (i = 0; i < emailElements.length; i++){
     // Reset each message holder.
     let messageHolder = emailElements[i].shadowRoot.querySelector('div.mail-item div#message-holder');
@@ -1329,7 +1329,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       selectedEmailElement = emailElements[i];
       selectedMailItem = emailElements[i].shadowRoot.querySelector(`div.mail-item`);
       selectedMailItem.classList.add('selected-mail-item');
-      
+
       // Add the <div> wrapper, inside which the message body will be rendered.
       let selectedItemHolder = selectedMailItem.querySelector(`div#message-holder`);
       selectedItemHolder.innerHTML = '<div class="message-wrapper" id="message-0"></div>';
@@ -1361,20 +1361,20 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       return;
     }
   }
-  
+
   // The user clicked on the email, so we can safely mark it as 'Seen' both to the server and to the local storage.
   // 'uid' and 'metadata.uid' are in the format 'folderUID'
     /*
       If the message on the server is not flagged as 'Seen' then we flag it and update the local store
       via 'updateMailByUid' (the mail body is not updated - it contains the flags too).
-      If the message on the server is flagged as 'Seen' then our local mail store is already up to date 
-      because of imapClient.checkFlags(). In other words we only need to update the local storage if this 
+      If the message on the server is flagged as 'Seen' then our local mail store is already up to date
+      because of imapClient.checkFlags(). In other words we only need to update the local storage if this
       client is the first one to mark the message as seen.
     */
   let newFlag = '\\Seen';
   let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
   this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
-  
+
   /*
     DirtyContent (message that will be rendered before escape from 'Clean.js') can be rendered with these formats:
     - text : includes the plaintext version of the message. Is set if the message has at least one ‘text/plain’ node
@@ -1387,20 +1387,25 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   /*
     ------------------------------------------------------------------------------------------------------------
     Before processing the email content of the message, we need to check if the email is in PGP/MIME format.
-    If it is, the actual message will be inside an inline attachment (usually .asc file), which needs to be decrypted 
+    We also check the possibility that it is not encrypted, but is signed with PGP.
+    If it is, the actual message will be inside an inline attachment (usually .asc file), which needs to be decrypted
     (and potentially needs to have its PGP signature verified). After decrypting and verifying, the decrypted
     message will be the new 'emailContent' we need to process.
     The decrypted data IS NOT stored in the disk. (Mailstore only contains the .asc file)
     ------------------------------------------------------------------------------------------------------------
   */
   let wasMessageEncrypted = false;      // Will become true is the email is detected to be encrypted with PGP/MIME.
-  let encryptedEncapsulatedMIMEMessage; // If message is encrypted, this is the whole encrypted message before parsing.
   let decryptedEncapsulatedMIMEMessage; // If the message was decrypted successfully, this is the whole decrypted message before parsing.
 
   // The following three variables will get populated once the decryptedEncapsulatedMIMEMessage is parsed.
   let encapsulatedMIMEData = [];
   let encapsulatedMIMEAttachments ;
   let encapsulatedMIMEHeaders = [];
+
+  let wasMessageSigned = false;
+  let wasSenderPublicKeyVerified = false; // We care only if the 'wasMessageSigned' becomes true.
+  let wasMessageVerified = false; // Relevant only if 'wasMessageSigned' becomes true.
+
 
   // Needed for signature verification (if the message is signed).
   let senderEmail = `${emailContent.envelope.from[0].mailbox}@${emailContent.envelope.from[0].host}`;
@@ -1412,27 +1417,24 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   if (senderInfo){
     senderPublicKey = await jetpack.readAsync(senderInfo.publicKey);
   }
-
-
-  let signatureState = 'Message was not signed by its sender';
-  // .....
-  // let signatureVerified = await decryptionResults[1] || '';
-            // if (signatureVerified === true) signatureState = 'Signature Verified';
-            // else if (signatureVerified === false) signatureState = 'Signature Not Verified';
-            // // Only encryption
-            // else if (signatureVerified === '') signatureState = 'Message was not signed by its sender';
-
+  // Check public key to make sure that the registered email is indeed the sender's.
+  if (senderPublicKey) {
+    let publicKeyOK = Encrypt.testPublicKey(senderPublicKey, senderEmail);
+    if (publicKeyOK){
+      wasSenderPublicKeyVerified = true;
+    }
+  }
 
   /*
     Check if the message was encrypted in PGP/MIME format.
-    OpenPGP encrypted data is denoted by the "multipart/encrypted" content type, and MUST have a "protocol" 
+    OpenPGP encrypted data is denoted by the "multipart/encrypted" content type, and MUST have a "protocol"
     parameter value of "application/pgp-encrypted". The value of the parameter MUST be enclosed in quotes.
   */
   for (let i = 0; i < emailContent.headers.length; i++){
     let headerName = emailContent.headers[i].name;
     if (headerName === 'content-type') {
-      if (emailContent.headers[i].value && emailContent.headers[i].value.value && 
-          emailContent.headers[i].value.value === 'multipart/encrypted' && 
+      if (emailContent.headers[i].value && emailContent.headers[i].value.value &&
+          emailContent.headers[i].value.value === 'multipart/encrypted' &&
           emailContent.headers[i].value.params && emailContent.headers[i].value.params.protocol &&
           emailContent.headers[i].value.params.protocol === 'application/pgp-encrypted'){
         wasMessageEncrypted = true;
@@ -1441,13 +1443,63 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     }
   }
 
+  // If the mail is not encrypted with PGP, we just check for a detached signature, since it can still be signed.
+  if (!wasMessageSigned && !wasMessageEncrypted){
+    for (let k = 0; k < emailContent.headers.length; k++){
+      if (emailContent.headers[k]['name'] === 'content-type'){
+        if (emailContent.headers[k]['value'].value === 'multipart/signed') {
+          wasMessageSigned = true;
+          /*
+            Since the 'content-type' is 'multipart/signed', we need to fetch the raw email headers + body in order
+            to verify the signature. The signature itself (detached) is an attachment. If the attachment is not
+            found, then the message is considered as not signed.
+          */
+          try {
+            let detachedSignature = await this.imapClient.fetchPGPSignatureForCleartextMessage(emailContent.attachments, this.utils.stripStringOfNonNumericValues(uid), path);
+            if (detachedSignature){
+              // We found the signature, so now IF we have the necessary public key, we can verify the content.
+              if (senderPublicKey && wasSenderPublicKeyVerified){
+                // Fetch only the raw message body along with the headers.
+                let rawMIMEStream = await this.imapClient.getRawEmail(path, true, emailHeaders.seqno, {bodies: '', struct: true, envelope: true});
+                await this.mailStore.saveRawMailBody(uid, rawMIMEStream, emailHeaders.user); // 'uid' is in the format : folderUID
+                let rawMessageBody = await this.mailStore.loadRawEmailBody(uid, emailHeaders.user);
+                let messageBoundary = emailContent.headers[k].value.params.boundary;
+                let originalMessage = Encrypt.prepareMessageForDetachedVerification(rawMessageBody, messageBoundary);
+                let verified = await Encrypt.openPGPVerifyDetachedSignature(originalMessage, senderPublicKey, detachedSignature);
+                if (verified){
+                  wasMessageVerified = true;
+                  this.logger.info('Integrity of the message was verified. Signature valid.');
+                }
+                else {
+                  wasMessageVerified = false;
+                  this.logger.info('Integrity of the message was not verified. Signature not valid.');
+                }
+            
+              }
+              else {
+                this.logger.info('Message was signed, but the sender`s public key is not known or is not correct.');
+              }
+            }
+            else {
+              this.logger.info('Message claims to be signed, but no signature was found. Treat the message as not signed.');
+              wasMessageSigned = false;
+            }
+          } catch (error) {
+            this.logger.error(error);
+          }
+        }
+        break;
+      }
+    }
+  }
+
   if (emailContent.attachments && wasMessageEncrypted){
     /*
-      The multipart/encrypted MIME body MUST consist of exactly two body parts, the first with content type 
+      The multipart/encrypted MIME body MUST consist of exactly two body parts, the first with content type
       "application/pgp-encrypted". This body contains the control information. A message complying with this
-      standard MUST contain a "Version: 1" field in this body.  Since the OpenPGP packet format contains all 
+      standard MUST contain a "Version: 1" field in this body.  Since the OpenPGP packet format contains all
       other information necessary for decrypting, no other information is required here.
-      The second MIME body part MUST contain the actual encrypted data. It MUST be labeled with a content type 
+      The second MIME body part MUST contain the actual encrypted data. It MUST be labeled with a content type
       of "application/octet-stream".
     */
     let numberOfPGPEncryptedParts = 0;
@@ -1464,85 +1516,151 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       for (let j = 0; j < emailContent.attachments.length; j++){
         if (emailContent.attachments[j]['contentType'] === "application/octet-stream"){
           try {
-            let src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j]['filename']}`;
-            
-            // If the encypted data has not been previously fetched, fetch it from inside the inline attachment.
-            if (!jetpack.inspect(src) ) {
-              await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
-            }
+            // If no keypair is found in the 'keys' directory, then no decryption is possible.
+            let keysDirectory = jetpack.cwd(app.getPath('userData'), `keys`, `${Utils.md5(accountInfo.user)}`);
+            const privateKeyArmored = keysDirectory.inspect(`${accountInfo.user}-private.asc`);
+            const publicKeyArmored = keysDirectory.inspect(`${accountInfo.user}-public.asc`);
+            const passphrase = keysDirectory.inspect(`getPass.txt`);
   
-            // Now we have the encrypted data as file on disk. Prepare from decryption.
-            let readPromise = jetpack.readAsync(src);
-            let encryptedData = await readPromise;
-            
-            // Get the decrypted data (new MIME message to be parsed).
-            let decryptionResults = await Encrypt.openPGPDecrypt(encryptedData, accountInfo, this.app.getPath('userData'));
-            materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
-            decryptedEncapsulatedMIMEMessage = decryptionResults;
-  
-            /*
-              This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
-              The one contains control data (content-type='application/pgp-encrypted) and the other the actual encrypted
-              data (content-type='application/octet-stream). The real message is inside the second attachment.
-              So the 'new' message is now the attachment itself. So we parse the message as an attachment and we extract
-              its MIME format, like we did with non encrypted messages from the server.
-            */
-            // Parse the new MIME message, and get the headers, body and attachments of the encapsulated MIME message.
-            let parsedDecryptedMessage = await this.imapClient.parsePGPMIMEMessage(decryptedEncapsulatedMIMEMessage);
-            encapsulatedMIMEData.push(parsedDecryptedMessage.data);
-            encapsulatedMIMEAttachments = parsedDecryptedMessage.attachments;
-            for (const [name, value] of parsedDecryptedMessage.headers) {
-              // Construct an array of headers instead of using the Map object.
-              encapsulatedMIMEHeaders.push({ name, value });
-            }
-        
-            // ----------------------------- Check for PGP signature ----------------------------------------
-            /*
-              If the parsedDecryptedMessage's 'content-type' header is 'multipart/signed', then we are sure
-              that the encapsulated MIME message (immediately after the decryption and before any parsing) is
-              signed with the sender's private key according to RFC 3156. So we need to posses the sender's 
-              public key in order to verify the signature. The signature can either be detached (in an attachment)
-              inside the encrypted body (two 'files', the signature and the original unchanged document), either
-              the whole message can be signed (original document including the signature - the document itself is 
-              signed). In the second case the 'content-type' header is probably not 'multipart/signed'.
+            if (privateKeyArmored && publicKeyArmored && passphrase){
+              let src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j]['filename']}`;
 
-              > From RFC 3156:  
-                - OpenPGP signed messages are denoted by the "multipart/signed" content type, 
-                with a "protocol" parameter which MUST have a value of "application/pgp-signature" (MUST be quoted).
-                The "micalg" parameter for the "application/pgp-signature" protocol MUST contain exactly one 
-                hash-symbol of the format "pgp-<hash- identifier>", where <hash-identifier> identifies the Message
-                Integrity Check (MIC) algorithm used to generate the signature. 
-                - The multipart/signed body MUST consist of exactly two parts. The first part contains the signed 
-                data in MIME canonical format, including a set of appropriate content headers describing the data.
-                The second body MUST contain the OpenPGP digital signature. It MUST be labeled with a content type 
-                of "application/pgp-signature".
-                - The data is first signed as a multipart/signature body, and then encrypted to form the final
-                multipart/encrypted body.
-            */
-        
-            // --- Detached signature case ---
-            if (encapsulatedMIMEHeaders[0]['name'] === 'content-type'){
-              if (encapsulatedMIMEHeaders[0]['value'].value === 'multipart/signed') {
-                let detachedSignature = await this.imapClient.fetchPGPSignature(encapsulatedMIMEAttachments, decryptedEncapsulatedMIMEMessage, this.utils.stripStringOfNonNumericValues(uid), path);
-                if (detachedSignature) {
-                  // We found the signature, so now IF we have the necessary public key, we can verify the content.
-                  if (senderPublicKey){
-                    // Get the non parsed encapsulated MIME message without the signature.
-                    let messageBoundary = encapsulatedMIMEHeaders[0].value.params.boundary;
-                    let originalMessage = Encrypt.prepareMessageForDetachedVerification(decryptedEncapsulatedMIMEMessage, messageBoundary);
-                    let verified = await Encrypt.openPGPVerifyDetachedSignature(originalMessage, senderPublicKey, detachedSignature);
-                    if (verified){
-                      // Say it was verified
-                    }
-                    else {
-                      // Say it was not verified
-                    }
+              // If the encypted data has not been previously fetched, fetch it from inside the inline attachment.
+              if (!jetpack.inspect(src) ) {
+                await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
+              }
+  
+              // Now we have the encrypted data as file on disk. Prepare from decryption.
+              let readPromise = jetpack.readAsync(src);
+              let encryptedData = await readPromise;
+  
+              /*
+                Attemp to decrypt message and also verify its signature at the same time (not detached case).
+                These types of  signatures are not compliant with the RFC, so if the we have the necessary public key
+                available we can try to verify, and if we cannot, we treat the message as not signed and later we
+                will try again for the case the message was signed via a detached signature.
+              */
+              let decryptionResults;
+              if (senderPublicKey && wasSenderPublicKeyVerified){
+                try {
+                  decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
+                  decryptedEncapsulatedMIMEMessage = decryptionResults[0];
+                  if (decryptionResults[1] === true){
+                    wasMessageSigned = true;
+                    wasMessageVerified = true;
                   }
-                  else {
-                    // Say we dont have the public key
+                  else if (decryptionResults[1] === false){
+                    wasMessageSigned = true;
+                    wasMessageVerified = false;
+                  }
+                  else if (decryptionResults[1] === 'notsigned'){
+                    wasMessageSigned = false;
+                  }
+                  materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+                } catch (error) {
+                  this.logger.error(error);
+                  throw error;
+                }
+              
+              }
+              /*
+                We did not find any relevant public key, so we dont attempt to verify any signature that is not detached.
+                Later we will try to find if the message is signed via a detached signature.
+              */
+              else {
+                try {
+                  // Get the decrypted data (new MIME message to be parsed).
+                  decryptionResults = await Encrypt.openPGPDecrypt(encryptedData, accountInfo, this.app.getPath('userData'));
+                  decryptedEncapsulatedMIMEMessage = decryptionResults;
+                  materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+                } catch (error) {
+                  this.logger.error(error);
+                  throw error;
+                }
+              }
+             
+  
+              /*
+                This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
+                The one contains control data (content-type='application/pgp-encrypted) and the other the actual encrypted
+                data (content-type='application/octet-stream). The real message is inside the second attachment.
+                So the 'new' message is now the attachment itself. So we parse the message as an attachment and we extract
+                its MIME format, like we did with non encrypted messages from the server.
+              */
+              // Parse the new MIME message, and get the headers, body and attachments of the encapsulated MIME message.
+              let parsedDecryptedMessage = await this.imapClient.parsePGPMIMEMessage(decryptedEncapsulatedMIMEMessage);
+              encapsulatedMIMEData.push(parsedDecryptedMessage.data);
+              encapsulatedMIMEAttachments = parsedDecryptedMessage.attachments;
+              for (const [name, value] of parsedDecryptedMessage.headers) {
+                // Construct an array of headers instead of using the Map object.
+                encapsulatedMIMEHeaders.push({ name, value });
+              }
+  
+              // ----------------------------- Check for PGP signature ----------------------------------------
+              /*
+                If the parsedDecryptedMessage's 'content-type' header is 'multipart/signed', then we are sure
+                that the encapsulated MIME message (immediately after the decryption and before any parsing) is
+                signed with the sender's private key according to RFC 3156. So we need to posses the sender's
+                public key in order to verify the signature. The signature can either be detached (in an attachment)
+                inside the encrypted body (two 'files', the signature and the original unchanged document), either
+                the whole message can be signed (original document including the signature - the document itself is
+                signed). In the second case the 'content-type' header is probably not 'multipart/signed'.
+  
+                > From RFC 3156:
+                  - OpenPGP signed messages are denoted by the "multipart/signed" content type,
+                  with a "protocol" parameter which MUST have a value of "application/pgp-signature" (MUST be quoted).
+                  The "micalg" parameter for the "application/pgp-signature" protocol MUST contain exactly one
+                  hash-symbol of the format "pgp-<hash- identifier>", where <hash-identifier> identifies the Message
+                  Integrity Check (MIC) algorithm used to generate the signature.
+                  - The multipart/signed body MUST consist of exactly two parts. The first part contains the signed
+                  data in MIME canonical format, including a set of appropriate content headers describing the data.
+                  The second body MUST contain the OpenPGP digital signature. It MUST be labeled with a content type
+                  of "application/pgp-signature".
+                  - The data is first signed as a multipart/signature body, and then encrypted to form the final
+                  multipart/encrypted body.
+              */
+  
+              // --- Detached signature case ---
+              if (!wasMessageSigned){
+                for (let k = 0; k < encapsulatedMIMEHeaders.length; k++){
+                  if (encapsulatedMIMEHeaders[k]['name'] === 'content-type'){
+                    if (encapsulatedMIMEHeaders[k]['value'].value === 'multipart/signed') {
+                      wasMessageSigned = true;
+  
+                      let detachedSignature = await this.imapClient.fetchPGPSignatureForDecryptedMessage(encapsulatedMIMEAttachments, decryptedEncapsulatedMIMEMessage, this.utils.stripStringOfNonNumericValues(uid), path);
+                      if (detachedSignature) {
+                        // We found the signature, so now IF we have the necessary public key, we can verify the content.
+                        if (senderPublicKey && wasSenderPublicKeyVerified){
+                          // Get the non parsed encapsulated MIME message without the signature.
+                          let messageBoundary = encapsulatedMIMEHeaders[k].value.params.boundary;
+                          let originalMessage = Encrypt.prepareMessageForDetachedVerification(decryptedEncapsulatedMIMEMessage, messageBoundary);
+                          let verified = await Encrypt.openPGPVerifyDetachedSignature(originalMessage, senderPublicKey, detachedSignature);
+                          if (verified){
+                            wasMessageVerified = true;
+                            this.logger.info('Integrity of the message was verified. Signature valid.');
+                          }
+                          else {
+                            wasMessageVerified = false;
+                            this.logger.info('Integrity of the message was not verified. Signature not valid.');
+                          }
+                        }
+                        else {
+                          this.logger.info('Message was signed, but the sender`s public key is not known or is not correct.');
+                        }
+                      }
+                      else {
+                        this.logger.info('Message claims to be signed, but no signature was found. Treat the message as not signed.');
+                        wasMessageSigned = false;
+                      }
+                    }
+                    break;
                   }
                 }
               }
+            }
+            else {
+              materialize.toast({html: 'Message could not be decrypted.', displayLength : 1400, classes: 'rounded'});
+              encapsulatedMIMEData.push({'html': `<br><br><hr>This email contains <strong>encypted data</strong>. It can be decrypted only if the app has access to the right private key.<hr><br><br>` });
             }
           } catch (error) {
             // If for some reason (for example we dont posses the right private key for the decryption) the decryption
@@ -1552,6 +1670,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
             materialize.toast({html: 'Message could not be decrypted.', displayLength : 1400, classes: 'rounded'});
             encapsulatedMIMEData.push({'html': `<br><br><hr>This email contains <strong>encypted data</strong>. It can be decrypted only if the app has access to the right private key.<hr><br><br>` });
           }
+          break;
         }
       }
     }
@@ -1586,7 +1705,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   // Do the same for attachments. The headers were already put inside the 'encapsulatedMIMEData.headers'.
   // These attachments (defined inside the decrypted encapsulated MIME data) are not going to be fetched
   // from the server via 'imapClient.fetch()', since the server does not know their MIME 'partID' parameter.
-  // The server (our server) has only access to the encrypted message and not the internal encapsulated MIME 
+  // The server (our server) has only access to the encrypted message and not the internal encapsulated MIME
   // structure.
   if (!emailContent.attachments) {
     emailContent.attachments = [];
@@ -1628,21 +1747,13 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     emailContent.internalMIMEHeaders = encapsulatedMIMEHeaders[0];
   }
 
-  // if (emailContent.internalMIMEHeaders['name'] === 'content-type'){
-  //   if (emailContent.internalMIMEHeaders['value'].value === 'multipart/signed') {
-      
-  //   }
-  // }
-
-
-
   /*
     --- CHANGE 'cid' OF INLINE ATTACHMENTS ---
-    Search the disk to find if the inline images inside the HTML body of the email are present. If they are 
+    Search the disk to find if the inline images inside the HTML body of the email are present. If they are
     found, change the 'cid' parameter of the image inside the MIME body to point to the disk location, so that
-    the images can be found when the user presses 'Show Inline images and style' button. 
-    - If they are not found, no error is thrown since if the user doesnt press the 'Show Inline Images and style' 
-      button, we use the strict HTML sanitization function which does not allow images. If the user presses the 
+    the images can be found when the user presses 'Show Inline images and style' button.
+    - If they are not found, no error is thrown since if the user doesnt press the 'Show Inline Images and style'
+      button, we use the strict HTML sanitization function which does not allow images. If the user presses the
       button, we check if the images are stored in the disk and fetch them. Then when the code reaches this specific
       point, it will change the cid to point to the disk path.
   */
@@ -1678,9 +1789,9 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         else {
           images[i].setAttribute('src', src);
         }
-   
+
       }
-      // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
+      // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants
       // Using outerHTML basically gets as a string from the HTML.
       dirtyContent = dirtyHTML.outerHTML;
     }
@@ -1707,9 +1818,9 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
       if (aArray[i].target === '') {
         aArray[i].target = '_blank';
-      } 
+      }
     }
-    // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants  
+    // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants
     // Using outerHTML basically gets as a string from the HTML.
     dirtyContent = htmlDirtyContent.outerHTML ;
   }
@@ -1733,7 +1844,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   selectedItemWrapper.innerHTML = '';
 
   // ------------------------------------ HEADER CONSTRUCTION -----------------------------------------------------
- 
   let headerContentNode = document.createElement('div');
   headerContentNode.classList.add('header-content');
   let envelope = emailHeaders.envelope;
@@ -1773,7 +1883,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     `;
   }
 
-  
+
   if (ccArray && ccArray.length){
     for (let i=0; i<ccArray.length; i++){
       if (i===0){
@@ -1802,7 +1912,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       </tr>
     `;
   }
- 
+
   if (bccArray && bccArray.length){
     for (let i=0; i<bccArray.length; i++){
       if (i===0){
@@ -1845,7 +1955,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   headerContent = headerContent + toHTML;
   headerContent = headerContent + ccHTML;
   headerContent = headerContent + bccHTML;
-       
+
   headerContent = headerContent + `
         <tr>
           <th>Date: &nbsp;</th>
@@ -1867,7 +1977,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       .header-table {
         table-layout: fixed;
         width: 100%;
-        text-align: left; 
+        text-align: left;
         vertical-align: middle;
         border-spacing:0;
         margin-bottom : 8px;
@@ -1914,7 +2024,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
       .show-headers{
         display: flex;
-        cursor: pointer; 
+        cursor: pointer;
         border: 1px solid rgb(255,202,40);
         border-radius: 6px;
         color: rgb(97,97,97);
@@ -1930,7 +2040,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
       .fetch-inline{
         display: flex;
-        cursor: pointer; 
+        cursor: pointer;
         border: 0px;
         border-radius: 6px;
         color: rgb(97,97,97);
@@ -1947,7 +2057,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
       .fetch-attachments{
         display: flex;
-        cursor: pointer; 
+        cursor: pointer;
         border: 0px;
         border-radius: 6px;
         color: whitesmoke;
@@ -1997,7 +2107,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     attachmentContentWrapperNode.appendChild(attachmentContentNode);
     selectedItemWrapper.appendChild(attachmentContentWrapperNode);
     // Attachment button
-    selectedItemWrapper.querySelector('.attachment-content').insertAdjacentHTML('afterend', 
+    selectedItemWrapper.querySelector('.attachment-content').insertAdjacentHTML('afterend',
     `<button class = 'fetch-attachments'>Download attachments</button><br><br><br>`);
 
     // Fetch attachments event listener.
@@ -2007,18 +2117,18 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       selectedItemWrapper.querySelector('.show-headers').disabled = true;
       selectedItemWrapper.querySelector('.fetch-inline').disabled = true;
       selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
-      
+
       /*
         Choose folder via dialog box and fetch chosen attachment(s).
         - If the message was not encrypted use client.fetch(uid) and fetch attachments from the server using the
           original message MIME partIDs.
-        - If the message was using PGP/MIME format, then the server has no information about the attachments and 
+        - If the message was using PGP/MIME format, then the server has no information about the attachments and
           their MIME partIDs, since it only has access to the original encrypted message. So we use the
           decryptedEncapsulatedMIMEMessage as the source insted of client.fetch(uid).
       */
       materialize.toast({html: 'Choose folder where the attachments will be fetched', displayLength : 3000 ,classes: 'rounded'});
       let fetched;
-      
+
       if (wasMessageEncrypted && decryptedEncapsulatedMIMEMessage ){
         fetched = await this.imapClient.fetchPGPMIMEAttachments(emailContent, decryptedEncapsulatedMIMEMessage ,this.ipcRenderer);
       }
@@ -2051,21 +2161,21 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   // -------------------------------- HANDLE INLINE STYLE AND IMAGES -----------------------------------------
   // Show 'Enable inline attachments button' if the email has attachments.
   if (reloadedFromAttachmentButton){
-    selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
+    selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend',
     `<button class = 'fetch-inline'>Disable inline style (and images)</button>`);
     selectedItemWrapper.querySelector('.fetch-inline').classList.add('enabled');
-  } 
+  }
   else {
-    selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend', 
+    selectedItemWrapper.querySelector('.show-headers').insertAdjacentHTML('afterend',
     `<button class = 'fetch-inline'>Enable inline attachments (and style)</button>`);
   }
-  
+
   // Enable style and inline data (eg. images with content-disposition = inline)
   // Only inline images will be fetched.
     selectedItemWrapper.querySelector('.fetch-inline').addEventListener('click', async (e) => {
       if (e.target.classList.contains('enabled')){
         e.target.classList.remove('enabled');
-      } 
+      }
       else e.target.classList.add('enabled');
 
       if (e.target.classList.contains('enabled')){
@@ -2079,30 +2189,30 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         }
         // Determine if inline attachments were already fetched before.
         let noFetch = await this.mailStore.findIfAttachmentsExist(attachmentsToCheck, uid, accountInfo.user);
-  
+
         if (noFetch === false) {
           e.currentTarget.disabled = true;
           selectedItemWrapper.querySelector('.show-headers').disabled = true;
           selectedMailItem.querySelector('#message-holder').querySelector('.back').disabled = true;
-      
+
            /*
             Fetch inline attachment(s).
             - If the message was not encrypted use client.fetch(uid) and fetch attachments from the server using the
               original message MIME partIDs.
-            - If the message was using PGP/MIME format, then the server has no information about the attachments and 
+            - If the message was using PGP/MIME format, then the server has no information about the attachments and
               their MIME partIDs, since it only has access to the original encrypted message. So we use the
               decryptedEncapsulatedMIMEMessage as the source insted of client.fetch(uid).
           */
           materialize.toast({html: 'Fetching...', displayLength : 3000 ,classes: 'rounded'});
-          
-          
+
+
           if (wasMessageEncrypted && decryptedEncapsulatedMIMEMessage ){
             await this.imapClient.fetchPGPMIMEInlineAttachments(emailContent, decryptedEncapsulatedMIMEMessage ,this.utils.stripStringOfNonNumericValues(uid), path);
           }
           else {
             await this.imapClient.fetchInlineAttachments(emailContent, this.utils.stripStringOfNonNumericValues(uid), path);
           }
-          
+
           // The third arguement 'true' is for the parameter : 'reloadedFromAttachmentButton' -> it will reload
           // the message with the inline attachments, but the 'Enable inline attachments button' will now say
           // 'Hide inline attachments'
@@ -2125,9 +2235,9 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     if (e.target.classList.contains('active')){
       e.target.classList.remove('active');
       e.target.textContent = 'Show All Headers';
-    } 
+    }
     else e.target.classList.add('active');
-    
+
     if (e.target.classList.contains('active')){
       for (let i=0; i < emailContent.headers.length; i++){
         this.createTableRow(selectedItemWrapper, emailContent.headers[i], false);
@@ -2146,7 +2256,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
       selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + toHTML;
       selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + ccHTML;
       selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + bccHTML;
-         
+
       selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + `
           <tr>
             <th>Date: &nbsp;</th>
@@ -2162,21 +2272,21 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         .header-table {
           table-layout: fixed;
           width: 100%;
-          text-align: left; 
+          text-align: left;
           vertical-align: middle;
           border-spacing:0;
           margin-bottom : 8px;
         }
-  
+
         .header-table thead tr {
           height: 16px;
           line-height: 16px;
         }
-  
+
         .header-table thead tr td a {
           text-decoration: none;
         }
-  
+
         .header-table thead tr td {
           max-width: 0;
           overflow: hidden;
@@ -2197,12 +2307,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
   // ---------------------------------- BACK BUTTON FUNCTIONALITY ---------------------------------------------
   // Add 'back' button which closes the currently open email, without removing the selected-mail-item class.
-  selectedMailItem.querySelector('#message-holder .message-wrapper').insertAdjacentHTML("beforebegin", 
+  selectedMailItem.querySelector('#message-holder .message-wrapper').insertAdjacentHTML("beforebegin",
     `
       <button class='back'><strong>Back<strong></button>
       <style>
         .back{
-          cursor: pointer; 
+          cursor: pointer;
           border: 1px solid rgb(97,97,97);
           border-radius: 6px;
           color: rgb(97,97,97);
@@ -2224,37 +2334,65 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
   // -------------------------------- SHOW ENCRYPTION / SIGNED STATUS ------------------------------------------
   let encryptionText ;
-  if (wasMessageEncrypted) encryptionText = '<span class="encrypted-message">(Message was sent encrypted using PGP)</span>';
-  else encryptionText = '<span class="unencrypted-message">(Message was sent unencrypted)</span>';
+  if (wasMessageEncrypted) encryptionText = '<span class="encrypted-message"><strong>(Message was sent encrypted using PGP)</strong></span>';
+  else encryptionText = '<span class="unencrypted-message">(Message was not encrypted by the sender)</span>';
 
   let signatureText;
-  if (signatureState === 'Signature Verified')  signatureText = `<span class="signed-message">(${signatureState})</span>`;
-  else if (signatureState === 'Signature Not Verified')  signatureText = `<span class="unsigned-message">(${signatureState})</span>`;
-  else if (signatureState === 'Message was not signed by its sender') signatureText = `<span class="unsigned-message">(${signatureState})</span>`;
+  if (wasMessageSigned) {
+    if (wasSenderPublicKeyVerified) {
+      if (wasMessageVerified) {
+        signatureText = `<span class="verified-message"><strong>(Message was signed - Signature was verified)</strong></span>`;
+      }
+      else {
+        signatureText = `<span class="unverified-message"><strong>(Message was signed - Could not verify signature!)</strong></span>`;
+      }
+    }
+    else {
+      signatureText = `<span class="public-key-problem">(Message was signed - Could not find a suitable Public Key to verify)</span>`;
+    }
+  }
+  else if (!wasMessageSigned && !wasMessageEncrypted) {
+    signatureText = `<span class="unsigned-message">(Message was not signed by the sender)</span>`;
+  }
+  else if (!wasMessageSigned && wasMessageEncrypted && !wasSenderPublicKeyVerified) {
+    signatureText = `<span class="unsigned-message">(Message is either not signed or no suitable Public Key was found to verify the signature)</span>`;
+  }
+  else if (!wasMessageSigned && wasMessageEncrypted && wasSenderPublicKeyVerified) {
+    signatureText = `<span class="unsigned-message">(Message was not signed by the sender)</span>`;
+  }
 
-  selectedMailItem.querySelector('#message-holder .back').insertAdjacentHTML("afterend", 
+
+  selectedMailItem.querySelector('#message-holder .back').insertAdjacentHTML("afterend",
   `
     <div class=encryption-status>
       <br>
-      <div class='encrypted'><strong>${encryptionText}</strong></div>
-      <div class='signed'><strong>${signatureText}</strong></div>
+      <div class='encrypted'>${encryptionText}</div>
+      <div class='signed'>${signatureText}</div>
     </div>
 
     <style>
-      div.signed strong span.signed-message{
+      .unsigned-message{
+        color: gray;
+      }
+
+      .verified-message{
         color: rgb(62, 148, 62);
       }
-      
-      div.signed strong span.unsigned-message{
+
+      .unverified-message{
         color: rgb(201, 35, 35);
       }
-      
-      div.encrypted strong span.encrypted-message{
+
+      .public-key-problem{
+        color: rgb(201, 35, 35);
+      }
+
+      .encrypted-message{
         color:rgb(62, 148, 62);
       }
-      
-      div.encrypted strong span.unencrypted-message{
-        color:rgb(201, 35, 35);
+
+      .unencrypted-message{
+        color:gray;
       }
     </style>
   `
@@ -2286,7 +2424,7 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
       <td></td>
     `;
     }
-   
+
     tableRow.innerHTML = tableRowHTML;
     wrapper.querySelector('.header-table thead').appendChild(tableRow);
     if (headerValue.length){
@@ -2353,7 +2491,7 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
       <td title=${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
     `;
     }
-  
+
     tableRow.innerHTML = tableRowHTML;
     wrapper.querySelector('.header-table thead').appendChild(tableRow);
   }
@@ -2364,8 +2502,8 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
 MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
   let fetchedPromise = new Promise(async function(resolve,reject){
     try {
-      emailContent = await this.imapClient.getEmails(message.folder, false, false, message.seqno, 
-        {bodies: '', struct: true, envelope: true}, 
+      emailContent = await this.imapClient.getEmails(message.folder, false, false, message.seqno,
+        {bodies: '', struct: true, envelope: true},
         async function (seqno, content, attributes) {
           // Convert 'Map' of headers into 'Array' of headers for storage.
           let headers = [];
@@ -2387,17 +2525,17 @@ MailPage.prototype.fetchEmailBody = async function(accountInfo, message){
             }
             content.attachmentHeaders = attachmentHeaders;
           }
-     
+
           // The attributes.uid here is from the server so its not in the format 'folderUID'.
           // The message.uid is in the format 'folderUID' since we got it from our local DB.
           let compiledContent = Object.assign({ seqno: seqno }, content, attributes);
           await this.mailStore.saveMailBody(message.uid, compiledContent, accountInfo.user);
 
-          // Mark the mail body as retrived so that we dont fetch its body again with 
+          // Mark the mail body as retrived so that we dont fetch its body again with
           // 'MailPage.prototype.retrieveEmailBodies'.
           this.mailStore.updateEmailByUid(message.uid, {'retrieved': true }, {flags : attributes.flags});
-          this.logger.log(`Added ${accountInfo.user} : ${message.uid} to the file system.`);  
-          resolve(); 
+          this.logger.log(`Added ${accountInfo.user} : ${message.uid} to the file system.`);
+          resolve();
         }.bind(this)
       );
     } catch (error) {
