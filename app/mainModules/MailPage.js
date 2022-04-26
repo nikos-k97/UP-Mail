@@ -1853,6 +1853,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let ccHTML = '';
   let bccArray = envelope.bcc;
   let bccHTML = '';
+
   // This is done because the to, cc, bcc fields can contain multiple email adresses.
   if (toArray && toArray.length){
     for (let i=0; i<toArray.length; i++){
@@ -1963,7 +1964,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         </tr>
         <tr>
           <th>Subject: &nbsp;</th>
-          <td>${envelope.subject}</td>
+          <td>${(envelope.subject && envelope.envelope.subject !== '') ? envelope.subject : '(No Subject)'}</td>
         </tr>
       </thead>
     </table>
@@ -2264,7 +2265,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           </tr>
           <tr>
             <th>Subject: &nbsp;</th>
-            <td>${envelope.subject}</td>
+            <td>${(envelope.subject && envelope.envelope.subject !== '') ? envelope.subject : '(No Subject)'}</td>
           </tr>
         </thead>
       </table>

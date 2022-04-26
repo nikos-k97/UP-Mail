@@ -42,6 +42,7 @@ FormValidator.showError = (input, message) => {
 FormValidator.showSuccess = (input) => {
     // get the form-field element
     const formField = input.parentElement;
+    console.log(formField)
 
     // remove the error class
     formField.classList.remove('error');
@@ -123,7 +124,8 @@ FormValidator.checkUsername = (usernameEl) => {
 FormValidator.checkEmailSubject = (textEl) => {
     let isSubjectEmpty = textEl.value.trim() === '' ? true : false;
     if (isSubjectEmpty) {
-        textEl = Clean.cleanForm(textEl.value.trim());
+        //textEl = Clean.cleanForm(textEl.value.trim());
+        console.log(textEl)
         let toastHTML = '<span>Are you sure you want to send this message without Subject ?</span><button class="btn-flat toast-no-subject">Yes</button><button class="btn-flat toast-give-subject">No</button>';
         M.toast({html: toastHTML, displayLength: Infinity, classes: 'rounded'});
         document.querySelector('#send').disabled = true;

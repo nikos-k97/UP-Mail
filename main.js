@@ -145,12 +145,12 @@ function openWindow (file) {
             icon: './icons/email-icon.png',
             title:'Compose', //overriden by the loaded html's <title/> tag (!!)
             minWidth: 500,
-            minHeight: 450,
+            minHeight: 490,
             maximized: false,
             maximizable : false,
             fullscreenable : false,
             maxWidth: 950,
-            maxHeight: 900,
+            maxHeight: 1000,
             frame: false,
             show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
             webPreferences: {

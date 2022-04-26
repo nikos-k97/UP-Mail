@@ -158,3 +158,15 @@ ul.tabs {
   color: whitesmoke !important;
   background-color : rgb(97,97,97) !important;
 }
+
+
+.switch label {
+  font-size :small;
+}
+
+.switch label input[type=checkbox]:checked+.lever {
+  background-color: rgb(255, 203, 48);
+}
+.switch label input[type=checkbox]:checked+.lever:after {
+  background-color: rgb(255,202,40);
+}
