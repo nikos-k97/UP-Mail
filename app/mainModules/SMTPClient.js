@@ -1,6 +1,7 @@
 const nodemailer     = require('nodemailer');
 const openpgpEncrypt = require('nodemailer-openpgp').openpgpEncrypt;
 const Encrypt        = require('./Encrypt');
+const jetpack        = require('fs-jetpack');
 
 function SMTPClient (account, logger, appPath) {
   this.account = account;
@@ -31,24 +32,72 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
        The envelope object returned by sendMail() includes just from (address string) and to 
        (an array of address strings) fields as all addresses from to, cc and bcc get merged into to when sending.
     */
-    // let publickey = await Encrypt.getOwnPublicKeyWithoutArmor(accountDetails, this.appPath);
-    // publickey = publickey.toString();
 
-    // let signingKey = await Encrypt.getOwnPrivateKeyWithoutArmor(accountDetails, this.appPath);
-    // this.transporters[account.user].use('stream', openpgpEncrypt(signingKey));
+    // If 'message.encrypted' is true, then we will attemp to encrypt & sign the message using the neccessary PGP keys.
+    let personalKeyFetched = false;
+    if (message.encrypted){
+      // Get the stored PGP private key and the passphrase.
+      try {
+        let personalPrivateKeyArmored = await Encrypt.getOwnPrivateKeyEncryptedWithArmor(accountDetails, this.appPath);
+        let decryptedPassphrase = await Encrypt.getDecryptedStoredPassphrase(accountDetails, this.appPath);
 
-    let mailOptions = {
-      from: {
-        name: message.fromName,
-        address: message.from
-      },
-      to: message.to, // list of receivers
-      cc: message.cc,
-      subject: message.subject, // Subject line
-      text: message.message, // plain text body
-      html: message.message, // html body
-      //encryptionKeys : [publickey]
-    };
+        let privateKeyOk = await Encrypt.testPrivateKey(personalPrivateKeyArmored, decryptedPassphrase, accountDetails.user);
+        if (personalPrivateKeyArmored && decryptedPassphrase && privateKeyOk){
+          let options = {
+            'signingKey' : String(personalPrivateKeyArmored).toString(),
+            'passphrase' : String(decryptedPassphrase).toString()
+          }
+          this.transporters[accountDetails.user].use('stream', openpgpEncrypt(options));
+          personalKeyFetched = true;
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    let mailOptions;
+    // Do not use PGP.
+    if (!message.encrypted || !personalKeyFetched || !message.recipientInfo){
+      mailOptions = {
+        from: {
+          name: message.fromName,
+          address: message.from
+        },
+        to: message.to, // list of receivers
+        cc: message.cc,
+        subject: message.subject, // Subject line
+        text: message.message, // plain text body
+        html: message.message, // html body
+      };
+    }
+    // Use PGP.
+    else{
+      let publicKeys = [];
+      // Get PGP public keys of the recipients from the 'message.recipientInfo'.
+      for (let i = 0; i < message.recipientInfo.length; i++){
+        let recipientPublicKey = await jetpack.readAsync(message.recipientInfo[i].publicKey);
+        if (recipientPublicKey) {
+          let publicKeyOK = Encrypt.testPublicKey(recipientPublicKey, message.recipientInfo[i].email);
+          if (publicKeyOK){
+           publicKeys.push(recipientPublicKey);
+          }
+        }
+      }
+  
+      mailOptions = {
+        from: {
+          name: message.fromName,
+          address: message.from
+        },
+        to: message.to, // list of receivers
+        cc: message.cc,
+        subject: message.subject, // Subject line
+        text: message.message, // plain text body
+        html: message.message, // html body
+        encryptionKeys : publicKeys
+      };
+    }
+ 
 
     try {
       await this.send(accountDetails, mailOptions);

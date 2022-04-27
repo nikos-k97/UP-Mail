@@ -352,6 +352,44 @@ Encrypt.getOwnPrivateKeyUnencryptedWithoutArmor = async function (accountInfo, a
    }
 }
 
+
+Encrypt.getOwnPrivateKeyEncryptedWithArmor = async function(accountInfo, appPath){
+    try {
+        let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+        const privateKeyArmored = await fs.readAsync(`${accountInfo.user}-private.asc`);
+
+
+        return privateKeyArmored;
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+
+Encrypt.getDecryptedStoredPassphrase = async function(accountInfoDecrypted, appPath){
+
+    try {
+        let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfoDecrypted.user)}`);
+        const encryptedPassphraseKey = await fs.readAsync(`getPass.txt`);
+        let decryptedPassphraseKey = Encrypt.decryptAES256CBC(accountInfoDecrypted.password, encryptedPassphraseKey);
+        return decryptedPassphraseKey;
+    } catch (error) {
+        console.error(error);
+    }
+}
+
+
+Encrypt.getOwnPublicKeyWithArmor = async function(accountInfo, appPath){
+    try {
+        let fs = jetpack.cwd(appPath, `keys`, `${Utils.md5(accountInfo.user)}`);
+        const publicKeyArmored = await fs.readAsync(`${accountInfo.user}-public.asc`);
+        return publicKeyArmored;
+   } catch (error) {
+       console.error(error);
+   }
+}
+
+
 /**
  * Test if the specified private key can be decrypted and parsed (using the specified passphrase).
  * Also check if the private key is indeed the user's by checking the emailAddress that was used

@@ -2,7 +2,7 @@
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
 const {contextBridge}              = require("electron");
 const {app, BrowserWindow, dialog} = require('@electron/remote');
-const Datastore                    = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Datastore                    = require('@seald-io/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise                      = require('bluebird');
 const jetpack                      = require('fs-jetpack');
 const materialize                  = require("./helperModules/materialize.min.js");
@@ -25,7 +25,8 @@ const accountsDB = new Datastore({
   filename: app.getPath('userData') + '/db/accounts.db',
   autoload: true
 });
-const accounts = Promise.promisifyAll(accountsDB);
+//const accounts = Promise.promisifyAll(accountsDB);
+const accounts = accountsDB;
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload
@@ -144,12 +145,16 @@ contextBridge.exposeInMainWorld(
                                     encryptedCheckbox.disabled = true;
                                     encryptedCheckbox.checked = false;
                                 }
-                                else encryptedCheckbox.disabled = false;      
+                                else {
+                                    encryptedCheckbox.disabled = false;  
+                                    document.querySelector('#encryption-switch').setAttribute('title', 'Email can be encrypted and signed.');
+                                }  
                             }
                         }
                         else {
                             encryptedCheckbox.disabled = true;
                             encryptedCheckbox.checked = false;
+                            document.querySelector('#encryption-switch').setAttribute('title', 'Necessary PGP Keys were not found.');
                         }
                         break;
                     case 'cc':
@@ -170,8 +175,13 @@ contextBridge.exposeInMainWorld(
                                 if (validationArray.includes('false')) {
                                     encryptedCheckbox.disabled = true;
                                     encryptedCheckbox.checked = false;
+                                    document.querySelector('#encryption-switch').setAttribute('title', 'Necessary PGP Keys were not found.');
                                 }
-                                else encryptedCheckbox.disabled = false;      
+                                else{
+                                    encryptedCheckbox.disabled = false;  
+                                    document.querySelector('#encryption-switch').setAttribute('title', 'Email can be encrypted and signed.');
+                                }
+                              
                             }
                         }
                         else {
@@ -206,14 +216,29 @@ contextBridge.exposeInMainWorld(
                     emailContent = Clean.cleanHTMLNonStrict(emailContent);
                     let isSubjectOK = FormValidator.checkEmailSubject(subject);
                     if (isSubjectOK){
+                        let encrypted = encryptedCheckbox.disabled ? false : encryptedCheckbox.checked;
+                        let recipientInfoArray = [];
+                        let allPublicKeysFound = false;
+                        // If the encrypted switch is turned on, find the necessary public keys.
+                        if (encrypted) {
+                            let toArray = (form.elements['to'].value).split(',');
+                            let recipientArray = form.elements['cc'].value !== '' ? toArray.concat((form.elements['cc'].value).split()) : toArray;
+                            for (let i = 0; i < recipientArray.length; i++){
+                                let info = await getContactInfo(recipientArray[i]);
+                                if (info) recipientInfoArray.push(info);
+                            }
+                            if (recipientInfoArray.length === recipientArray.length) allPublicKeysFound = true;
+                        }
+   
                         let message = {
-                            from: form.elements['from'].value, 
+                            from: form.elements['from'].value,
                             fromName : form.elements['from-name'].value,
                             to: form.elements['to'].value,
                             cc: form.elements['cc'].value,
                             subject: form.elements['subject'].value,
                             message: emailContent,
-                            encrypted: encryptedCheckbox.disabled ? false : encryptedCheckbox.checked
+                            encrypted: encrypted,
+                            recipientInfo : (encrypted && allPublicKeysFound) ? recipientInfoArray : null
                         }
 
                         logger.log('Required fields completed. Preparing to send message ...');
@@ -231,6 +256,23 @@ contextBridge.exposeInMainWorld(
                     else {
                         document.querySelector('.toast-no-subject').addEventListener('click' , async (e) => {
                             materialize.Toast.getInstance(document.querySelector('.toast')).dismiss();
+
+                            let encrypted = encryptedCheckbox.disabled ? false : encryptedCheckbox.checked;
+                            let recipientInfoArray = [];
+                            let allPublicKeysFound = false;
+                            // If the encrypted switch is turned on, find the necessary public keys.
+                            if (encrypted) {
+                                let toArray = (form.elements['to'].value).split(',');
+                                let recipientArray = form.elements['cc'].value !== '' ? toArray.concat((form.elements['cc'].value).split()) : toArray;
+                                for (let i = 0; i < recipientArray.length; i++){
+                                    let info = await getContactInfo(recipientArray[i]);
+                                    if (info) recipientInfoArray.push(info);
+                                }
+                                if (recipientInfoArray.length === recipientArray.length) allPublicKeysFound = true;
+            
+                            }
+                           
+                          
                             let message = {
                                 from: form.elements['from'].value,
                                 fromName : form.elements['from-name'].value,
@@ -238,8 +280,10 @@ contextBridge.exposeInMainWorld(
                                 cc: form.elements['cc'].value,
                                 subject: undefined,
                                 message: emailContent,
-                                encrypted: encryptedCheckbox.disabled ? false : encryptedCheckbox.checked
+                                encrypted: encrypted,
+                                recipientInfo : (encrypted && allPublicKeysFound) ? recipientInfoArray : null
                             }
+
                             logger.log('Required fields completed. Preparing to send message ...');
                             materialize.toast({html: 'Sending message ...', displayLength : 3000 ,classes: 'rounded'});
                             // Disable the button again after pressing send.
@@ -297,5 +341,17 @@ async function necessaryTargetPGPKeyFound (recipientEmail){
       }
     }
     return false;
+}
+
+
+async function getContactInfo (recipientEmail){
+    try {
+        let accountInfo = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
+        await contactsManager.createContactsDB(accountInfo.user);
+        let recipientInfo = await contactsManager.loadContact(recipientEmail);
+        return recipientInfo;
+    } catch (error) {
+        console.error(error);
+    }
 }
 

@@ -2,7 +2,7 @@
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
 const {contextBridge, ipcRenderer}  = require("electron");
 const {app, BrowserWindow}          = require('@electron/remote');
-const Datastore                     = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Datastore                     = require('@seald-io/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise                       = require('bluebird');
 const jetpack                       = require('fs-jetpack');
 const materialize                   = require("./helperModules/materialize.min.js");
@@ -23,7 +23,8 @@ const accountsDB = new Datastore({
   filename: app.getPath('userData') + '/db/accounts.db',
   autoload: true
 });
-const accounts = Promise.promisifyAll(accountsDB);
+//const accounts = Promise.promisifyAll(accountsDB);
+const accounts = accountsDB;
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload

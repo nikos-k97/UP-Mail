@@ -1,5 +1,5 @@
 const jetpack    = require('fs-jetpack');
-const Datastore  = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Datastore  = require('@seald-io/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise    = require('bluebird');
 const IMAPClient = require('./IMAPClient');
 const SMTPClient = require('./SMTPClient');
@@ -27,7 +27,8 @@ function AccountManager (app, logger, stateManager, utils, ipcRenderer) {
       autoload: true                   
     }
   );
-	this.accounts = Promise.promisifyAll(db);
+	//this.accounts = Promise.promisifyAll(db);
+  this.accounts = db;
   // Use database indexing for 'user' field - mostly used to enforce uniqueness to the 'user' field.
   this.accounts.ensureIndex({ fieldName: 'user', unique: true });
 }

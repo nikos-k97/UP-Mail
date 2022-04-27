@@ -1,4 +1,4 @@
-const Datastore   = require('@rmanibus/nedb'); // Use a NeDB fork since original NeDB is deprecated.
+const Datastore   = require('@seald-io/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const Promise     = require('bluebird');
 const jetpack     = require('fs-jetpack');
 const Utils       = require('./Utils');
@@ -41,7 +41,8 @@ function MailStore (app, utils) {
         */ 
       }
     );
-    this.db = Promise.promisifyAll(mailDB);
+    //this.db = Promise.promisifyAll(mailDB);
+    this.db = mailDB
     // Load the database
     await this.db.loadDatabaseAsync();
     // Since each message's UID is unique inside each mailbox, we specify that 'uid' field should be unique.

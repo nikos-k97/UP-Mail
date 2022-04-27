@@ -9,7 +9,7 @@
   "author": "Nikolaos Kontos",
   "license": "MIT",
   "dependencies": {
-    "@rmanibus/nedb": "^1.9.2",
+    "@seald-io/nedb": "^3.0.0",
     "base64-stream": "^1.0.0",
     "bcrypt": "^5.0.1",
     "bluebird": "^3.7.2",
