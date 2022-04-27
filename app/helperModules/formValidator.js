@@ -7,7 +7,7 @@ FormValidator.isRequired = value => value === '' ? false : true;
 FormValidator.isBetween = (length, min, max) => length < min || length > max ? false : true;
 
 FormValidator.isEmailValid = (email) => {
-    const re = /^((([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))[ ]*[,]?[ ]*)+$/;
+    const re = /^([\w+-.%]+@[\w.-]+\.[A-Za-z]{2,4}[ ]*)(,[ ]*[\w+-.%]+@[\w.-]+\.[A-Za-z]{2,4})*$/;
     return re.test(email);
 };
 
@@ -42,7 +42,6 @@ FormValidator.showError = (input, message) => {
 FormValidator.showSuccess = (input) => {
     // get the form-field element
     const formField = input.parentElement;
-    console.log(formField)
 
     // remove the error class
     formField.classList.remove('error');
@@ -52,6 +51,8 @@ FormValidator.showSuccess = (input) => {
     const error = formField.querySelector('small');
     error.textContent = '';
 }
+
+
 
 FormValidator.checkEmailAddress = (emailEl) => {
     let valid = false;
@@ -65,6 +66,24 @@ FormValidator.checkEmailAddress = (emailEl) => {
         FormValidator.showSuccess(emailEl);
         valid = true;
     }
+    return valid;
+}
+
+// CC field is not required
+FormValidator.checkEmailAddressForCC = (emailEl) => {
+    let valid = false;
+    const email = Clean.cleanForm(emailEl.value.trim());
+
+    if (email === '') valid = true;
+    else {
+        if (!FormValidator.isEmailValid(email)) {
+            FormValidator.showError(emailEl, 'Email format is not valid.')
+        } else {
+            FormValidator.showSuccess(emailEl);
+            valid = true;
+        }
+    }
+   
     return valid;
 }
 
@@ -125,7 +144,6 @@ FormValidator.checkEmailSubject = (textEl) => {
     let isSubjectEmpty = textEl.value.trim() === '' ? true : false;
     if (isSubjectEmpty) {
         //textEl = Clean.cleanForm(textEl.value.trim());
-        console.log(textEl)
         let toastHTML = '<span>Are you sure you want to send this message without Subject ?</span><button class="btn-flat toast-no-subject">Yes</button><button class="btn-flat toast-give-subject">No</button>';
         M.toast({html: toastHTML, displayLength: Infinity, classes: 'rounded'});
         document.querySelector('#send').disabled = true;

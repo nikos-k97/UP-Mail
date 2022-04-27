@@ -11,6 +11,9 @@ const FormValidator                = require('./helperModules/formValidator');
 const Header                       = require('./mainModules/Header');
 const SMTPClient                   = require('./mainModules/SMTPClient');
 const Clean                        = require('./mainModules/Clean');
+const Utils                        = require('./mainModules/Utils');
+const ContactsManager              = require('./mainModules/ContactsManager');
+const Encrypt                      = require('./mainModules/Encrypt');
 const easyMDE                      = require('easymde');
 const {marked}                     = require('marked')
 
@@ -32,7 +35,9 @@ const accounts = Promise.promisifyAll(accountsDB);
 // which means they are undefined at the 'browser' side - 'app.js' and undefined on the electron side - 'main.js' ).
 const logger = new Logger ({}, app); 
 const header = new Header (app, BrowserWindow);
+const utils  = new Utils (app, logger);
 const smtpClient = new SMTPClient (accounts, logger, app.getPath('userData'));
+const contactsManager = new ContactsManager(app, utils);
 
 let easymde;
 // Expose protected methods that allow the renderer process to use the ipcRenderer without exposing the entire object.
@@ -82,20 +87,97 @@ contextBridge.exposeInMainWorld(
             },
           });
         },
-        setSendHandler : () => {
+        setSendHandler : async () => {
             const form = document.getElementById('send-mail-form');
+
+            // Add autocomplete list from contacts to 'to' and 'cc' fields.
+            let datalist = document.querySelector('datalist#contacts');
+            let accountInfo = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
+            await contactsManager.createContactsDB(accountInfo.user);
+            let contactsFromDB = await contactsManager.loadAllContacts();
+            for (let j = 0; j < contactsFromDB.length; j++){
+                let option = document.createElement('option');
+                option.value = contactsFromDB[j].email;
+                datalist.appendChild(option);
+            }
 
             const to = form.elements['to'];
             const cc = form.elements['cc'];
             const subject = form.elements['subject'];
+            const encryptedCheckbox = form.elements['encrypted'];
 
-            form.addEventListener('input', FormValidator.debounce(function (e) {
+            /*
+                Decide whether to keep the encrypt switch disabled or not. If the public keys of the 
+                recepients (To, CC etc) are known, and the user has created (or imported) a personal
+                PGP keypair, then the checkbox can be enabled to give the user the option to send an
+                encrypted and signed email with PGP.  Only the case of both encryption and signature
+                is supported, since the need to have encrypted but not signed email is not significant, 
+                and the case of signing emails but not encrypting them is also not used as commonly.
+            */
+            let personalPGPKeyPairFound = await necessaryPersonalPGPKeysFound();
+        
+            form.addEventListener('input', FormValidator.debounce(async function (e) {
                 switch (e.target.id) {
                     case 'to':
-                        FormValidator.checkEmailAddress(to);
+                        let valid = FormValidator.checkEmailAddress(to);
+                        /*
+                            Form validator marks an email address as valid if it has the correct email format and
+                            allows only the comma (',') character to separate multiple email addresses. This means
+                            that if the user has specified multiple email addresses as the recipient, we need to 
+                            split the string to get all the individual email addresses, and then check if we have
+                            the neccessary PGP public key for each one.
+                        */
+                        if (valid){
+                            if (personalPGPKeyPairFound){
+                                // Split the 'to' string to all the individual email addresses.
+                                let recipientsArray = to.value.split(',');
+                                let validationArray = [];
+                                for (let i = 0; i < recipientsArray.length; i++){
+                                    // Remove possible whitespaces at the ends of the individual email address.
+                                    recipientsArray[i] = recipientsArray[i].trim();
+                                    let recipientPublicKeyFound = await necessaryTargetPGPKeyFound(recipientsArray[i]);
+                                    if (recipientPublicKeyFound) validationArray.push('true');
+                                    else validationArray.push('false');
+                                
+                                }
+                                if (validationArray.includes('false')) {
+                                    encryptedCheckbox.disabled = true;
+                                    encryptedCheckbox.checked = false;
+                                }
+                                else encryptedCheckbox.disabled = false;      
+                            }
+                        }
+                        else {
+                            encryptedCheckbox.disabled = true;
+                            encryptedCheckbox.checked = false;
+                        }
                         break;
                     case 'cc':
-                        FormValidator.checkEmailAddress(cc);
+                        let ccValid = FormValidator.checkEmailAddressForCC(cc);
+                        if (ccValid){
+                            if (personalPGPKeyPairFound){
+                                // Split the 'to' string to all the individual email addresses.
+                                let recipientsArray = cc.value.split(',');
+                                let validationArray = [];
+                                for (let i = 0; i < recipientsArray.length; i++){
+                                    // Remove possible whitespaces at the ends of the individual email address.
+                                    recipientsArray[i] = recipientsArray[i].trim();
+                                    let recipientPublicKeyFound = await necessaryTargetPGPKeyFound(recipientsArray[i]);
+                                    if (recipientPublicKeyFound) validationArray.push('true');
+                                    else validationArray.push('false');
+                                
+                                }
+                                if (validationArray.includes('false')) {
+                                    encryptedCheckbox.disabled = true;
+                                    encryptedCheckbox.checked = false;
+                                }
+                                else encryptedCheckbox.disabled = false;      
+                            }
+                        }
+                        else {
+                            encryptedCheckbox.disabled = true;
+                            encryptedCheckbox.checked = false;
+                        }
                         break;
                     default: 
                 }
@@ -107,7 +189,7 @@ contextBridge.exposeInMainWorld(
                 
                 let isEmailValid = FormValidator.checkEmailAddress(to);
                 let isCcValid;
-                if (cc) isCcValid = FormValidator.checkEmailAddress(to);
+                if (cc) isCcValid = FormValidator.checkEmailAddressForCC(cc);
                 else isCcValid = true;
                 if (isEmailValid && isCcValid) {
                     let emailContent;
@@ -125,12 +207,13 @@ contextBridge.exposeInMainWorld(
                     let isSubjectOK = FormValidator.checkEmailSubject(subject);
                     if (isSubjectOK){
                         let message = {
-                            from: form.elements['from'].value, //_id
+                            from: form.elements['from'].value, 
                             fromName : form.elements['from-name'].value,
                             to: form.elements['to'].value,
                             cc: form.elements['cc'].value,
                             subject: form.elements['subject'].value,
-                            message: emailContent
+                            message: emailContent,
+                            encrypted: encryptedCheckbox.disabled ? false : encryptedCheckbox.checked
                         }
 
                         logger.log('Required fields completed. Preparing to send message ...');
@@ -154,7 +237,8 @@ contextBridge.exposeInMainWorld(
                                 to: form.elements['to'].value,
                                 cc: form.elements['cc'].value,
                                 subject: undefined,
-                                message: emailContent
+                                message: emailContent,
+                                encrypted: encryptedCheckbox.disabled ? false : encryptedCheckbox.checked
                             }
                             logger.log('Required fields completed. Preparing to send message ...');
                             materialize.toast({html: 'Sending message ...', displayLength : 3000 ,classes: 'rounded'});
@@ -182,3 +266,36 @@ contextBridge.exposeInMainWorld(
         }
     }   
 );
+
+async function necessaryPersonalPGPKeysFound (){
+    let accountInfo = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
+
+    // If no keypair is found in the 'keys' directory, then no decryption is possible.
+    let keysDirectory = jetpack.cwd(app.getPath('userData'), `keys`, `${Utils.md5(accountInfo.user)}`);
+    const privateKeyArmored = keysDirectory.inspect(`${accountInfo.user}-private.asc`);
+    const publicKeyArmored = keysDirectory.inspect(`${accountInfo.user}-public.asc`);
+    const passphrase = keysDirectory.inspect(`getPass.txt`);
+
+    if (!privateKeyArmored || !publicKeyArmored || !passphrase) return false;
+    else return true;
+}
+
+async function necessaryTargetPGPKeyFound (recipientEmail){
+    let accountInfo = await (async (email) => (await accounts.findAsync({user: email} ))[0] || {})(state.account.user);
+    await contactsManager.createContactsDB(accountInfo.user);
+
+    let recipientInfo = await contactsManager.loadContact(recipientEmail);
+    let recipientPublicKey ;
+    if (recipientInfo){
+        recipientPublicKey = await jetpack.readAsync(recipientInfo.publicKey);
+    }
+    // Check public key to make sure that the registered email is indeed the recipient's.
+    if (recipientPublicKey) {
+      let publicKeyOK = Encrypt.testPublicKey(recipientPublicKey, recipientEmail);
+      if (publicKeyOK){
+       return true;
+      }
+    }
+    return false;
+}
+

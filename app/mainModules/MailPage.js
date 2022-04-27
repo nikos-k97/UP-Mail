@@ -1964,7 +1964,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         </tr>
         <tr>
           <th>Subject: &nbsp;</th>
-          <td>${(envelope.subject && envelope.envelope.subject !== '') ? envelope.subject : '(No Subject)'}</td>
+          <td>${(envelope.subject && envelope.subject !== '') ? envelope.subject : '(No Subject)'}</td>
         </tr>
       </thead>
     </table>
@@ -2265,7 +2265,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           </tr>
           <tr>
             <th>Subject: &nbsp;</th>
-            <td>${(envelope.subject && envelope.envelope.subject !== '') ? envelope.subject : '(No Subject)'}</td>
+            <td>${(envelope.subject && envelope.subject !== '') ? envelope.subject : '(No Subject)'}</td>
           </tr>
         </thead>
       </table>

@@ -21,16 +21,23 @@
 
             <div class="form-field input-field">
               <label for='to'>To: </label>
-              <input type="email" name="to" id="to" autocomplete="off">
+              <input type="email" name="to" id="to" list="contacts" 
+                     title="For multiple recipients, use a comma (,) separated list of valid email addresses."
+                     pattern="^([\w+-.%]+@[\w.-]+\.[A-Za-z]{2,4}[ ]*)(,[ ]*[\w+-.%]+@[\w.-]+\.[A-Za-z]{2,4})*$">
               <small></small>
             </div>
             
 
             <div class="form-field input-field">
               <label for='cc'>Cc: </label>
-              <input type="email" name="cc" id="cc" autocomplete="off">
+              <input type="email" name="cc" id="cc" list="contacts"
+                     title="For multiple recipients, use a comma (,) separated list of valid email addresses."
+                     pattern="^([\w+-.%]+@[\w.-]+\.[A-Za-z]{2,4}[ ]*)(,[ ]*[\w+-.%]+@[\w.-]+\.[A-Za-z]{2,4})*$">
               <small></small>
             </div>
+
+            <datalist id="contacts">
+            </datalist>
 
 
             <div class="form-field input-field">
@@ -43,7 +50,7 @@
             <div class="form-field switch center-align" title="Necessary PGP Keys were not found">
               <label>
                 <span title="">No encryption</span>
-                <input type="checkbox" disabled>
+                <input type="checkbox" disabled id="encrypted">
                 <span class="lever"></span>
                 <span title="">Encrypt & Sign (PGP)</span>
               </label>
