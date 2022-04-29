@@ -245,13 +245,21 @@ contextBridge.exposeInMainWorld(
                         materialize.toast({html: 'Sending message ...', displayLength : 3000 ,classes: 'rounded'});
                         // Disable the button again after pressing send.
                         document.querySelector('#send').disabled = true;
-                        let sent = await smtpClient.queueMailForSend(message);
-                        if (!sent) {
+                        try {
+                            let sent = await smtpClient.queueMailForSend(message);
+                            if (!sent) {
+                                // Reenable the send button since message was not sent.
+                                materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
+                                document.querySelector('#send').disabled = false;
+                            }
+                            else materialize.toast({html: 'Message sent!', displayLength : 3000 ,classes: 'rounded'});
+                        } catch (error) {
+                            console.error(error);
                             // Reenable the send button since message was not sent.
                             materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
                             document.querySelector('#send').disabled = false;
                         }
-                        else materialize.toast({html: 'Message sent!', displayLength : 3000 ,classes: 'rounded'});
+                   
                     }
                     else {
                         document.querySelector('.toast-no-subject').addEventListener('click' , async (e) => {
@@ -288,13 +296,21 @@ contextBridge.exposeInMainWorld(
                             materialize.toast({html: 'Sending message ...', displayLength : 3000 ,classes: 'rounded'});
                             // Disable the button again after pressing send.
                              document.querySelector('#send').disabled = true;
-                            let sent = await smtpClient.queueMailForSend(message);
-                            if (!sent) {
-                                materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
-                                // Reenable the send button since message was not sent.
-                                document.querySelector('#send').disabled = false;
-                            }
-                            else materialize.toast({html: 'Message sent!', displayLength : 3000 ,classes: 'rounded'});
+                             try {
+                                let sent = await smtpClient.queueMailForSend(message);
+                                if (!sent) {
+                                    materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
+                                    // Reenable the send button since message was not sent.
+                                    document.querySelector('#send').disabled = false;
+                                }
+                                else materialize.toast({html: 'Message sent!', displayLength : 3000 ,classes: 'rounded'}); 
+                             } catch (error) {
+                                 console.error(error);
+                                 materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
+                                 // Reenable the send button since message was not sent.
+                                 document.querySelector('#send').disabled = false;
+                             }
+                         
                         })
 
                         document.querySelector('.toast-give-subject').addEventListener('click' , (e) => {

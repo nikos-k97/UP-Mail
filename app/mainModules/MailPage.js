@@ -47,6 +47,7 @@ MailPage.prototype.initializeIMAP = async function(accountInfo) {
     this.logger.error(error);
     client = null;
     this.imapClient = null;
+   
     materialize.toast({html: 'Could not connect to IMAP server. Navigating back to login screen ...', displayLength : 3000 ,classes: 'rounded'});
     this.logger.warn('Could not connect to IMAP server. Navigating back to login screen ...');
     this.stateManager.change('state', 'new');
@@ -54,7 +55,6 @@ MailPage.prototype.initializeIMAP = async function(accountInfo) {
     // Re-emit window.load event so that the StateManager.style function can work properly.
     // (it is waiting for the window.load event to apply style)
     dispatchEvent(new Event('load'));
-    return false;
   }
 }
 
@@ -64,7 +64,6 @@ MailPage.prototype.checkIMAPStatus = async function (accountInfo) {
   // We always want to be in the 'authenticated' state in order to be able to perform IMAP operations.
   if (this.imapClient.client.state === 'disconnected' || this.imapClient.client.state === 'connected') {
     this.logger.log('Client disconnected. Reconnecting...');
-    //this.imapClient.client.end();
     this.imapClient = null;
     let initialized = await this.initializeIMAP(accountInfo);
     if (initialized) {
@@ -1395,6 +1394,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     ------------------------------------------------------------------------------------------------------------
   */
   let wasMessageEncrypted = false;      // Will become true is the email is detected to be encrypted with PGP/MIME.
+  let wasMessageDecryptedSuccessfully = false; 
   let decryptedEncapsulatedMIMEMessage; // If the message was decrypted successfully, this is the whole decrypted message before parsing.
 
   // The following three variables will get populated once the decryptedEncapsulatedMIMEMessage is parsed.
@@ -1545,23 +1545,25 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
                 try {
                   decryptionResults = await Encrypt.openPGPDecryptAndVerify(encryptedData, senderPublicKey, accountInfo, this.app.getPath('userData'));
                   decryptedEncapsulatedMIMEMessage = decryptionResults[0];
-                  if (decryptionResults[1] === true){
-                    wasMessageSigned = true;
-                    wasMessageVerified = true;
-                  }
-                  else if (decryptionResults[1] === false){
-                    wasMessageSigned = true;
-                    wasMessageVerified = false;
-                  }
-                  else if (decryptionResults[1] === 'notsigned'){
-                    wasMessageSigned = false;
-                  }
-                  materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+                  if (decryptionResults[0]){
+                    wasMessageDecryptedSuccessfully = true;
+                    if (decryptionResults[1] === true){
+                      wasMessageSigned = true;
+                      wasMessageVerified = true;
+                    }
+                    else if (decryptionResults[1] === false){
+                      wasMessageSigned = true;
+                      wasMessageVerified = false;
+                    }
+                    else if (decryptionResults[1] === 'notsigned'){
+                      wasMessageSigned = false;
+                    }
+                    materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+                  }  
                 } catch (error) {
                   this.logger.error(error);
-                  throw error;
+                  throw error; //Throw error so we can catch it in the external try-catch block.
                 }
-              
               }
               /*
                 We did not find any relevant public key, so we dont attempt to verify any signature that is not detached.
@@ -1571,15 +1573,17 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
                 try {
                   // Get the decrypted data (new MIME message to be parsed).
                   decryptionResults = await Encrypt.openPGPDecrypt(encryptedData, accountInfo, this.app.getPath('userData'));
-                  decryptedEncapsulatedMIMEMessage = decryptionResults;
-                  materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+                  if (decryptionResults){
+                    wasMessageDecryptedSuccessfully = true;
+                    decryptedEncapsulatedMIMEMessage = decryptionResults;
+                    materialize.toast({html: 'Message was decrypted using the stored private key.', displayLength : 3000 ,classes: 'rounded'});
+                  }
                 } catch (error) {
                   this.logger.error(error);
-                  throw error;
+                  throw error; //Throw error so we can catch it in the external try-catch block.
                 }
               }
-              console.log(decryptedEncapsulatedMIMEMessage)
-  
+
               /*
                 This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
                 The one contains control data (content-type='application/pgp-encrypted) and the other the actual encrypted
@@ -2335,32 +2339,39 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
   // -------------------------------- SHOW ENCRYPTION / SIGNED STATUS ------------------------------------------
   let encryptionText ;
-  if (wasMessageEncrypted) encryptionText = '<span class="encrypted-message"><strong>(Message was sent encrypted using PGP)</strong></span>';
+  if (wasMessageEncrypted && !wasMessageDecryptedSuccessfully) encryptionText = '<span class="encrypted-message-fail"><strong>(Message was sent encrypted using PGP but could not be decrypted)</strong></span>';
+  else if (wasMessageEncrypted && wasMessageDecryptedSuccessfully) encryptionText = '<span class="encrypted-message-success"><strong>(Message was sent encrypted using PGP - Decryption was successful)</strong></span>';
   else encryptionText = '<span class="unencrypted-message">(Message was not encrypted by the sender)</span>';
 
   let signatureText;
-  if (wasMessageSigned) {
-    if (wasSenderPublicKeyVerified) {
-      if (wasMessageVerified) {
-        signatureText = `<span class="verified-message"><strong>(Message was signed - Signature was verified)</strong></span>`;
+  if ((wasMessageEncrypted && wasMessageDecryptedSuccessfully) || !wasMessageEncrypted){
+    if (wasMessageSigned) {
+      if (wasSenderPublicKeyVerified) {
+        if (wasMessageVerified) {
+          signatureText = `<span class="verified-message"><strong>(Message was signed - Signature was verified)</strong></span>`;
+        }
+        else {
+          signatureText = `<span class="unverified-message"><strong>(Message was signed - Could not verify signature!)</strong></span>`;
+        }
       }
       else {
-        signatureText = `<span class="unverified-message"><strong>(Message was signed - Could not verify signature!)</strong></span>`;
+        signatureText = `<span class="public-key-problem">(Message was signed - Could not find a suitable Public Key to verify)</span>`;
       }
     }
-    else {
-      signatureText = `<span class="public-key-problem">(Message was signed - Could not find a suitable Public Key to verify)</span>`;
+    else if (!wasMessageSigned && !wasMessageEncrypted) {
+      signatureText = `<span class="unsigned-message">(Message was not signed by the sender)</span>`;
+    }
+    else if (!wasMessageSigned && wasMessageEncrypted && !wasSenderPublicKeyVerified) {
+      signatureText = `<span class="unsigned-message">(Message is either not signed or no suitable Public Key was found to verify the signature)</span>`;
+    }
+    else if (!wasMessageSigned && wasMessageEncrypted && wasSenderPublicKeyVerified) {
+      signatureText = `<span class="unsigned-message">(Message was not signed by the sender)</span>`;
     }
   }
-  else if (!wasMessageSigned && !wasMessageEncrypted) {
-    signatureText = `<span class="unsigned-message">(Message was not signed by the sender)</span>`;
+  else {
+    signatureText = `<span class="unsigned-message">(Could not determine if message was signed - Decryption was not possible)</span>`;
   }
-  else if (!wasMessageSigned && wasMessageEncrypted && !wasSenderPublicKeyVerified) {
-    signatureText = `<span class="unsigned-message">(Message is either not signed or no suitable Public Key was found to verify the signature)</span>`;
-  }
-  else if (!wasMessageSigned && wasMessageEncrypted && wasSenderPublicKeyVerified) {
-    signatureText = `<span class="unsigned-message">(Message was not signed by the sender)</span>`;
-  }
+  
 
 
   selectedMailItem.querySelector('#message-holder .back').insertAdjacentHTML("afterend",
@@ -2388,8 +2399,12 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
         color: rgb(201, 35, 35);
       }
 
-      .encrypted-message{
+      .encrypted-message-success{
         color:rgb(62, 148, 62);
+      }
+
+      .encrypted-message-fail{
+        color: rgb(201, 35, 35);
       }
 
       .unencrypted-message{
