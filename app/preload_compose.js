@@ -1,9 +1,8 @@
 // Secure way of importing node.js modules into the renderer process (compose.js) - 
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
 const {contextBridge}              = require("electron");
-const {app, BrowserWindow, dialog} = require('@electron/remote');
+const {app, BrowserWindow}         = require('@electron/remote');
 const Datastore                    = require('@seald-io/nedb'); // Use a NeDB fork since original NeDB is deprecated.
-const Promise                      = require('bluebird');
 const jetpack                      = require('fs-jetpack');
 const materialize                  = require("./helperModules/materialize.min.js");
 const Logger                       = require('./helperModules/logger'); 
@@ -21,12 +20,10 @@ const {marked}                     = require('marked')
 const appDir = jetpack.cwd(app.getAppPath());
 const storeDir = jetpack.cwd(app.getPath('userData'));
 const state = storeDir.read('./state.json', 'json') || { state: 'new' };
-const accountsDB = new Datastore({
+const accounts = new Datastore({
   filename: app.getPath('userData') + '/db/accounts.db',
   autoload: true
 });
-//const accounts = Promise.promisifyAll(accountsDB);
-const accounts = accountsDB;
 
 
 // Avoid global variables by creating instances with parameters. For example nearly every module loaded by the preload

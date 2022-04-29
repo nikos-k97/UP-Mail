@@ -1,5 +1,4 @@
 const Datastore   = require('@seald-io/nedb'); // Use a NeDB fork since original NeDB is deprecated.
-const Promise     = require('bluebird');
 const jetpack     = require('fs-jetpack');
 
 
@@ -19,14 +18,13 @@ function ContactsManager (app, utils) {
   let hash = emailAddress.includes('@') ? this.utils.md5(emailAddress) : emailAddress;
   if (typeof this.db === 'undefined') {
     // Create (only if it doesnt exist) the database that stores the mail for the particular emailAddress.
-    const contactsDB = new Datastore(
+    this.db = new Datastore(
       {
         filename: `${this.app.getPath('userData')}/contacts/${hash}.db`,
         autoload: false
       }
     );
-    //this.db = Promise.promisifyAll(contactsDB);
-    this.db = contactsDB;
+
     // Load the database
     await this.db.loadDatabaseAsync();
     // Since each message's UID is unique inside each mailbox, we specify that 'uid' field should be unique.

@@ -5,7 +5,6 @@
 // Main Process can interact with each Renderer Processes web page via the BrowserWindows's 'webContents' object.
 
 'use strict'
-
 const path                                               = require("path");
 const electron                                           = require('electron');
 const {app, BrowserWindow, Menu, ipcMain, shell, dialog} = electron;
