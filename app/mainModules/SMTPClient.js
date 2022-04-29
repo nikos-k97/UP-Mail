@@ -1,5 +1,5 @@
 const nodemailer     = require('nodemailer');
-const openpgpEncrypt = require('nodemailer-openpgp').openpgpEncrypt;
+const openpgpEncrypt = require('../externalModules/nodemailer-openpgp').openpgpEncrypt;
 const Encrypt        = require('./Encrypt');
 const jetpack        = require('fs-jetpack');
 
@@ -44,8 +44,8 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
         let privateKeyOk = await Encrypt.testPrivateKey(personalPrivateKeyArmored, decryptedPassphrase, accountDetails.user);
         if (personalPrivateKeyArmored && decryptedPassphrase && privateKeyOk){
           let options = {
-            'signingKey' : String(personalPrivateKeyArmored).toString(),
-            'passphrase' : String(decryptedPassphrase).toString()
+            'signingKey' : personalPrivateKeyArmored,
+            'passphrase' : decryptedPassphrase
           }
           this.transporters[accountDetails.user].use('stream', openpgpEncrypt(options));
           personalKeyFetched = true;

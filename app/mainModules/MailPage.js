@@ -1578,7 +1578,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
                   throw error;
                 }
               }
-             
+              console.log(decryptedEncapsulatedMIMEMessage)
   
               /*
                 This is PGP/MIME message. We already fetched the message from the server, and it contained 2 attachments.
