@@ -50,6 +50,8 @@ MailPage.prototype.initializeIMAP = async function(accountInfo) {
    
     materialize.toast({html: 'Could not connect to IMAP server. Navigating back to login screen ...', displayLength : 3000 ,classes: 'rounded'});
     this.logger.warn('Could not connect to IMAP server. Navigating back to login screen ...');
+    // Close all other windows
+    this.ipcRenderer.send('closeAllOtherWindows');
     this.stateManager.change('state', 'new');
     this.stateManager.checkUserState();
     // Re-emit window.load event so that the StateManager.style function can work properly.
@@ -683,6 +685,9 @@ MailPage.prototype.addActionsButtonFunctionality = async function(accountInfo) {
 
     connectionEnded.then(async () => {
       materialize.toast({html: 'Logging out and deleting all locally stored data...', displayLength : 1000 ,classes: 'rounded'});
+      // Close all other windows
+      this.ipcRenderer.send('closeAllOtherWindows');
+
       await this.mailStore.deleteEmails();
       await this.mailStore.deleteEmailBodies(accountInfo.user, [], true);
       await this.stateManager.contactsManager.deleteAllContacts();

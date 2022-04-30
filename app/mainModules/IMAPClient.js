@@ -1,10 +1,10 @@
-const MailParser     = require('mailparser').MailParser;
-const Promise        = require('bluebird');
-const jetpack        = require('fs-jetpack');
-const IMAP           = require('node-imap');
-const base64         = require('base64-stream');
-const Utils          = require('./Utils');
-const Readable       = require('stream').Readable;
+const MailParser      = require('mailparser').MailParser;
+const Promise         = require('bluebird');
+const jetpack         = require('fs-jetpack');
+const IMAP            = require('node-imap');
+const base64          = require('base64-stream');
+const Utils           = require('./Utils');
+const Readable        = require('stream').Readable;
 
 /**
  * Logs the user in to their email server.

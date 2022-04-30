@@ -1,6 +1,6 @@
 // Secure way of importing node.js modules into the renderer process (compose.js) - 
 // Renderer process has access only to the modules - instances of modules that are defined in the contextBridge.
-const {contextBridge}              = require("electron");
+const {contextBridge, ipcRenderer} = require("electron");
 const {app, BrowserWindow}         = require('@electron/remote');
 const Datastore                    = require('@seald-io/nedb'); // Use a NeDB fork since original NeDB is deprecated.
 const jetpack                      = require('fs-jetpack');
@@ -249,7 +249,11 @@ contextBridge.exposeInMainWorld(
                                 materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});
                                 document.querySelector('#send').disabled = false;
                             }
-                            else materialize.toast({html: 'Message sent!', displayLength : 3000 ,classes: 'rounded'});
+                            else {
+                                setTimeout( ()=>{ ipcRenderer.send('close');}, 900);
+                                materialize.toast({html: 'Message sent!', displayLength : 2200 ,classes: 'rounded'});
+                            }
+                            
                         } catch (error) {
                             console.error(error);
                             // Reenable the send button since message was not sent.
@@ -300,7 +304,11 @@ contextBridge.exposeInMainWorld(
                                     // Reenable the send button since message was not sent.
                                     document.querySelector('#send').disabled = false;
                                 }
-                                else materialize.toast({html: 'Message sent!', displayLength : 3000 ,classes: 'rounded'}); 
+                                else {
+                                    setTimeout( ()=>{ ipcRenderer.send('close');}, 900);   
+                                    materialize.toast({html: 'Message sent!', displayLength : 2200 ,classes: 'rounded'}); 
+                                }
+                               
                              } catch (error) {
                                  console.error(error);
                                  materialize.toast({html: 'Message was not sent, a problem occured.', displayLength : 3000 ,classes: 'rounded'});

@@ -275,30 +275,85 @@ ipcMain.on('open', (event, arg) => {
     }
 });
 
+// Close specific window
+ipcMain.on('close', (event) => {
+    let windowID = BrowserWindow.getFocusedWindow().id;
+    let targetWindow;
+    for (let i = 0; i < appWindows.length; i++){
+        if (appWindows[i]){
+            let id = appWindows[i].id;
+            if (windowID === id) targetWindow = appWindows[i];
+        }
+    }
+    if (targetWindow) targetWindow.close();
+});
+
+ipcMain.on('closeAllOtherWindows', (event) => {
+    let allWindows = BrowserWindow.getAllWindows();
+    let currentWindow = BrowserWindow.getFocusedWindow();
+    for (let i = 0; i < allWindows.length; i++){
+      if (allWindows[i].id !== currentWindow.id) allWindows[i].close();
+    }
+});
+
 
 // Choose folder to save attachment.
 ipcMain.on('saveAttachment', (event, file) => {
+    let windowID = BrowserWindow.getFocusedWindow().id;
+    let targetWindow;
+    for (let i = 0; i < appWindows.length; i++){
+        if (appWindows[i]){
+            let id = appWindows[i].id;
+            if (windowID === id) targetWindow = appWindows[i];
+        }
+    };
+
     let options = {
         title: `Choose directory to save file : ${file} `,
         buttonLabel: 'Choose',
         defaultPath : app.getPath('downloads'),
         properties: ['openDirectory']
     }
-    // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
-    let filepath = dialog.showOpenDialogSync(appWindows[event.frameId], options);
+
+    let filepath;
+    if (targetWindow){
+        // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
+        filepath = dialog.showOpenDialogSync(targetWindow, options);
+    }
+    else {
+        filepath = dialog.showOpenDialogSync(options);
+    }
+ 
     event.sender.send('saveFolder', filepath);
 })
 
 // Choose file and send its path to the renderer.
 ipcMain.on('selectFile', (event) => {
+    let windowID = BrowserWindow.getFocusedWindow().id;
+    let targetWindow;
+    for (let i = 0; i < appWindows.length; i++){
+        if (appWindows[i]){
+            let id = appWindows[i].id;
+            if (windowID === id) targetWindow = appWindows[i];
+        }
+    };
+
     let options = {
         title: `Choose the file to import:`,
         buttonLabel: 'Choose',
         defaultPath : app.getPath('downloads'),
         properties: ['openFile']
     }
-    // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
-    let filepath = dialog.showOpenDialogSync(appWindows[event.frameId], options);
+
+    let filepath;
+    if (targetWindow){
+        // The browserWindow argument allows the dialog to attach itself to a parent window, making it modal.
+        filepath = dialog.showOpenDialogSync(targetWindow, options);
+    }
+    else{
+        filepath = dialog.showOpenDialogSync(options);
+    }
+
     event.sender.send('fileSelected', filepath);
 })
 
