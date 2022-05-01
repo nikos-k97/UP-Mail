@@ -461,6 +461,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
 
   // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
   let promises = []; // For each mailbox's message.
+  let shouldHighestSeqNoBeIncremented = false;
 
   // Check box status since last login.
   statusOK = await this.checkIMAPStatus(accountInfo);
@@ -519,11 +520,11 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
             // (highestSeqNo, parsedContent from mailParser, attribues)
             function onLoad(seqno, msg, attributes) {
               promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
-              if (seqno > highestSeqNo) highestSeqNo = seqno;
+              if (seqno > highestSeqNo) promises.push(new Promise((resolve) => {highestSeqNo = seqno; resolve()}))
               document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
             }.bind(this)
           );
-          highestSeqNo = highestSeqNo + 1;
+          shouldHighestSeqNoBeIncremented = true;
         } catch (error) {
           this.logger.error(error);
           // Skip the emails fetch for this particular mailbox.
@@ -549,7 +550,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
               },
               function onLoad(seqno, msg, attributes) {
                 promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
-                if (seqno > highestSeqNo) highestSeqNo = seqno;
+                if (seqno > highestSeqNo) promises.push(new Promise((resolve) => {highestSeqNo = seqno; resolve()}))
                 document.querySelector('#number').innerText = `Total emails fetched: ${++totalEmails}`;
               }.bind(this)
             );
@@ -557,7 +558,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
             this.logger.error(error);
             return;
           }
-          highestSeqNo = highestSeqNo + 1;
+          shouldHighestSeqNoBeIncremented = true;
         }
         break;
     }
@@ -567,6 +568,10 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
     // Skip the emails fetch for this particular mailbox.
     return;
   }
+
+  // Wait for all the database inserts/ updated to be resolved.
+  await Promise.all(promises);
+  if (shouldHighestSeqNoBeIncremented) highestSeqNo = highestSeqNo + 1;
 
   this.logger.info(`Highest Local SeqNo after switch: ${highestSeqNo}`);
   this.logger.info(`Highest Server SeqNo after switch: ${this.imapClient.mailbox.messages.total}`);
@@ -610,8 +615,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
     return;
   }
 
-  // Wait for all the database inserts/ updated to be resolved.
-  await Promise.all(promises);
+
 
   _.set(personalFolders, objectPath.concat(['highestSeqNo']), highestSeqNo);
   _.set(personalFolders, objectPath.concat(['UIDSequence']), serverUidSequence);
@@ -979,7 +983,7 @@ MailPage.prototype.newMailReceived = async function (){
     In both cases we do nothing. The new mails will arrive when the mailbox is reloaded.
   */
 
-  if (this.imapClient.mailbox.messages.total > storedMessageCount && this.imapClient.mailbox.messages.new > 0){
+  if (this.imapClient.mailbox.messages.total > storedMessageCount ){
       checkPassed = true;
   }
 
@@ -988,27 +992,36 @@ MailPage.prototype.newMailReceived = async function (){
   // Fetch the new mail.
   let uid ; // Will have the format 'folderUID'
   let pureUid; // Just the number.
+  let getPromise;
   try {
-    await this.imapClient.getEmails(path, true, false, highestSeqNo,
-      {
-        bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
-        envelope: true
-      },
-      async function onLoad(seqno, msg, attributes) {
-        // If the UID is already present we dont fetch it again.
-        if (storedUIDSequence.includes(attributes.uid)) return ;
-        await this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path);
-        this.logger.info(`Saved email with ${attributes.uid} to mailstore`)
-        if (seqno > highestSeqNo) highestSeqNo = seqno;
-        this.logger.info(`Was highest seqno incremented again? -> ${highestSeqNo}`)
-        pureUid = attributes.uid;
-        uid = `${path}${attributes.uid}`;
-      }.bind(this)
-    );
+    getPromise = new Promise ((resolve) => {
+      this.imapClient.getEmails(path, true, false, highestSeqNo,
+        {
+          bodies: 'HEADER.FIELDS (TO FROM SUBJECT)',
+          envelope: true
+        },
+        async function onLoad(seqno, msg, attributes) {
+          // If the UID is already present we dont fetch it again.
+          if (storedUIDSequence.includes(attributes.uid)) return ;
+          await this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path);
+          this.logger.info(`Saving email with ${attributes.uid} to mailstore...`)
+          if (seqno > highestSeqNo) {
+            highestSeqNo = seqno;
+          }
+          this.logger.info(`Was highest seqno incremented again? -> ${highestSeqNo}`)
+          pureUid = attributes.uid;
+          uid = `${path}${attributes.uid}`;
+          resolve(uid);
+        }.bind(this)
+      );
+    });
   } catch (error) {
     this.logger.error(error);
     return;
   }
+
+  // Wait for all the database inserts/ updated to be resolved.
+  await getPromise;
 
   // UID is undefined since we didnt fetch any emails (the mail was already in the DB)
   // If multiple mail come at the same time, there might be some problems with the highestSeqNo (local < server)
