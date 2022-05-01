@@ -62,7 +62,7 @@ MailStore.prototype.saveEmail = async function (email, seqno, msg, attributes, f
   let mail = Object.assign( 
     msg, // target
     attributes,  //source1
-    { seqno: seqno, folder : folder, user: email, uid: folder+attributes.uid, date: +new Date(attributes.date) } //source2
+    { seqno: seqno, folder : folder, user: email, uid: folder+attributes.uid, date: +new Date(attributes.date)} //source2
   )
   
   return this.db.insertAsync(mail).catch((reason) => {

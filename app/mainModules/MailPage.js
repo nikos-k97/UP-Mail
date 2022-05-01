@@ -21,6 +21,7 @@ function MailPage (app, logger, stateManager, utils, accountManager, mailStore) 
   this.ipcRenderer = this.accountManager.ipcRenderer;
   //this.imapClient -> defined in 'initializeIMAP()'
   this.checkedUIDs = [];
+  this.folderPaths = [];
 }
 
 
@@ -218,6 +219,25 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   // Render folders in the sidebar (mailbox.html)
   await this.renderFolderStructure(accountInfo);
 
+  // Save the path to the trash, inbox and sent folders (used for moving emails to other folders)
+  for (let i = 0; i < this.folderPaths.length; i++){
+    let path = String(this.folderPaths[i]).toString();
+    let pathLower = path.toLowerCase();
+    if (pathLower.includes('trash') || pathLower.includes('deleted') || pathLower.includes('κάδος') 
+        || pathLower.includes('καδος') || pathLower.includes('απορρίματα') || pathLower.includes('απορριματα')
+        || pathLower.includes('διεγραμμενα') || pathLower.includes('διεγραμμένα')){
+        this.folderPathTrash = path;
+    }
+    else if (pathLower.includes('inbox') || pathLower.includes('incoming') || pathLower.includes('εισερχομενα') 
+        || pathLower.includes('εισερχόμενα')){
+        this.folderPathInbox = path;
+    }
+    else if (pathLower.includes('sent') || pathLower.includes('outgoing') || pathLower.includes('εξερχόμενα') 
+        || pathLower.includes('εξερχόμενα') || pathLower.includes('απεσταλμένα') || pathLower.includes('απεσταλμενα')){
+        this.folderPathSent = path;
+    }
+  }
+
   // Render 'Key Management' button
   this.createKeyManagementButton();
 
@@ -231,19 +251,6 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
   // that 'state.json' dictates.
   await this.getChosenFolderInfo(this.stateManager.state.account.folder);
 
-  document.querySelector('.navlink-delete').addEventListener('click', async (e) => {
-    let newFlag = '\\Deleted';
-    let path = this.imapClient.compilePath(this.stateManager.state.account.folder);
-    for (let i = 0; i < this.checkedUIDs.length; i++){
-      let metadata = await this.mailStore.loadEmail(this.checkedUIDs[i]);
-      let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
-      await this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
-    }
-    let uids = [];
-    this.checkedUIDs.forEach(uid => uids.push(this.utils.stripStringOfNonNumericValues(uid)));
-    //await this.imapClient.expungeEmails(path, false, uids);
-  });
-
   /*
     We define the event listeners for the active mailbox here and not inside the 'getChosenFolderInfo'
     function, otherwise we create a new listener for the same event each time we change folder.
@@ -255,9 +262,10 @@ MailPage.prototype.getFolderInfo = async function(accountInfo, reloading){
       await this.newMailReceived();
     });
 
-    // Listen for expunged mails in the active mailbox.
+    // Listen for expunged mails in the active mailbox. This can happen if we flag a message as deleted, or move
+    // it to another mailbox. The same happens if this happens from another client (externally).
     this.imapClient.client.on('expunge', async (deletedSeqNo) => {
-      this.logger.info(`Server message with seqno : '${deletedSeqNo}' was expunged externally.`);
+      this.logger.info(`Server message with seqno : '${deletedSeqNo}' was expunged.`);
       await this.messageWasExpunged();
     });
 
@@ -332,10 +340,17 @@ MailPage.prototype.generateFolderList = async function (email, folders, journey)
     let pathSoFar = journey.concat({ name: folder, delimiter: folders[folder].delimiter });
 
     let id = btoa(unescape(encodeURIComponent(JSON.stringify(pathSoFar))));
+
     if (folders[folder].children){
       html += await this.generateFolderList(undefined, folders[folder].children, pathSoFar);
     }
     else {
+      // Save the paths to the mailboxes for later use.
+      let folderPath = JSON.parse(decodeURIComponent(escape(atob(id))));
+      let processedPath = this.imapClient.compilePath(folderPath);
+      this.folderPaths.push(processedPath);
+      
+
       html += `
       <div class="no-padding center-align">
         <div class="folder-button waves-effect waves-light btn-flat wide folder-tree" id="${id}">${folder}
@@ -429,6 +444,86 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   // objectPath   : ["Inbox"]
   let path = this.imapClient.compilePath(chosenFolder);
   let objectPath = IMAPClient.compileObjectPath(chosenFolder);
+
+  // If this is the 'deleted' folder, add one more option to the navbar -> Restore
+  if (path === this.folderPathTrash){
+    document.querySelector('.nav-wrapper ul').innerHTML = `
+      <li ><a class="navlink-restore"><i class="material-icons left">payment</i>Restore</a></li>
+      <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete</a></li>
+      <li ><a class="navlink-mark"><i class="material-icons left">markunread</i>Mark as Unread</a></li>
+      <li ><a class="navlink-flag"><i class="material-icons left">flag</i>Flag</a></li>
+    `;
+  }
+  else {
+    document.querySelector('.nav-wrapper ul').innerHTML = `
+      <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete</a></li>
+      <li ><a class="navlink-mark"><i class="material-icons left">markunread</i>Mark as Unread</a></li>
+      <li ><a class="navlink-flag"><i class="material-icons left">flag</i>Flag</a></li>
+  `;
+  }
+
+  document.querySelector('.navlink-delete').addEventListener('click', async (e) => {
+    // Avoid conflict when the mailbox is reopened in non read-only mode from updateFlag(). UpdateFlag() needs 
+    // to have a mailbox that is in write mode, and because there is a chance that the mailbox is still in 
+    // read only mode (from imap.fetch), each email that we check (checkbox) will call updateFlag() which will
+    // attempt to reoopen the mailbox, which will trigger errors.
+    let currentlyOpenFolder = this.imapClient.compilePath(this.stateManager.state.account.folder);
+    if (this.imapClient.mailbox.readOnly) {
+      let promise = new Promise (async (resolve, reject) => {
+        await this.imapClient.reloadBox(currentlyOpenFolder, false);
+        resolve();
+      })
+      await promise;
+    }
+   
+    // If current folder is the Trash folder, we delete the emails. Otherwise, we move them to the Trash folder.
+    // In both cases, the expunge event is triggered since the mails are no longer in the mailbox.
+    if (currentlyOpenFolder === this.folderPathTrash){
+      /* If we wanted to permanently delete the emails from the other folders insted of moving them to 'Trash',
+         expunge() is not necessary, since servers automatically delete permenently all mail with deleted flag from
+         non Trash folders.
+      */
+      try {
+        let newFlag = '\\Deleted';
+        this.checkedUIDs.forEach( async (element) => {
+          let metadata = await this.mailStore.loadEmail(element);
+          let updatedFlags = await this.imapClient.updateFlag(metadata.folder, false, metadata.uid, metadata.flags, newFlag);
+          await this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
+          await this.imapClient.expungeEmails(currentlyOpenFolder, false, this.utils.stripStringOfNonNumericValues( metadata.uid));
+        });
+      } catch (error) {
+        this.logger.error(error); 
+      }
+    }
+    else {
+      this.checkedUIDs.forEach(async (element) => {
+        let metadata = await this.mailStore.loadEmail(element);
+        let uid = this.utils.stripStringOfNonNumericValues(String(metadata.uid).toString());
+        this.imapClient.client.move(uid, this.folderPathTrash);
+      });
+    }
+  });
+
+  let restoreButton = document.querySelector('.navlink-restore');
+  if (restoreButton){
+    document.querySelector('.navlink-restore').addEventListener('click', async (e) => {
+      let currentlyOpenFolder = this.imapClient.compilePath(this.stateManager.state.account.folder);
+      this.checkedUIDs.forEach(async (element) => {
+        let metadata = await this.mailStore.loadEmail(element);
+        // Decide to which folder the mail will be moved when the 'Restore' button is pressed.
+        let from = `${metadata.envelope.from[0].mailbox}@${metadata.envelope.from[0].host}`;
+        let to = `${metadata.envelope.to[0].mailbox}@${metadata.envelope.to[0].host}`;
+        let userEmail = this.stateManager.state.account.user;
+        let moveTo;
+        if (userEmail === from) moveTo = this.folderPathSent;
+        else if (userEmail === to) moveTo = this.folderPathInbox;
+        else moveTo = this.folderPathInbox;
+        let uid = this.utils.stripStringOfNonNumericValues(String(metadata.uid).toString());
+        this.imapClient.client.move(uid, moveTo);
+      });
+    });
+  }
+
 
   /*
     'folderInfo' contains all the information we got from merging the folder info stored in accounts.db and
@@ -1076,7 +1171,6 @@ MailPage.prototype.newMailReceived = async function (){
 
   // Save all the folders data in the accounts database.
   await this.accountManager.editAccount(accountInfo.user, {'personalFolders' : personalFolders});
-
   // Get the new info that we just stored in the accounts database.
   accountInfo = await this.accountManager.findAccount(this.stateManager.state.account.user);
 
@@ -1111,10 +1205,11 @@ MailPage.prototype.newMailReceived = async function (){
         <e-mail class="email-item description"></e-mail>
       </div>
     `;
-    description = document.querySelector('.wrapper-description');
+
+    description = document.querySelector('.wrapper-description e-mail');
     let shadow = description.shadowRoot;
     shadow.innerHTML = this.utils.createDescriptionItem(this.imapClient.compilePath(this.stateManager.state.account.folder));
-    description.insertAdjacentHTML("afterend", html);
+    document.querySelector('.wrapper-description').insertAdjacentHTML("afterend", html);
   }
 
   let newEmailTag = document.querySelector('.new');
@@ -1310,6 +1405,15 @@ MailPage.prototype.messageWasExpunged = async function(){
         this.checkedUIDs.splice(index, 1); // 2nd parameter means remove one item only
         if (document.querySelector('.checkbox-description label input').checked) document.querySelector('.checkbox-description label input').checked = false;
       }
+    }
+  }
+  // If there are no more emails, delete the description item.
+  let emailWrappersLeft = document.querySelectorAll('.email-wrapper');
+  if (emailWrappersLeft.length === 1){
+    if (emailWrappersLeft[0].classList.contains('wrapper-description')){
+      emailWrappersLeft[0].remove();
+      let html = 'This folder is empty.';
+      document.querySelector('#mail').innerHTML = html;
     }
   }
 }

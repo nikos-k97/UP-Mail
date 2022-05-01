@@ -1294,12 +1294,14 @@ IMAPClient.prototype.checkFlags = async function (path, readOnly){
 }
 
 IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags, newFlag){
+  console.log(readOnly)
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
   // Also ensure that the box is not opened in 'readOnly' mode since we are attempting to change flags.
   if (this.currentPath !== path || (this.currentPath === path && this.mailbox.readOnly === true)) {  
     if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
       try {
         this.mailbox = await this.openBox(path, readOnly);
+        console.log(this.mailbox)
       } catch (error) {
         this.logger.error(error);
         return new Promise((resolve,reject) => {
@@ -1378,37 +1380,36 @@ IMAPClient.prototype.reloadBox = async function(path,readOnly){
                             S: A003 OK UID EXPUNGE completed
                 ------------------------------------------------
 */
-IMAPClient.prototype.expungeEmails = async function (path,readOnly,uids){
-  if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
+IMAPClient.prototype.expungeEmails = async function (path, readOnly, uids){
+  console.log(readOnly)
+  // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
+  // Also ensure that the box is not opened in 'readOnly' mode since we are attempting to delete.
+  if (this.currentPath !== path || (this.currentPath === path && this.mailbox.readOnly === true) || !this.mailbox) {  
+    if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
     try {
       this.mailbox = await this.openBox(path, readOnly);
     } catch (error) {
       this.logger.error(error);
       return new Promise((resolve,reject) => {
         reject(error);
-    });
+      });
+    }
   }
+
   if (this.client.serverSupports('UIDPLUS')){
     // Permanently removes all messages flagged as 'Deleted' in the currently open mailbox. 
     // If the server supports the 'UIDPLUS' capability, uids can be supplied to only remove messages that both 
     // have their uid in uids and have the \Deleted flag set.
     this.logger.debug('Server supports "UIDPLUS" extension.');
-    console.log(uids)
     this.client.expunge(uids, (error) => {
-      this.logger.error(error);
     });
   }
   else {
     this.logger.debug('Server does not support "UIDPLUS" extension.');
     // Permanently removes all messages flagged as 'Deleted' in the currently open mailbox since UIDPLUS is not supported.. 
     this.client.expunge((error) => {
-      this.logger.error(error);
     });
   }
-
-  this.client.expunge(uids, (error) => {
-    this.logger.error(error);
-  });
 }
 
 
