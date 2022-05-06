@@ -1039,6 +1039,7 @@ IMAPClient.prototype.fetchPGPSignatureForCleartextMessage = async function (atta
 IMAPClient.prototype.fetchPGPMIMEAttachments = async function (emailContent, sourceMIMENode, ipcRenderer){
   let parsedAttachments = emailContent.attachments;
   let attachmentHeaders = emailContent.attachmentHeaders;
+  let resultsArray = [];
 
   for (let i = 0; i < parsedAttachments.length; i++) {
     let attachment = parsedAttachments[i];
@@ -1129,12 +1130,14 @@ IMAPClient.prototype.fetchPGPMIMEAttachments = async function (emailContent, sou
   
     try {
       await parsePromise;
-      return true;
+      resultsArray.push(true);
     } catch (error) {
       this.logger.error(error);
-      return false;
+      resultsArray.push(false);
     }
   }
+  if (resultsArray.includes(false)) return false;
+  else return true;
 }
 
 
@@ -1294,14 +1297,13 @@ IMAPClient.prototype.checkFlags = async function (path, readOnly){
 }
 
 IMAPClient.prototype.updateFlag = async function (path, readOnly, uid, oldFlags, newFlag){
-  console.log(readOnly)
   // Ensure we have the right box open. Otherwise call 'openBox' to set currentPath (currentBox).
   // Also ensure that the box is not opened in 'readOnly' mode since we are attempting to change flags.
-  if (this.currentPath !== path || (this.currentPath === path && this.mailbox.readOnly === true)) {  
+  if (this.currentPath !== path || (this.currentPath === path && this.mailbox.readOnly === true)) { 
     if (this.mailbox) await this.client.closeBoxAsync(autoExpunge = false);
       try {
+        this.logger.log(`Closing and reopening box with readonly: ${readOnly} `);
         this.mailbox = await this.openBox(path, readOnly);
-        console.log(this.mailbox)
       } catch (error) {
         this.logger.error(error);
         return new Promise((resolve,reject) => {

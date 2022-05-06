@@ -106,7 +106,7 @@ function isSafeForExternalOpen(url){
     else return false;
 }
 
-function openWindow (file) {
+function openWindow (file, extraArg) {
     let index = file === 'appWindow' ? 0 : appWindows.length; //mainWindow is always at index 0 of the appWindows array
     const {width, height} = electron.screen.getPrimaryDisplay().workAreaSize;
 
@@ -137,34 +137,68 @@ function openWindow (file) {
         });
     }
     else if (file === 'composeWindow'){
-        //Use window.js helper script to create and open the electron.js BrowserWindow
-        appWindows[index] = createWindow(file, {
-            width: 950,
-            height: 900,
-            icon: './icons/email-icon.png',
-            title:'Compose', //overriden by the loaded html's <title/> tag (!!)
-            minWidth: 500,
-            minHeight: 490,
-            maximized: false,
-            maximizable : false,
-            fullscreenable : false,
-            maxWidth: 950,
-            maxHeight: 1000,
-            frame: false,
-            show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
-            webPreferences: {
-                preload: path.join(__dirname, "/app/preload_compose.js"), // Preload is a mechanism to execute code before renderer scripts are loaded.
-                                                                          // safely get and set file system and 
-                                                                          // operating system values on behalf of the browser window.
-                sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
-                                // (only in conjunction with preload script - otherwise only IPC messages are permitted)
-                contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
-                                        // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
-                                        // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
-                nodeIntegration: false, // deny the renderer process access to the node.js API
-                enableRemoteModule: false //turn off remote (redundant, since Remote module was removed at electron.js v14)
-            }
-        });
+        if (extraArg){
+            //Use window.js helper script to create and open the electron.js BrowserWindow
+            appWindows[index] = createWindow(file, {
+                width: 950,
+                height: 900,
+                icon: './icons/email-icon.png',
+                title:'Compose', //overriden by the loaded html's <title/> tag (!!)
+                minWidth: 500,
+                minHeight: 490,
+                maximized: false,
+                maximizable : false,
+                fullscreenable : false,
+                maxWidth: 950,
+                maxHeight: 1000,
+                frame: false,
+                show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
+                webPreferences: {
+                    preload: path.join(__dirname, "/app/preload_compose.js"), // Preload is a mechanism to execute code before renderer scripts are loaded.
+                                                                            // safely get and set file system and 
+                                                                            // operating system values on behalf of the browser window.
+                    sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
+                                    // (only in conjunction with preload script - otherwise only IPC messages are permitted)
+                    contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
+                                            // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
+                                            // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
+                    nodeIntegration: false, // deny the renderer process access to the node.js API
+                    enableRemoteModule: false, //turn off remote (redundant, since Remote module was removed at electron.js v14)
+                    additionalArguments: ['extra', extraArg]
+                },
+            });
+        }
+        else {
+            //Use window.js helper script to create and open the electron.js BrowserWindow
+            appWindows[index] = createWindow(file, {
+                width: 950,
+                height: 900,
+                icon: './icons/email-icon.png',
+                title:'Compose', //overriden by the loaded html's <title/> tag (!!)
+                minWidth: 500,
+                minHeight: 490,
+                maximized: false,
+                maximizable : false,
+                fullscreenable : false,
+                maxWidth: 950,
+                maxHeight: 1000,
+                frame: false,
+                show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
+                webPreferences: {
+                    preload: path.join(__dirname, "/app/preload_compose.js"), // Preload is a mechanism to execute code before renderer scripts are loaded.
+                                                                            // safely get and set file system and 
+                                                                            // operating system values on behalf of the browser window.
+                    sandbox: false, // extreme protection - deny access to Node.js API and extremely limits access to electron API.
+                                    // (only in conjunction with preload script - otherwise only IPC messages are permitted)
+                    contextIsolation: true, // force the creation of a separate JavaScript world for each browser window /
+                                            // prevent prototype pollution attacks - manipulating prototype chain in an untrusted
+                                            // browser window, in order to surreptitiously gain control over trusted code in a sibling browser window.
+                    nodeIntegration: false, // deny the renderer process access to the node.js API
+                    enableRemoteModule: false, //turn off remote (redundant, since Remote module was removed at electron.js v14)
+                },
+            });
+        }
+
     }
     else if (file === 'keysWindow'){
         //Use window.js helper script to create and open the electron.js BrowserWindow
@@ -204,12 +238,10 @@ function openWindow (file) {
     // For @electron.remote.
     remoteMain.enable(appWindows[index].webContents);
 
-    
     //Load .html content from html folder.
     //The file:// protocol is used to load a file from the local filesystem.
     //loadURL method can also use 'http' protocol to load a webpage etc.
     appWindows[index].loadURL(`file://${__dirname}/app/html/${file}.html`);
-
 
     //Passing an arguement to the event listener is tricky since it invokes the function rather than declaring it.
     //without arguements - function is not invoked: appWindows[index].on('closed', testFunction);
@@ -271,7 +303,23 @@ ipcMain.on('open', (event, arg) => {
     }
     
     if (usefulAppWindowsNo < 4){
-        openWindow(arg.file);
+        if (arg.extraArg){
+            openWindow(arg.file, arg.extraArg);
+        }
+        else {
+            openWindow(arg.file);
+        }
+    }
+    else {
+        const options = {
+            type: 'info',
+            buttons: ['OK'],
+            defaultId: 0,
+            title: 'Cannot open window',
+            message: 'Too many windows are already open.',
+            detail: 'Refusing to open any more windows.',
+          };
+        dialog.showMessageBox(null, options);
     }
 });
 
@@ -355,6 +403,12 @@ ipcMain.on('selectFile', (event) => {
     }
 
     event.sender.send('fileSelected', filepath);
+});
+
+ipcMain.on('replySuccessful', (e) => {
+    // Send message to the renderer process of mainWindow, to notify it that a message was answered (replied)
+    // so that the '\Answered' flag can be appended to the flag list.
+    appWindows[0].webContents.send('answered');
 })
 
 

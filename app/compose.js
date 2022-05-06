@@ -6,6 +6,12 @@ window.api.setLoc('Compose');
 window.api.loadContent();
 window.api.formatFormSelectElement();
 window.api.formatTextArea();
-// On form submit (user presses 'send') setSendHandler is executed.
-window.api.setSendHandler();
+let sendOrReply = window.api.decideIfToReplyOrToSend();
+if (sendOrReply === 'send'){
+    // On form submit (user presses 'send') setSendHandler is executed.
+    window.api.setSendHandler();
+}
+else if (sendOrReply === 'reply'){
+    window.api.setReplyHandler();
+}
 

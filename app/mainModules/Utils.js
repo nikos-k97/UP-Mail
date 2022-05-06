@@ -45,7 +45,13 @@ Utils.prototype.stringToHTML = function (str) {
 
 
 Utils.prototype.stripStringOfNonNumericValues = function (str) {
-  return str.replace(/\D/g, '');
+  try {
+    return str.replace(/\D/g, '');
+  } catch (error) {
+    console.error(error);
+    return str;
+  }
+  
 }
 
 
@@ -253,6 +259,11 @@ Utils.prototype.alterDate = function (date) {
   if (isWithinAMonth(messageTime)) return messageTime.toFormat('ccc dd/LL');
   if (isWithinAYear(messageTime)) return messageTime.toFormat('dd/LL/yy');
   return messageTime.toFormat('dd/LL/yy');
+}
+
+Utils.prototype.alterDateForReplying = function (date) {
+  let messageTime = DateTime.fromISO(new Date(date).toISOString()).setLocale('en-us');
+  return messageTime.toFormat('dd/LL/yy hh:mm a');
 }
 
 

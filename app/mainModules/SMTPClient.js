@@ -56,19 +56,40 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
     }
 
     let mailOptions;
-    // Do not use PGP.
-    if (!message.encrypted || !personalKeyFetched || !message.recipientInfo){
-      mailOptions = {
-        from: {
-          name: message.fromName,
-          address: message.from
-        },
-        to: message.to, // list of receivers
-        cc: message.cc,
-        subject: message.subject, // Subject line
-        text: message.message, // plain text body
-        html: message.message, // html body
-      };
+    // Do not use PGP - PGP is also not used if replying to a message.
+    if (!message.encrypted || !personalKeyFetched || !message.recipientInfo || message.messageId){
+      // Replying to a message.
+      if (message.messageId){
+        mailOptions = {
+          from: {
+            name: message.fromName,
+            address: message.from
+          },
+          to: message.to, // list of receivers
+          cc: message.cc,
+          subject: message.subject, // Subject line
+          replyTo: message.from,
+          inReplyTo: message.messageId,
+          references: [message.messageId],
+          text: message.message, // plain text body
+          html: message.message, // html body
+        };
+      }
+      // Sending a new message.
+      else {
+        mailOptions = {
+          from: {
+            name: message.fromName,
+            address: message.from
+          },
+          to: message.to, // list of receivers
+          cc: message.cc,
+          subject: message.subject, // Subject line
+          replyTo: message.from,
+          text: message.message, // plain text body
+          html: message.message, // html body
+        };
+      }
     }
     // Use PGP.
     else{

@@ -449,7 +449,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   if (path === this.folderPathTrash){
     document.querySelector('.nav-wrapper ul').innerHTML = `
       <li ><a class="navlink-restore"><i class="material-icons left">payment</i>Restore</a></li>
-      <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete</a></li>
+      <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete Permanently</a></li>
       <li ><a class="navlink-mark"><i class="material-icons left">markunread</i>Mark as Unread</a></li>
       <li ><a class="navlink-flag"><i class="material-icons left">flag</i>Flag</a></li>
     `;
@@ -483,6 +483,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
          expunge() is not necessary, since servers automatically delete permenently all mail with deleted flag from
          non Trash folders.
       */
+      materialize.toast({html: 'Permanently deleting message(s)...', displayLength : 1000 ,classes: 'rounded'});
       try {
         let newFlag = '\\Deleted';
         this.checkedUIDs.forEach( async (element) => {
@@ -496,6 +497,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
       }
     }
     else {
+      materialize.toast({html: 'Moving message(s) to `Deleted`...', displayLength : 1000 ,classes: 'rounded'});
       this.checkedUIDs.forEach(async (element) => {
         let metadata = await this.mailStore.loadEmail(element);
         let uid = this.utils.stripStringOfNonNumericValues(String(metadata.uid).toString());
@@ -507,7 +509,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   let restoreButton = document.querySelector('.navlink-restore');
   if (restoreButton){
     document.querySelector('.navlink-restore').addEventListener('click', async (e) => {
-      let currentlyOpenFolder = this.imapClient.compilePath(this.stateManager.state.account.folder);
+      materialize.toast({html: 'Restoring message(s)...', displayLength : 1000 ,classes: 'rounded'});
       this.checkedUIDs.forEach(async (element) => {
         let metadata = await this.mailStore.loadEmail(element);
         // Decide to which folder the mail will be moved when the 'Restore' button is pressed.
@@ -556,6 +558,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
 
   // Database Insert / Update promises from the saveEmail() function in 'MailStore.js' waiting to be resolved.
   let promises = []; // For each mailbox's message.
+  let incrementPromises = [];
   let shouldHighestSeqNoBeIncremented = false;
 
   // Check box status since last login.
@@ -574,6 +577,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
     switch (checkResult) {
       case 'Sync':
         this.logger.log(`Folder '${path}' is up to date with server.`);
+        if (highestSeqNo <= this.imapClient.mailbox.messages.total) shouldHighestSeqNoBeIncremented = true;
         break;
       case 'SyncDelete':
         this.logger.log(`Folder '${path}' has no messages. Deleting all the locally stored mails, if there are any.`);
@@ -615,7 +619,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
             // (highestSeqNo, parsedContent from mailParser, attribues)
             function onLoad(seqno, msg, attributes) {
               promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
-              if (seqno > highestSeqNo) promises.push(new Promise((resolve) => {highestSeqNo = seqno; resolve()}))
+              if (seqno > highestSeqNo) incrementPromises.push(new Promise((resolve) => {highestSeqNo = seqno; resolve(seqno)}))
               document.querySelector('#number').innerText = `Total emails: ${++totalEmails}`;
             }.bind(this)
           );
@@ -645,7 +649,7 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
               },
               function onLoad(seqno, msg, attributes) {
                 promises.push(this.mailStore.saveEmail(accountInfo.user, seqno, msg, attributes, path));
-                if (seqno > highestSeqNo) promises.push(new Promise((resolve) => {highestSeqNo = seqno; resolve()}))
+                if (seqno > highestSeqNo) incrementPromises.push(new Promise((resolve) => {highestSeqNo = seqno; resolve(seqno)}))
                 document.querySelector('#number').innerText = `Total emails fetched: ${++totalEmails}`;
               }.bind(this)
             );
@@ -666,6 +670,16 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
 
   // Wait for all the database inserts/ updated to be resolved.
   await Promise.all(promises);
+  /*
+    Because the 'onLoad' function is asynchronous, the highestSeqNo is incremented in an asynchronous way.
+    Depending on the app speed, if we dont use increment Promise, the highest seqno that will be detected may
+    be a lot less than the real one because all the asynchronous onLoad functions may not be finished yet.
+  */
+  await Promise.all(incrementPromises);
+  for (let i = 0; i < incrementPromises.length; i++){
+    let seqno = await incrementPromises[i];
+    if (seqno > highestSeqNo) highestSeqNo = seqno;
+  }
   if (shouldHighestSeqNoBeIncremented) highestSeqNo = highestSeqNo + 1;
 
   this.logger.info(`Highest Local SeqNo after switch: ${highestSeqNo}`);
@@ -1483,6 +1497,11 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     }
   }
 
+  // The flags are updated only inside the mailstore.db and not inside the .json files that contain the bodies.
+  // So the flag info is only present inside the 'emailHeaders'. So, when a flag is changed, the info is
+  // not updatated inside the 'emailContent' variable.
+  emailContent = Object.assign(emailContent, {flags: emailHeaders.flags});
+
   // The user clicked on the email, so we can safely mark it as 'Seen' both to the server and to the local storage.
   // 'uid' and 'metadata.uid' are in the format 'folderUID'
     /*
@@ -1885,41 +1904,47 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   */
   if (emailContent.html){
     if (emailContent.attachments){
-      // Convert string to HTML for using DOM queries.
-      let dirtyHTML = this.utils.stringToHTML(emailContent.html);
-      let images = dirtyHTML.querySelectorAll('img') ;
-      for (let i=0; i<images.length; i++){
-        let src = images[i].getAttribute('src');
-        for (let j=0; j < emailContent.attachments.length; j++){
-          let attachmentCID = emailContent.attachments[j].cid;
-          if (src.includes(attachmentCID)){
-            try {
-              src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j].filename}`;
-            } catch (error) {
-              this.logger.error(error);
+      try {
+        // Convert string to HTML for using DOM queries.
+        let dirtyHTML = this.utils.stringToHTML(emailContent.html);
+        let images = dirtyHTML.querySelectorAll('img') ;
+        for (let i=0; i<images.length; i++){
+          let src = images[i].getAttribute('src');
+          for (let j=0; j < emailContent.attachments.length; j++){
+            let attachmentCID = emailContent.attachments[j].cid;
+            if (src.includes(attachmentCID)){
+              try {
+                src = `${app.getPath('userData')}\\mail\\${accountInfo.hash}\\${this.utils.md5(`${uid}`)}\\${emailContent.attachments[j].filename}`;
+              } catch (error) {
+                this.logger.error(error);
+              }
+              break;
             }
-            break;
           }
-        }
-        // If the attachment was included with the mail (inline) then due to the above procedure, now the 'src'
-        // attribute is an absolute file system path. -> 'file:/' protocol
-        // So the non strict HTML sanitization function enables the 'file' protocol for images.
-        if (src.includes('C:')){
-          images[i].setAttribute('src', URL.pathToFileURL(src));
-        }
-        // If the attachment was not included with the mail (inline attachment) or for some other reason the protocol is not
-        // 'file:/', we use the pure 'src' value. For example, a remote inline attachment (not included in the email)
-        // will use 'http' or 'https' as the 'src' protocol (scheme). It is up to the non strict sanitization
-        // function to allow or not such schemes. (currently we dont allow it since it conflicts with Contect Security Policy).
-        // https schemes are only allowed in links.
-        else {
-          images[i].setAttribute('src', src);
-        }
+          // If the attachment was included with the mail (inline) then due to the above procedure, now the 'src'
+          // attribute is an absolute file system path. -> 'file:/' protocol
+          // So the non strict HTML sanitization function enables the 'file' protocol for images.
+          if (src.includes('C:')){
+            images[i].setAttribute('src', URL.pathToFileURL(src));
+          }
+          // If the attachment was not included with the mail (inline attachment) or for some other reason the protocol is not
+          // 'file:/', we use the pure 'src' value. For example, a remote inline attachment (not included in the email)
+          // will use 'http' or 'https' as the 'src' protocol (scheme). It is up to the non strict sanitization
+          // function to allow or not such schemes. (currently we dont allow it since it conflicts with Contect Security Policy).
+          // https schemes are only allowed in links.
+          else {
+            images[i].setAttribute('src', src);
+          }
 
+        }
+        // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants
+        // Using outerHTML basically gets as a string from the HTML.
+        dirtyContent = dirtyHTML.outerHTML;
+      } catch (error) {
+        this.logger.error(error);
+        dirtyContent = emailContent.html;
       }
-      // Reading the value of outerHTML returns a DOMString containing an HTML serialization of the element and its descendants
-      // Using outerHTML basically gets as a string from the HTML.
-      dirtyContent = dirtyHTML.outerHTML;
+    
     }
     else{
       dirtyContent = emailContent.html;
@@ -1977,10 +2002,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let toHTML = '';
   let ccArray = envelope.cc;
   let ccHTML = '';
-  let bccArray = envelope.bcc;
-  let bccHTML = '';
 
-  // This is done because the to, cc, bcc fields can contain multiple email adresses.
+  // This is done because the to, cc fields can contain multiple email adresses.
   if (toArray && toArray.length){
     for (let i=0; i<toArray.length; i++){
       if (i===0){
@@ -2040,35 +2063,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
     `;
   }
 
-  if (bccArray && bccArray.length){
-    for (let i=0; i<bccArray.length; i++){
-      if (i===0){
-        bccHTML = bccHTML + `
-          <tr>
-            <th>Bcc: &nbsp;</th>
-            <td><a href="javascript:void(0)">${envelope.bcc[i].mailbox}@${envelope.bcc[i].host}</a>  ${envelope.bcc[i].name ? ' &nbsp; ('+envelope.bcc[i].name+')' : ''}</td>
-          </tr>
-        `;
-      }
-      else {
-        bccHTML = bccHTML + `
-        <tr>
-          <td></td>
-          <td><a href="javascript:void(0)">${envelope.bcc[i].mailbox}@${envelope.bcc[i].host}</a>  ${envelope.bcc[i].name ? ' &nbsp; ('+envelope.bcc[i].name+')' : ''}</td>
-        </tr>
-      `;
-      }
-    }
-  }
-  else {
-    bccHTML = bccHTML + `
-    <tr>
-      <th>Bcc: &nbsp;</th>
-      <td><a href="javascript:void(0)">-</td>
-    </tr>
-  `;
-  }
-
   let headerContent = `
     <br>
     <table class='header-table'>
@@ -2081,7 +2075,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
   headerContent = headerContent + toHTML;
   headerContent = headerContent + ccHTML;
-  headerContent = headerContent + bccHTML;
 
   headerContent = headerContent + `
         <tr>
@@ -2280,7 +2273,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   // --------------------------------- APPEND BODY CONTENT ---------------------------------------------------
   let bodyContentNode = document.createElement('div');
   bodyContentNode.classList.add('body-content');
-  bodyContentNode.innerHTML = cleanContent + ' <br><br>';
+  bodyContentNode.innerHTML = cleanContent + '<br>';
   selectedItemWrapper.appendChild(bodyContentNode);
   // ---------------------------------------------------------------------------------------------------------
 
@@ -2382,7 +2375,6 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
 
       selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + toHTML;
       selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + ccHTML;
-      selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + bccHTML;
 
       selectedItemWrapper.querySelector('.header-table thead').innerHTML = selectedItemWrapper.querySelector('.header-table thead').innerHTML + `
           <tr>
@@ -2536,6 +2528,82 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   `
  );
  // ------------------------------------------------------------------------------------------------------------
+
+ // ------------------------------------- Reply Button ---------------------------------------------------------
+ /*
+  We do not support 'reply' in the Deleted folders.
+  Due to EFAIL vulnerability which dictates (among other things) that an email cannot contain encrypted and 
+  unencrypted content at the same time, we won't provide Reply funtionality if the message was sent to us in
+  encrypted format.
+ */
+  let lowerPath = String(path).toString().toLowerCase();
+  let shouldReplyBeAllowed = true;
+  if ( lowerPath.includes('deleted') || lowerPath.includes('trash') ||
+      lowerPath.includes('κάδος') ||  lowerPath.includes('κάδος') || lowerPath.includes('διεγραμμένα') || 
+      lowerPath.includes('διεγραμμενα') || lowerPath.includes('απορρίματα') || lowerPath.includes('απορριματα')){
+    shouldReplyBeAllowed = false;
+  }
+
+  if (!wasMessageEncrypted && shouldReplyBeAllowed) {
+    selectedMailItem.querySelector('#message-holder .message-wrapper').insertAdjacentHTML("afterend",
+    `
+    <div class='reply-button-wrapper center-align'>
+      <button id='reply' class='reply'>Reply</button>
+      <br>
+      <br>
+    </div>
+      
+      <style>
+        .reply-button-wrapper{
+          display: flex;
+          justify-items: center;
+          justify-content: center;
+        }
+
+        .reply{
+          display: flex;
+          text-align: center;
+          justify-content: center;
+          justify-items: center;
+          font-size: small;
+          cursor: pointer;
+          border: 1px solid whitesmoke;
+          border-radius: 6px;
+          color: whitesmoke;
+          background-color: rgb(107,107,107);
+          height: fit-content;
+          width : 7%;
+          padding: 10px;
+          margin-right: 4px;
+        }
+
+        .reply:hover{
+          color: whitesmoke;
+          background-color: rgb(91,91,91);
+        }
+      </style>
+    `
+    );
+    selectedMailItem.querySelector('#message-holder').querySelector('#reply').addEventListener('click', (e) => {
+      //e.currentTarget.parentNode.innerHTML = ``;
+      let contentToSendToOtherProcess = {};
+      let emailBodyToSend = emailContent.html || emailContent.textAsHtml || emailContent.text;
+      contentToSendToOtherProcess = Object.assign(contentToSendToOtherProcess, {'envelope': emailContent.envelope}, {'html' : emailBodyToSend});
+      this.ipcRenderer.send('open', { file: 'composeWindow', extraArg: JSON.stringify(contentToSendToOtherProcess)});
+      this.ipcRenderer.on('answered', async () => {
+        let updatedFlags = await this.imapClient.updateFlag(path, false, uid, emailContent.flags, '\\Answered');
+        await this.mailStore.updateEmailByUid(metadata.uid, {'flags' : updatedFlags});
+      });
+    });
+  }
+  // If the reply button is not allowed, we add two break lines for styling reasons.
+  else {
+    selectedMailItem.querySelector('#message-holder .message-wrapper').insertAdjacentHTML("afterend",
+    `
+      <br>
+    `
+    );
+  }
 }
 
 /*
