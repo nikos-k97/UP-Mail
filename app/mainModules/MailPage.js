@@ -2636,49 +2636,80 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
     if (headerValue.length){
       for (let j = 0 ; j < headerValue.length; j++){
         if ( typeof headerValue.value === 'object'){
-          let tableRow = document.createElement('tr');
-          let tableRowHTML = `
-            <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-            <td title=${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
-          `;
-          tableRow.innerHTML = tableRowHTML;
-          wrapper.querySelector('.header-table thead').appendChild(tableRow);
+          try {
+            let tableRow = document.createElement('tr');
+            let tableRowHTML = `
+              <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+              <td title=${(headerValue.text || headerValue.value || headerValue[j] || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || headerValue[j] || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
+            `;
+            tableRow.innerHTML = tableRowHTML;
+            wrapper.querySelector('.header-table thead').appendChild(tableRow);
+          } catch (error) {
+            this.logger.error(error);
+          }
         }
         else {
           let tableRow = document.createElement('tr');
-          let tableRowHTML = `
-            <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-            <td title=${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || headerValue[j] || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
-          `;
-          tableRow.innerHTML = tableRowHTML;
-          wrapper.querySelector('.header-table thead').appendChild(tableRow);
+          let chosenValue = headerValue.text || headerValue.value || headerValue[j];
+          if (typeof chosenValue === 'object'){
+            try {
+              let tableRowHTML = `
+                <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+                <td title=${(chosenValue.text || chosenValue.value || chosenValue[j] || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(chosenValue.text || chosenValue.value || chosenValue[j] || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
+              `;
+              tableRow.innerHTML = tableRowHTML;
+              wrapper.querySelector('.header-table thead').appendChild(tableRow);
+            } catch (error) {
+              this.logger.error(error);
+            }
+          }
+          else {
+            try {
+              let tableRowHTML = `
+                <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+                <td title=${(headerValue.text || headerValue.value || headerValue[j] || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || headerValue[j] || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
+              `;
+              tableRow.innerHTML = tableRowHTML;
+              wrapper.querySelector('.header-table thead').appendChild(tableRow);
+            } catch (error) {
+              this.logger.error(error);
+            }
+          }
         }
       }
     }
     else {
       if (headerValue.params){
-        let tableRow = document.createElement('tr');
-        let tableRowHTML = `
-          <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-          <td title=${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
-        `;
-        tableRow.innerHTML = tableRowHTML;
-        wrapper.querySelector('.header-table thead').appendChild(tableRow);
-        for (let i in headerValue.params){
-          let key = i;
-          let val = headerValue.params[i];
-          if (key && key !== ' ' && val && val !== ' ')
-          this.createTableRow(wrapper, {'name':key, 'value':val}, true);
+        try {
+          let tableRow = document.createElement('tr');
+          let tableRowHTML = `
+            <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+            <td title=${(headerValue.text || headerValue.value || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
+          `;
+          tableRow.innerHTML = tableRowHTML;
+          wrapper.querySelector('.header-table thead').appendChild(tableRow);
+          for (let i in headerValue.params){
+            let key = i;
+            let val = headerValue.params[i];
+            if (key && key !== ' ' && val && val !== ' ')
+            this.createTableRow(wrapper, {'name':key, 'value':val}, true);
+          }
+        } catch (error) {
+          this.logger.error(error);
         }
       }
       else {
-        let tableRow = document.createElement('tr');
-        let tableRowHTML = `
-          <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
-          <td title=${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
-        `;
-        tableRow.innerHTML = tableRowHTML;
-        wrapper.querySelector('.header-table thead').appendChild(tableRow);
+        try {
+          let tableRow = document.createElement('tr');
+          let tableRowHTML = `
+            <td>&nbsp;&nbsp;&nbsp; => &nbsp;</td>
+            <td title=${(headerValue.text || headerValue.value || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue.text || headerValue.value || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
+          `;
+          tableRow.innerHTML = tableRowHTML;
+          wrapper.querySelector('.header-table thead').appendChild(tableRow);
+        } catch (error) {
+          this.logger.error(error);
+        }
       }
     }
   }
@@ -2688,13 +2719,13 @@ MailPage.prototype.createTableRow = function(wrapper, header, recursion){
     if (recursion){
       tableRowHTML = `
         <td title=${headerName}>&nbsp;&nbsp;&nbsp; => ${headerName}: &nbsp;</td>
-        <td title=${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
+        <td title=${(headerValue || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
       `;
     }
     else {
       tableRowHTML = `
       <th title=${headerName}>${headerName }: &nbsp;</th>
-      <td title=${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
+      <td title=${(headerValue || '-').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}>${(headerValue || '').replace(/([<>])/g, function (s) { return entities[s]; }).replace(/[ ]/g,"\u00a0")}</td>
     `;
     }
 

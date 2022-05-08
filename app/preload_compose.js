@@ -376,7 +376,13 @@ contextBridge.exposeInMainWorld(
                 originalSubject = replyInfo[1].envelope.subject;
             }
             else {
-                originalSubject = `RE: ${replyInfo[1].envelope.subject}`;
+                if (replyInfo[1].envelope.subject){
+                    originalSubject = `RE: ${replyInfo[1].envelope.subject}`;
+                }
+                else {
+                    originalSubject = `RE: (No Subject)`;
+                }
+
             }
            
             form.querySelector('#subject').setAttribute('value', originalSubject);
@@ -424,9 +430,8 @@ contextBridge.exposeInMainWorld(
                         // 'replyInfo[1].html' is used everytime, since at MailPage.js, we constucted a new object
                         // with a property 'html' that contains the best type of mail content for this message
                         // (html, textAsHtml, text) and stored it inside the 'html' parameter
-                        let oldMessageContent = `<br><br><hr>
+                        let oldMessageContent = `<br><hr>
                             &nbsp;&nbsp;&nbsp;<div>On ${utils.alterDateForReplying(replyInfo[1].envelope.date)}, ${replyInfo[1].envelope.from[0].mailbox}@${replyInfo[1].envelope.from[0].host} wrote: </div>
-                            <br>
 
                             <div>
                             &nbsp;&nbsp;&nbsp;${replyInfo[1].html}

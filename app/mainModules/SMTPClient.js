@@ -82,12 +82,18 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
             name: message.fromName,
             address: message.from
           },
-          to: message.to, // list of receivers
-          cc: message.cc,
+          to: message.to, // List of receivers
+          cc: message.cc, 
           subject: message.subject, // Subject line
-          replyTo: message.from,
-          text: message.message, // plain text body
-          html: message.message, // html body
+          replyTo: message.from,  // The email to which replies will be sent = Our email address
+          // headers : {
+          //   'disposition-notification-to' : 'nick-test3@outlook.com', // Τhe notification that the message was read
+          //                                                             // by the receiving clientw ill be send to the 
+          //                                                             // specified email.
+          //   'return-receipt-to' : 'nick-test3@outlook.com'             
+          // },
+          text: message.message, // Plain text body
+          html: message.message, // HTML body
         };
       }
     }
