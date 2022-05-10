@@ -1985,6 +1985,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
   let cleanContent;
   if (reloadedFromAttachmentButton){
     cleanContent = Clean.cleanHTMLNonStrict(dirtyContent);
+    //cleanContent = dirtyContent;
   }
   else {
     cleanContent = Clean.cleanHTMLStrict(dirtyContent);

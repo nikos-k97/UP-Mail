@@ -325,22 +325,30 @@ ipcMain.on('open', (event, arg) => {
 
 // Close specific window
 ipcMain.on('close', (event) => {
-    let windowID = BrowserWindow.getFocusedWindow().id;
-    let targetWindow;
-    for (let i = 0; i < appWindows.length; i++){
-        if (appWindows[i]){
-            let id = appWindows[i].id;
-            if (windowID === id) targetWindow = appWindows[i];
+    try {
+        let windowID = BrowserWindow.getFocusedWindow().id;
+        let targetWindow;
+        for (let i = 0; i < appWindows.length; i++){
+            if (appWindows[i]){
+                let id = appWindows[i].id;
+                if (windowID === id) targetWindow = appWindows[i];
+            }
         }
+        if (targetWindow) targetWindow.close(); 
+    } catch (error) {
+        console.error(error);
     }
-    if (targetWindow) targetWindow.close();
 });
 
 ipcMain.on('closeAllOtherWindows', (event) => {
-    let allWindows = BrowserWindow.getAllWindows();
-    let currentWindow = BrowserWindow.getFocusedWindow();
-    for (let i = 0; i < allWindows.length; i++){
-      if (allWindows[i].id !== currentWindow.id) allWindows[i].close();
+    try {
+        let allWindows = BrowserWindow.getAllWindows();
+        let currentWindow = BrowserWindow.getFocusedWindow();
+        for (let i = 0; i < allWindows.length; i++){
+          if (allWindows[i].id !== currentWindow.id) allWindows[i].close();
+        }
+    } catch (error) {
+        console.error(error);
     }
 });
 
