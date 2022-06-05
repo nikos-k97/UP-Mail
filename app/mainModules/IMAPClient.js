@@ -1028,7 +1028,6 @@ IMAPClient.prototype.fetchPGPSignatureForCleartextMessage = async function (atta
         signatureToReturn = await fetchAndWritePromise;
       }
     }
-
     return signatureToReturn;
 
 }

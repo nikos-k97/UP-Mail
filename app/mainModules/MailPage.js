@@ -447,18 +447,25 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
 
   // If this is the 'deleted' folder, add one more option to the navbar -> Restore
   if (path === this.folderPathTrash){
-    document.querySelector('.nav-wrapper ul').innerHTML = `
+    /*
       <li ><a class="navlink-restore"><i class="material-icons left">payment</i>Restore</a></li>
       <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete Permanently</a></li>
       <li ><a class="navlink-mark"><i class="material-icons left">markunread</i>Mark as Unread</a></li>
       <li ><a class="navlink-flag"><i class="material-icons left">flag</i>Flag</a></li>
+    */
+    document.querySelector('.nav-wrapper ul').innerHTML = `
+      <li ><a class="navlink-restore"><i class="material-icons left">payment</i>Restore</a></li>
+      <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete Permanently</a></li>
     `;
   }
   else {
-    document.querySelector('.nav-wrapper ul').innerHTML = `
+    /*
       <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete</a></li>
       <li ><a class="navlink-mark"><i class="material-icons left">markunread</i>Mark as Unread</a></li>
       <li ><a class="navlink-flag"><i class="material-icons left">flag</i>Flag</a></li>
+    */
+    document.querySelector('.nav-wrapper ul').innerHTML = `
+      <li ><a class="navlink-delete"><i class="material-icons left">delete</i>Delete</a></li>
   `;
   }
 
@@ -1672,9 +1679,8 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
               }
   
               // Now we have the encrypted data as file on disk. Prepare from decryption.
-              let readPromise = jetpack.readAsync(src);
-              let encryptedData = await readPromise;
-  
+              let encryptedData = await jetpack.readAsync(src);
+        
               /*
                 Attemp to decrypt message and also verify its signature at the same time (not detached case).
                 These types of  signatures are not compliant with the RFC, so if the we have the necessary public key
@@ -2466,7 +2472,7 @@ MailPage.prototype.renderEmail = async function (accountInfo, uid, reloadedFromA
           signatureText = `<span class="verified-message"><strong>(Message was signed - Signature was verified)</strong></span>`;
         }
         else {
-          signatureText = `<span class="unverified-message"><strong>(Message was signed - Could not verify signature!)</strong></span>`;
+          signatureText = `<span class="unverified-message"><strong>(Message was signed - Could not verify signature)</strong></span>`;
         }
       }
       else {
