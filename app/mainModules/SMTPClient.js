@@ -1,5 +1,5 @@
 const nodemailer     = require('nodemailer');
-const openpgpEncrypt = require('../externalModules/nodemailer-openpgp').openpgpEncrypt;
+const openpgpEncrypt = require('nodemailer-openpgp').openpgpEncrypt;
 const Encrypt        = require('./Encrypt');
 const jetpack        = require('fs-jetpack');
 
@@ -121,7 +121,8 @@ SMTPClient.prototype.queueMailForSend = async function(message) {
         subject: message.subject, // Subject line
         text: message.message, // plain text body
         html: message.message, // html body
-        encryptionKeys : publicKeys
+        encryptionKeys : publicKeys,
+        shouldSign: true
       };
     }
  

@@ -1,6 +1,9 @@
----------- Οδηγίες εγκατάστασης ----------
-------------------------------------------
-
+Installation
+------------
+1. Download Node.js <https://nodejs.org/en/download/> (Application was tested with version 16.14.0)
+2. Navigate to the application folder 
+3. Install dependancies:   'npm install'
+4. Run the app:            'npm start'
 
 
 
