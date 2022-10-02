@@ -92,7 +92,6 @@ contextBridge.exposeInMainWorld(
             unorderedListStyle : '*',
             spellChecker : false,
             scrollbarStyle : 'native',
-            uploadImage: true,
             renderingConfig: {
                 sanitizerFunction: (renderedHTML) => {
                     // Use non strict HTML sanitizer (the IMAP client of the receipient should do more filtering if needed)

@@ -117,12 +117,12 @@ function openWindow (file, extraArg) {
             width,
             height,
             icon: './icons/email-icon.png',
-            title:'Mail Client', //overriden by the loaded html's <title/> tag (!!)
+            title:'Mail Client', // overriden by the loaded html's <title/> tag 
             minWidth: 1050,
             minHeight: 600,
             maximized: true,
             frame: false,
-            show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
+            show: false, // false until all content is loaded -> becomes true -> window is visible without loading times
             webPreferences: {
                 preload: path.join(__dirname, "/app/preload_app.js"), // use a preload script - safely get and set file system and 
                                                                       // operating system values on behalf of the browser window.

@@ -1,5 +1,5 @@
-Installation
-------------
+---- Installation ----
+----------------------
 1. Download Node.js <https://nodejs.org/en/download/> (Application was tested with version 16.14.0)
 2. Navigate to the application folder 
 3. Install dependancies:   'npm install'
@@ -8,10 +8,10 @@ Installation
 
 
 ---------- Οδηγίες για εισοδο (Login) με ήδη υπάρχων account ηλεκτρονικού ταχυδρομείου ----------
---------------------------------  (συνήθεις παροχοι)  -------------------------------------------
+-------------------------------------------------------------------------------------------------
+** Outlook / Microsoft / Hotmail / Msn ** : Χρήση απλώς της email διεύθυνσης και Password του ήδη υπάρχοντος
+                                            account του χρήστη στην υπηρεσία
 
-** Outlook / Microsoft/ Hotmail / Msn ** : Χρήση απλώς της email διεύθυνσης και Password του ήδη υπάρχοντος
-                                           account του χρήστη στην υπηρεσία
 
 ** Yahoo! ** : Χρήση της ήδη υπάρχουσας email διεύθυνσης του χρήστη στην υπηρεσία. 
                Σχετικά με το password πρέπει να δημιουργηθεί διαφορετικός μοναδικός κωδικός 
@@ -27,9 +27,11 @@ Installation
                           (μόνο) στη συγκεκριμένη εφαρμογή (παρών email client).
                           
 
-** Gmail ** :
+** Gmail ** :  Η Google από τον από τον Μάιο του 2022, δεν επιτρέπει πια login στους email servers της 
+               από τρίτες εφαρμογές μέσω PLAIN authentication (username, password). Έτσι η συγκεκριμένη         
+               εφαρμογή, στην τωρινή της έκδοση, δεν υποστηρίζει πλέον σύνδεση σε Gmail Servers.
 
-** Upnet / Upatras ** : 
+
 
 
 Σημειωση: Ο παρών client δεν διαθέτει δυνατότητα δημιουργίας λογαρισμού (account) σε οποιαδοίποτε 

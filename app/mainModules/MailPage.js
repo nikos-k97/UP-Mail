@@ -424,8 +424,6 @@ MailPage.prototype.getChosenFolderInfo = async function(chosenFolder) {
   this.checkedUIDs = [];
   document.querySelector('.nav-wrapper').classList.add('hide');
 
-  this.logger.debug(this.imapClient.client._events);
-
   document.querySelector('#mail').innerHTML = `
     <span id="doing"></span>
     <span id="number"></span><br>

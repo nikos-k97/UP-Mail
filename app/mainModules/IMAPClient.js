@@ -135,30 +135,36 @@ complete list of mailboxes available, and initially position the user at the roo
 IMAPClient.prototype.fetchNamespaces = async function() {
   // There should always be at least one namespace entry in the personal namespace list, 
   // with a blank namespace prefix.
-  let personalNamespaces = this.client.namespaces.personal;
-  let sharedNamespaces = this.client.namespaces.shared;
-  let otherNamespaces = this.client.namespaces.other;
   let availableNamespaces = {'type' : [], 'prefix' : [], 'delimiter' : []};
-  if (sharedNamespaces !== null){
-    for (let i=0; i < sharedNamespaces.length; i++){
-      availableNamespaces.type[i] = 'shared';
-      availableNamespaces.prefix[i] = sharedNamespaces[i].prefix;
-      availableNamespaces.delimiter[i] = sharedNamespaces[i].delimiter;
+  if (this.client.namespaces){
+    let personalNamespaces = this.client.namespaces.personal || '/';
+    let sharedNamespaces = this.client.namespaces.shared;
+    let otherNamespaces = this.client.namespaces.other;
+   
+    if (sharedNamespaces !== null){
+      for (let i=0; i < sharedNamespaces.length; i++){
+        availableNamespaces.type[i] = 'shared';
+        availableNamespaces.prefix[i] = sharedNamespaces[i].prefix;
+        availableNamespaces.delimiter[i] = sharedNamespaces[i].delimiter;
+      }
+    }
+    if (otherNamespaces !== null){
+      for (let i=0; i < otherNamespaces.length; i++){
+        availableNamespaces.type[i] = 'other';
+        availableNamespaces.prefix[i] = otherNamespaces[i].prefix;
+        availableNamespaces.delimiter[i] = otherNamespaces[i].delimiter;
+      }
+    }
+    if (personalNamespaces !== null) {
+      for (let i=0; i < personalNamespaces.length; i++){
+        availableNamespaces.type[i] = 'personal';
+        availableNamespaces.prefix[i] = personalNamespaces[i].prefix;
+        availableNamespaces.delimiter[i] = personalNamespaces[i].delimiter;
+      }
     }
   }
-  if (otherNamespaces !== null){
-    for (let i=0; i < otherNamespaces.length; i++){
-      availableNamespaces.type[i] = 'other';
-      availableNamespaces.prefix[i] = otherNamespaces[i].prefix;
-      availableNamespaces.delimiter[i] = otherNamespaces[i].delimiter;
-    }
-  }
-  if (personalNamespaces !== null) {
-    for (let i=0; i < personalNamespaces.length; i++){
-      availableNamespaces.type[i] = 'personal';
-      availableNamespaces.prefix[i] = personalNamespaces[i].prefix;
-      availableNamespaces.delimiter[i] = personalNamespaces[i].delimiter;
-    }
+  else {
+    availableNamespaces = {'type' : ['personal'], 'prefix' : [''], 'delimiter' : ['/']};
   }
   return availableNamespaces;
 }
