@@ -15,27 +15,24 @@ const URL                                                = require('url').URL;
 const remoteMain                                         = require("@electron/remote/main");
 remoteMain.initialize();
 
-//Global object in Node.js is the 'module.exports' object
+// Global object in Node.js is the 'module.exports' object
 global.logger = logger; //logger is now visible into all modules that main.js uses (not in renderer processes/ preload)
 
-//Sets node environment variable
+// Sets node environment variable
 process.env.NODE_ENV = 'development'; //or production
 
-//If in development mode enables dotenv and adds debug features like HotKeys for triggering Dev Tools and reload.
-if (process.env.NODE_ENV === 'development') {
-    //require('dotenv').config();
-    //const { port } = require('./app/config');
-    //console.log(port);
-   require('electron-debug')({ showDevTools: true }); //not necessery since we display the menu in development mode
+// If in development mode enables dotenv and adds debug features like HotKeys for triggering Dev Tools and reload.
+if (process.env.NODE_ENV === 'production') {
+   require('electron-debug')({ showDevTools: true }); // Not necessary since we display the menu in development mode
 };
 
 // Keep a global reference of the window object, otherwise the window will
 // be closed automatically when the JavaScript object is garbage collected.
 let appWindows = []; 
 
-//Listening to the 'ready' event of the application.
-//This event is fired only once when Electron has done initializing the application and app windows can be safely created.
-//Wait for the event and then call openWindow() when app's whenReady() method resolves its promise
+// Listening to the 'ready' event of the application.
+// This event is fired only once when Electron has done initializing the application and app windows can be safely created.
+// Wait for the event and then call openWindow() when app's whenReady() method resolves its promise
 app.whenReady().then(() => {
     openWindow('appWindow');
 }).catch((error) => {
@@ -43,9 +40,9 @@ app.whenReady().then(() => {
 })
 
 
-//The 'window-all-closed' event is emitted when the last opened window of the application is closed.
-//On Windows and Linux when all app windows are closed then the whole app is closed.
-//Quits the application except on macOS since it contradicts the default behavior of macOS.
+// The 'window-all-closed' event is emitted when the last opened window of the application is closed.
+// On Windows and Linux when all app windows are closed then the whole app is closed.
+// Quits the application except on macOS since it contradicts the default behavior of macOS.
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit(); 
@@ -143,7 +140,7 @@ function openWindow (file, extraArg) {
                 width: 950,
                 height: 900,
                 icon: './icons/email-icon.png',
-                title:'Compose', //overriden by the loaded html's <title/> tag (!!)
+                title:'Compose', // overriden by the loaded html's <title/> tag (!!)
                 minWidth: 500,
                 minHeight: 490,
                 maximized: false,
@@ -152,7 +149,7 @@ function openWindow (file, extraArg) {
                 maxWidth: 950,
                 maxHeight: 1000,
                 frame: false,
-                show:false, //false until all content is loaded -> becomes true -> window is visible without loading times
+                show:false, // false until all content is loaded -> becomes true -> window is visible without loading times
                 webPreferences: {
                     preload: path.join(__dirname, "/app/preload_compose.js"), // Preload is a mechanism to execute code before renderer scripts are loaded.
                                                                             // safely get and set file system and 
@@ -169,12 +166,12 @@ function openWindow (file, extraArg) {
             });
         }
         else {
-            //Use window.js helper script to create and open the electron.js BrowserWindow
+            // Use window.js helper script to create and open the electron.js BrowserWindow
             appWindows[index] = createWindow(file, {
                 width: 950,
                 height: 900,
                 icon: './icons/email-icon.png',
-                title:'Compose', //overriden by the loaded html's <title/> tag (!!)
+                title:'Compose', // Overriden by the loaded html's <title/> tag (!!)
                 minWidth: 500,
                 minHeight: 490,
                 maximized: false,
@@ -201,12 +198,12 @@ function openWindow (file, extraArg) {
 
     }
     else if (file === 'keysWindow'){
-        //Use window.js helper script to create and open the electron.js BrowserWindow
+        // Use window.js helper script to create and open the electron.js BrowserWindow
         appWindows[index] = createWindow(file, {
             width: 950,
             height: 900,
             icon: './icons/email-icon.png',
-            title:'Contacts & Keys', //overriden by the loaded html's <title/> tag (!!)
+            title:'Contacts & Keys', // Overriden by the loaded html's <title/> tag (!!)
             minWidth: 720,
             minHeight: 720,
             maximized: false,
