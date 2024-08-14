@@ -43,6 +43,22 @@ Location of log files: `C:\Users\<user>\AppData\Roaming\email-client\logs`.
 
 ## App screenshots
 
+Login Page
+
+![Inbox](./icons/login.jpg)
 
 Main Page
+
 ![Inbox](./icons/inbox.jpg)
+
+Contacts & Keys
+
+![Inbox](./icons/contacts.jpg)
+
+Open Encrypted / Signed Message
+
+![Inbox](./icons/pgp.jpg)
+
+Compose Window
+
+![Compose](./icons/compose.jpg)
