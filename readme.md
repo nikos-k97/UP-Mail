@@ -1,8 +1,8 @@
 # **UP-Mail**
-An opensource email client with built-in OpenPGP functionality that respects your privacy!
+An open-source email client with built-in privacy features and OpenPGP functionality.
 
 ## Installation Guide
-1. Download Node.js (<https://nodejs.org/en/download/>)
+1. Requires Node.js (you can download at (<https://nodejs.org/en/download/>)
 2. Navigate to the application folder 
 3. Install dependancies:  
    `npm install`
